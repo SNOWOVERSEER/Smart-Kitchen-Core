@@ -1,4 +1,4 @@
-"""LangChain tools for inventory management."""
+"""LangChain tools for inventory management. (Legacy!!!!! Not In Use anymore)"""
 
 from datetime import date
 from typing import Annotated
