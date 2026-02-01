@@ -113,3 +113,43 @@ def list_transaction_logs(limit: int = 50, db: Session = Depends(get_db)):
     """Get recent transaction logs for audit trail."""
     return get_transaction_logs(db, limit)
 
+
+#AI Agent
+
+@app.post("/api/v1/agent/action", response_model=AgentActionResponse)
+def agent_action(request: AgentActionRequest):
+    """
+    Process natural language commands using AI agent.
+
+    Supports multi-turn conversation with slot filling and confirmation.
+
+    For multi-turn:
+    - First request: send text, get back thread_id
+    - Follow-up: send text + thread_id to continue conversation
+    - Confirmation: send confirm=true/false + thread_id
+    """
+    result = run_agent(
+        text=request.text,
+        thread_id=request.thread_id,
+        confirm_action=request.confirm,
+    )
+
+    # Build pending action response if exists
+    pending = None
+    if result.get("pending_action"):
+        pa = result["pending_action"]
+        pending = PendingActionResponse(
+            intent=pa.get("intent"),
+            extracted_info=pa.get("extracted_info"),
+            missing_fields=pa.get("missing_fields"),
+            confirmation_message=pa.get("confirmation_message"),
+        )
+
+    return AgentActionResponse(
+        response=result.get("response", ""),
+        thread_id=result.get("thread_id", ""),
+        status=result.get("status", "completed"),
+        pending_action=pending,
+        tool_calls=result.get("tool_calls", []),
+    )
+
