@@ -1,6 +1,6 @@
 # SmartKitchen Core
 
-A portfolio project demonstrating **Full-Stack + AI Agent** capabilities. An intelligent kitchen inventory management system with batch-level tracking and natural language processing.
+An intelligent kitchen inventory management system with batch-level tracking and natural language processing.
 
 ## Highlights
 
