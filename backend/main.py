@@ -16,6 +16,7 @@ from schemas import (
     AgentActionRequest,
     AgentActionResponse,
     PendingActionResponse,
+    PendingActionItemResponse,
 )
 from agent import run_agent
 from services import (
@@ -134,14 +135,21 @@ def agent_action(request: AgentActionRequest):
         confirm_action=request.confirm,
     )
 
-    # Build pending action response if exists
+    # Build pending action response if exists (multi-item support)
     pending = None
     if result.get("pending_action"):
         pa = result["pending_action"]
+        items = pa.get("items", [])
         pending = PendingActionResponse(
-            intent=pa.get("intent"),
-            extracted_info=pa.get("extracted_info"),
-            missing_fields=pa.get("missing_fields"),
+            items=[
+                PendingActionItemResponse(
+                    index=item.get("index", i),
+                    intent=item.get("intent"),
+                    extracted_info=item.get("extracted_info"),
+                    missing_fields=item.get("missing_fields"),
+                )
+                for i, item in enumerate(items)
+            ] if items else None,
             confirmation_message=pa.get("confirmation_message"),
         )
 

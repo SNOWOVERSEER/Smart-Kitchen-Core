@@ -11,9 +11,9 @@ from sqlmodel import Session
 
 from agent.prompts import (
     get_intent_analyst_prompt,
-    get_ask_more_prompt,
+    get_ask_more_prompt_multi,
 )
-from agent.state import AgentState, PendingAction, REQUIRED_FIELDS
+from agent.state import AgentState, PendingAction, PendingActionItem, REQUIRED_FIELDS
 from database import engine
 from services import consume_item, add_inventory_item, discard_batch, get_inventory_grouped
 from schemas import InventoryItemCreate
@@ -82,22 +82,36 @@ def intent_analyst(state: AgentState) -> dict:
     except (json.JSONDecodeError, IndexError):
         print(f"[WARN] Failed to parse intent analysis: {response.content}")
         analysis = {
-            "intent": "QUERY",
-            "extracted_info": {},
-            "confidence": "low",
+            "operations": [{"intent": "QUERY", "extracted_info": {}}],
             "raw_understanding": "Could not parse user input",
         }
 
-    intent = analysis.get("intent", "QUERY")
-    extracted_info = analysis.get("extracted_info", {})
+    # Handle operations array (multi-item support)
+    operations = analysis.get("operations", [])
+    if not operations:
+        # Backward compatibility: single item format
+        operations = [{
+            "intent": analysis.get("intent", "QUERY"),
+            "extracted_info": analysis.get("extracted_info", {}),
+        }]
 
-    # Create pending action
+    # Build items list from operations
+    items: list[PendingActionItem] = []
+    for idx, op in enumerate(operations[:5]):  # Max 5 items
+        items.append({
+            "index": idx,
+            "intent": op.get("intent", "QUERY"),
+            "extracted_info": op.get("extracted_info", {}),
+            "missing_fields": [],
+            "fefo_plan": [],
+        })
+
+    # Create pending action with items
     pending_action: PendingAction = {
-        "intent": intent,
-        "extracted_info": extracted_info,
-        "missing_fields": [],
+        "items": items,
         "needs_confirmation": False,
         "confirmation_message": "",
+        "all_complete": False,
     }
 
     output = {
@@ -113,59 +127,99 @@ def handle_confirmation_response(state: AgentState, user_input: str) -> dict:
     """Handle user's confirmation response (yes/no)."""
     user_input_lower = user_input.lower().strip()
 
-    # Check for positive/negative confirmation (includes internal "confirm"/"cancel")
-    positive = ["yes", "y", "confirm", "确认", "是", "好", "ok", "确定", "可以", "行"]
-    negative = ["no", "n", "cancel", "取消", "否", "不", "不要", "算了"]
-
     pending = state.get("pending_action")
     messages = state.get("messages", [])
     user_lang = detect_language(messages)
 
-    if any(p in user_input_lower for p in positive):
-        # User confirmed - proceed to execution
-        return {
-            "pending_action": pending,
-            "status": "confirmed",
-        }
-    elif any(n in user_input_lower for n in negative):
-        # User rejected - clear pending and respond
+    # Check for EXPLICIT confirmation/cancellation patterns
+    # These are checked first as they're unambiguous
+    explicit_confirm = ["confirm", "确认", "确定", "执行"]
+    explicit_cancel = ["cancel", "取消", "算了", "不要了", "不执行"]
+
+    # Check explicit patterns first (higher priority)
+    if any(p == user_input_lower or user_input_lower.startswith(p) for p in explicit_confirm):
+        return {"pending_action": pending, "status": "confirmed"}
+    if any(n == user_input_lower or user_input_lower.startswith(n) for n in explicit_cancel):
         cancel_msg = "好的，已取消操作。还有什么需要帮忙的吗？" if user_lang == "zh" else "OK, operation cancelled. Anything else I can help with?"
-        return {
-            "pending_action": None,
-            "status": "completed",
-            "response": cancel_msg,
-        }
-    else:
-        # Unclear response - ask again
-        retry_msg = "请确认是否执行？回复'确认'或'取消'" if user_lang == "zh" else "Please confirm: reply 'yes' or 'no'"
-        return {
-            "pending_action": pending,
-            "status": "awaiting_confirm",
-            "response": retry_msg,
-        }
+        return {"pending_action": None, "status": "completed", "response": cancel_msg}
+
+    # Check for negation patterns (must check BEFORE simple positive patterns)
+    # "不对" (wrong), "不是" (not that), "不行" (no way) indicate rejection or correction
+    negation_patterns = ["不对", "不是", "不行", "错了", "wrong", "not right", "wait"]
+    if any(neg in user_input_lower for neg in negation_patterns):
+        # User is correcting - treat as modification request, not simple cancel
+        # For now, cancel and ask them to try again with correct info
+        correction_msg = "好的，已取消。请重新告诉我正确的操作。" if user_lang == "zh" else "OK, cancelled. Please tell me the correct operation."
+        return {"pending_action": None, "status": "completed", "response": correction_msg}
+
+    # Simple yes/no patterns (lower priority)
+    simple_yes = ["yes", "y", "ok", "是", "好", "可以", "行", "嗯", "对"]
+    simple_no = ["no", "n", "否", "不"]
+
+    # For simple patterns, require them to be standalone or at start
+    for yes in simple_yes:
+        if user_input_lower == yes or user_input_lower.startswith(yes + " "):
+            return {"pending_action": pending, "status": "confirmed"}
+
+    for no in simple_no:
+        if user_input_lower == no or user_input_lower.startswith(no + " "):
+            cancel_msg = "好的，已取消操作。还有什么需要帮忙的吗？" if user_lang == "zh" else "OK, operation cancelled. Anything else I can help with?"
+            return {"pending_action": None, "status": "completed", "response": cancel_msg}
+
+    # Unclear response - ask again
+    retry_msg = "请确认是否执行？回复'确认'或'取消'" if user_lang == "zh" else "Please confirm: reply 'yes' or 'no'"
+    return {"pending_action": pending, "status": "awaiting_confirm", "response": retry_msg}
 
 
 def handle_additional_info(state: AgentState, user_input: str) -> dict:
-    """Handle additional info provided by user for slot filling."""
+    """Handle additional info provided by user for slot filling (multi-item support)."""
     pending = state.get("pending_action", {})
-    extracted = pending.get("extracted_info", {})
-    missing = pending.get("missing_fields", [])
+    items = pending.get("items", [])
 
-    # Use LLM to extract the additional info
+    # Collect all missing fields with item context
+    all_missing = []
+    for item in items:
+        for field in item.get("missing_fields", []):
+            all_missing.append({
+                "index": item["index"],
+                "item_name": item["extracted_info"].get("item_name", "unknown"),
+                "intent": item["intent"],
+                "field": field,
+            })
+
+    # Use LLM to extract additional info for all items
     llm = get_llm()
-    prompt = f"""The user is providing additional information for a {pending.get('intent')} operation.
-We already have: {extracted}
-We're missing: {missing}
+    items_context = json.dumps([{
+        "index": i["index"],
+        "item": i["extracted_info"].get("item_name", "unknown"),
+        "intent": i["intent"],
+        "have": i["extracted_info"],
+        "missing": i["missing_fields"],
+    } for i in items if i.get("missing_fields")], ensure_ascii=False)
+
+    prompt = f"""The user is providing additional information for multiple items.
+
+Items needing info:
+{items_context}
 
 User's response: {user_input}
 
-Extract any new information. Return JSON with only the NEW fields found:
-{{"field_name": "value", ...}}
+Extract new information and map to correct items. Return JSON:
+{{
+    "updates": [
+        {{"index": 0, "quantity": 0.5, "unit": "kg", "expiry_date": "2024-02-20"}},
+        {{"index": 1, "quantity": 10, "unit": "pcs"}}
+    ]
+}}
+
+IMPORTANT: Use actual field names as keys (quantity, unit, expiry_date, brand, etc.), NOT "field_name".
+Only include fields that the user actually provided.
 
 Remember:
 - Translate Chinese food names to English
 - Convert units: ml→L (÷1000), g→kg (÷1000)
 - Dates in YYYY-MM-DD format
+- Match info to the correct item by context
 """
 
     response = llm.invoke([HumanMessage(content=prompt)])
@@ -176,16 +230,22 @@ Remember:
             content = content.split("```json")[1].split("```")[0]
         elif "```" in content:
             content = content.split("```")[1].split("```")[0]
-        new_info = json.loads(content.strip())
+        result = json.loads(content.strip())
+        updates = result.get("updates", [])
     except (json.JSONDecodeError, IndexError):
-        new_info = {}
+        updates = []
 
-    # Merge new info
-    extracted.update(new_info)
+    # Apply updates to correct items
+    for update in updates:
+        idx = update.pop("index", 0)
+        if idx < len(items):
+            items[idx]["extracted_info"].update(update)
+            items[idx]["missing_fields"] = get_missing_fields(
+                items[idx]["intent"],
+                items[idx]["extracted_info"]
+            )
 
-    # Update pending action
-    pending["extracted_info"] = extracted
-    pending["missing_fields"] = get_missing_fields(pending["intent"], extracted)
+    pending["items"] = items
 
     return {
         "pending_action": pending,
@@ -197,7 +257,7 @@ Remember:
 
 def information_validator(state: AgentState) -> dict:
     """
-    Validate extracted information and decide next step.
+    Validate extracted information and decide next step (multi-item support).
     Routes to: ask_more, confirm, or execute.
     """
     pending = state.get("pending_action")
@@ -206,21 +266,37 @@ def information_validator(state: AgentState) -> dict:
         log_node("Information_Validator", state, output)
         return output
 
-    intent = pending.get("intent", "QUERY")
-    extracted = pending.get("extracted_info", {})
+    items = pending.get("items", [])
+    if not items:
+        output = {"status": "completed", "response": "No items to process."}
+        log_node("Information_Validator", state, output)
+        return output
 
-    # Check for missing required fields
-    missing = get_missing_fields(intent, extracted)
-    pending["missing_fields"] = missing
+    # Check missing fields for ALL items
+    all_complete = True
+    needs_confirmation = False
 
-    if missing:
-        # Need more info
+    for item in items:
+        missing = get_missing_fields(item["intent"], item["extracted_info"])
+        item["missing_fields"] = missing
+
+        if missing:
+            all_complete = False
+
+        if item["intent"] in ["CONSUME", "DISCARD"]:
+            needs_confirmation = True
+
+    pending["all_complete"] = all_complete
+    pending["items"] = items
+
+    if not all_complete:
+        # Need more info for some items
         output = {
             "pending_action": pending,
             "status": "awaiting_info",
             "next": "ask_more",
         }
-    elif intent in ["CONSUME", "DISCARD"]:
+    elif needs_confirmation:
         # Need confirmation for write operations
         output = {
             "pending_action": pending,
@@ -258,26 +334,35 @@ def get_missing_fields(intent: str, extracted: dict) -> list[str]:
 
 def ask_more(state: AgentState) -> dict:
     """
-    Generate follow-up question for missing information.
+    Generate follow-up question for missing information (multi-item support).
     """
     pending = state.get("pending_action", {})
-    intent = pending.get("intent", "")
-    extracted = pending.get("extracted_info", {})
-    missing = pending.get("missing_fields", [])
+    items = pending.get("items", [])
+
+    # Build summary of items needing info
+    items_summary = []
+    for item in items:
+        if item.get("missing_fields"):
+            items_summary.append({
+                "item_name": item["extracted_info"].get("item_name", "unknown"),
+                "intent": item["intent"],
+                "have": item["extracted_info"],
+                "missing": item["missing_fields"],
+            })
 
     # Get the original user language from messages
     messages = state.get("messages", [])
     user_lang = detect_language(messages)
 
     llm = get_llm()
-    prompt = get_ask_more_prompt(intent, extracted, missing)
+    prompt = get_ask_more_prompt_multi(items_summary)
 
     # Add language hint
     lang_hint = "Respond in Chinese." if user_lang == "zh" else "Respond in English."
 
     response = llm.invoke([
         SystemMessage(content=prompt),
-        HumanMessage(content=f"{lang_hint}\nGenerate a natural follow-up question for the missing fields: {missing}"),
+        HumanMessage(content=f"{lang_hint}\nGenerate a natural follow-up question for all missing fields."),
     ])
 
     output = {
@@ -304,69 +389,106 @@ def detect_language(messages: list) -> str:
 
 def confirm(state: AgentState) -> dict:
     """
-    Generate confirmation message and prepare FEFO plan.
+    Generate confirmation message and prepare FEFO plan (multi-item support).
     This node uses interrupt_before to pause for user confirmation.
     """
     pending = state.get("pending_action", {})
-    intent = pending.get("intent", "")
-    extracted = pending.get("extracted_info", {})
+    items = pending.get("items", [])
 
     messages = state.get("messages", [])
     user_lang = detect_language(messages)
 
-    # For CONSUME, calculate FEFO plan
-    fefo_plan = []
-    if intent == "CONSUME":
-        fefo_plan = calculate_fefo_plan(
-            item_name=extracted.get("item_name", ""),
-            amount=extracted.get("amount", 0),
-            brand=extracted.get("brand"),
-        )
-        pending["fefo_plan"] = fefo_plan
+    # Calculate FEFO plan for all CONSUME items
+    for item in items:
+        if item["intent"] == "CONSUME":
+            item["fefo_plan"] = calculate_fefo_plan(
+                item_name=item["extracted_info"].get("item_name", ""),
+                amount=item["extracted_info"].get("amount", 0),
+                brand=item["extracted_info"].get("brand"),
+            )
 
-    # Generate confirmation message
-    llm = get_llm()
-
-    if intent == "CONSUME" and fefo_plan:
-        # Build FEFO confirmation message
-        item_name = extracted.get("item_name", "item")
-        amount = extracted.get("amount", 0)
-        unit = extracted.get("unit", "")
-
-        if user_lang == "zh":
-            msg = f"系统将执行以下操作：\n📦 消耗 {amount}{unit} {item_name}\n"
-            for batch in fefo_plan:
-                brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
-                msg += f"   → 扣除: Batch #{batch['batch_id']}{brand_str}, "
-                msg += f"过期日 {batch.get('expiry_date', 'N/A')}, "
-                msg += f"数量: {batch['deduct_amount']}{unit}\n"
-            msg += "\n确认执行？[是/否]"
-        else:
-            msg = f"System will execute:\n📦 Consume {amount}{unit} {item_name}\n"
-            for batch in fefo_plan:
-                brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
-                msg += f"   → Deduct: Batch #{batch['batch_id']}{brand_str}, "
-                msg += f"expires {batch.get('expiry_date', 'N/A')}, "
-                msg += f"amount: {batch['deduct_amount']}{unit}\n"
-            msg += "\nConfirm? [Yes/No]"
-
-        pending["confirmation_message"] = msg
+    # Build multi-item confirmation message
+    if user_lang == "zh":
+        msg = "系统将执行以下操作：\n\n"
+        for i, item in enumerate(items, 1):
+            msg += build_item_confirmation_zh(i, item)
+        msg += "\n确认执行所有操作？[是/否]"
     else:
-        # Generic confirmation
-        if user_lang == "zh":
-            msg = f"确认要执行 {intent} 操作吗？\n详情: {extracted}\n[是/否]"
-        else:
-            msg = f"Confirm {intent} operation?\nDetails: {extracted}\n[Yes/No]"
-        pending["confirmation_message"] = msg
+        msg = "System will execute:\n\n"
+        for i, item in enumerate(items, 1):
+            msg += build_item_confirmation_en(i, item)
+        msg += "\nConfirm all operations? [Yes/No]"
+
+    pending["confirmation_message"] = msg
+    pending["items"] = items
 
     output = {
         "pending_action": pending,
         "status": "awaiting_confirm",
-        "response": pending["confirmation_message"],
+        "response": msg,
     }
 
     log_node("Confirm", state, output)
     return output
+
+
+def build_item_confirmation_zh(num: int, item: dict) -> str:
+    """Build Chinese confirmation for single item."""
+    intent = item["intent"]
+    info = item["extracted_info"]
+
+    emoji = {"ADD": "📥", "CONSUME": "📦", "DISCARD": "🗑️", "QUERY": "🔍"}
+    action = {"ADD": "添加", "CONSUME": "消耗", "DISCARD": "丢弃", "QUERY": "查询"}
+
+    msg = f"{num}️⃣ {emoji.get(intent, '')} {action.get(intent, '')} "
+
+    if intent == "CONSUME":
+        msg += f"{info.get('amount', 0)}{info.get('unit', '')} {info.get('item_name', '')}\n"
+        for batch in item.get("fefo_plan", []):
+            brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
+            msg += f"   → Batch #{batch['batch_id']}{brand_str}, "
+            msg += f"过期 {batch.get('expiry_date', 'N/A')}, "
+            msg += f"扣除 {batch['deduct_amount']}\n"
+    elif intent == "ADD":
+        msg += f"{info.get('quantity', 0)}{info.get('unit', '')} {info.get('item_name', '')}"
+        if info.get("expiry_date"):
+            msg += f", 过期日 {info['expiry_date']}"
+        msg += "\n"
+    elif intent == "DISCARD":
+        msg += f"批次 #{info.get('batch_id', '?')}\n"
+    else:
+        msg += f"{info.get('item_name', 'all')}\n"
+
+    return msg + "\n"
+
+
+def build_item_confirmation_en(num: int, item: dict) -> str:
+    """Build English confirmation for single item."""
+    intent = item["intent"]
+    info = item["extracted_info"]
+
+    emoji = {"ADD": "📥", "CONSUME": "📦", "DISCARD": "🗑️", "QUERY": "🔍"}
+
+    msg = f"{num}️⃣ {emoji.get(intent, '')} {intent} "
+
+    if intent == "CONSUME":
+        msg += f"{info.get('amount', 0)}{info.get('unit', '')} {info.get('item_name', '')}\n"
+        for batch in item.get("fefo_plan", []):
+            brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
+            msg += f"   → Batch #{batch['batch_id']}{brand_str}, "
+            msg += f"expires {batch.get('expiry_date', 'N/A')}, "
+            msg += f"deduct {batch['deduct_amount']}\n"
+    elif intent == "ADD":
+        msg += f"{info.get('quantity', 0)}{info.get('unit', '')} {info.get('item_name', '')}"
+        if info.get("expiry_date"):
+            msg += f", expires {info['expiry_date']}"
+        msg += "\n"
+    elif intent == "DISCARD":
+        msg += f"batch #{info.get('batch_id', '?')}\n"
+    else:
+        msg += f"{info.get('item_name', 'all')}\n"
+
+    return msg + "\n"
 
 
 def calculate_fefo_plan(item_name: str, amount: float, brand: str | None) -> list[dict]:
@@ -422,47 +544,61 @@ def calculate_fefo_plan(item_name: str, amount: float, brand: str | None) -> lis
 
 def tool_executor(state: AgentState) -> dict:
     """
-    Execute the actual database operation.
+    Execute the actual database operations (multi-item support with transaction).
     """
     pending = state.get("pending_action", {})
-    intent = pending.get("intent", "")
-    extracted = pending.get("extracted_info", {})
+    items = pending.get("items", [])
 
     messages = state.get("messages", [])
     user_lang = detect_language(messages)
 
     tool_calls = state.get("tool_calls", [])
-    result_message = ""
+    results = []
 
     try:
         with Session(engine) as db:
-            if intent == "ADD":
-                result_message = execute_add(db, extracted, user_lang)
-            elif intent == "CONSUME":
-                result_message = execute_consume(db, extracted, pending.get("fefo_plan", []), user_lang)
-            elif intent == "DISCARD":
-                result_message = execute_discard(db, extracted, user_lang)
-            elif intent == "QUERY":
-                result_message = execute_query(db, extracted, user_lang)
+            # Execute all operations in a transaction
+            for item in items:
+                intent = item["intent"]
+                extracted = item["extracted_info"]
 
-            tool_calls.append({
-                "tool": f"execute_{intent.lower()}",
-                "args": extracted,
-                "result": "success",
-            })
+                if intent == "ADD":
+                    result = execute_add(db, extracted, user_lang)
+                elif intent == "CONSUME":
+                    result = execute_consume(db, extracted, item.get("fefo_plan", []), user_lang)
+                elif intent == "DISCARD":
+                    result = execute_discard(db, extracted, user_lang)
+                elif intent == "QUERY":
+                    result = execute_query(db, extracted, user_lang)
+                else:
+                    result = f"Unknown intent: {intent}"
+
+                results.append(result)
+                tool_calls.append({
+                    "tool": f"execute_{intent.lower()}",
+                    "args": extracted,
+                    "result": "success",
+                })
+
+            # Commit all at once (transaction)
+            db.commit()
 
     except Exception as e:
-        result_message = f"操作失败: {str(e)}" if user_lang == "zh" else f"Operation failed: {str(e)}"
+        error_msg = f"操作失败: {str(e)}" if user_lang == "zh" else f"Operation failed: {str(e)}"
+        results.append(error_msg)
         tool_calls.append({
-            "tool": f"execute_{intent.lower()}",
-            "args": extracted,
+            "tool": "batch_execute",
+            "args": {"items_count": len(items)},
             "result": f"error: {str(e)}",
         })
+
+    # Combine results
+    combined_response = "\n\n".join(results)
 
     output = {
         "pending_action": None,
         "status": "completed",
-        "response": result_message,
+        "response": combined_response,
         "tool_calls": tool_calls,
     }
 

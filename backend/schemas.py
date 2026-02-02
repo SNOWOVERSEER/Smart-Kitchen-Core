@@ -94,12 +94,19 @@ class AgentActionRequest(BaseModel):
     confirm: bool | None = Field(None, description="Explicit confirmation (True/False)")
 
 
-class PendingActionResponse(BaseModel):
-    """Schema for pending action details in response."""
+class PendingActionItemResponse(BaseModel):
+    """Schema for a single pending action item (multi-item support)."""
 
+    index: int = 0
     intent: str | None = None
     extracted_info: dict[str, Any] | None = None
     missing_fields: list[str] | None = None
+
+
+class PendingActionResponse(BaseModel):
+    """Schema for pending action details in response (multi-item support)."""
+
+    items: list[PendingActionItemResponse] | None = None
     confirmation_message: str | None = None
 
 

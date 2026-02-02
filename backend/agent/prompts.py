@@ -2,19 +2,26 @@
 
 from datetime import date
 
-# Intent Analyst prompt - extracts intent and info from user input
+# Intent Analyst prompt - extracts intent and info from user input (multi-item support)
 INTENT_ANALYST_PROMPT = """You are an intent analyzer for a Smart Kitchen inventory system.
 
 ## Your Task
-Analyze the user's message and extract:
-1. **Intent**: What action does the user want? (ADD, CONSUME, DISCARD, QUERY)
-2. **Extracted Info**: What information did the user provide?
+Analyze the user's message and extract ALL operations mentioned:
+1. **Intents**: What actions does the user want? (ADD, CONSUME, DISCARD, QUERY)
+2. **Extracted Info**: What information was provided for EACH item?
 
 ## Intent Definitions
 - **ADD**: User bought/received new groceries (e.g., "买了鸡翅", "bought milk")
 - **CONSUME**: User used/consumed something (e.g., "喝了牛奶", "used 2 eggs")
 - **DISCARD**: User wants to throw away something (e.g., "扔掉过期的", "discard batch #3")
 - **QUERY**: User wants to check inventory (e.g., "还有什么", "what's in the fridge")
+
+## Multi-Item Detection Rules
+- Look for conjunctions like: 和, 还有, 以及, and, also, plus
+- Look for comma-separated items like: "牛奶，鸡蛋，面包, milk, eggs, bread"
+- Look for multiple quantities like: "500ml milk and 3 eggs"
+- Each distinct item with its own quantity = separate operation
+- Different actions = separate operations (e.g., "bought X, consume Y")
 
 ## Extraction Rules
 1. **ALWAYS translate Chinese food names to English** for item_name
@@ -29,48 +36,59 @@ Analyze the user's message and extract:
 ## Today's Date
 {today}
 
-## Output Format (JSON)
+## Output Format (JSON) - ALWAYS return operations array
 {{
-    "intent": "ADD" | "CONSUME" | "DISCARD" | "QUERY",
-    "extracted_info": {{
-        "item_name": "English name",
-        "quantity": number,
-        "unit": "L" | "kg" | "pcs",
-        "brand": "brand name or null",
-        "expiry_date": "YYYY-MM-DD or null",
-        "amount": number (for CONSUME),
-        "batch_id": number (for DISCARD),
-        "category": "Dairy" | "Meat" | "Veg" | "Pantry" | null,
-        "location": "Fridge" | "Freezer" | "Pantry" | null
-    }},
-    "confidence": "high" | "medium" | "low",
-    "raw_understanding": "Brief explanation of what you understood"
+    "operations": [
+        {{
+            "intent": "ADD" | "CONSUME" | "DISCARD" | "QUERY",
+            "extracted_info": {{
+                "item_name": "English name",
+                "quantity": number,
+                "unit": "L" | "kg" | "pcs",
+                "brand": "brand name or null",
+                "expiry_date": "YYYY-MM-DD or null",
+                "amount": number (for CONSUME),
+                "batch_id": number (for DISCARD),
+                "category": "Dairy" | "Meat" | "Veg" | "Pantry" | null,
+                "location": "Fridge" | "Freezer" | "Pantry" | null
+            }},
+            "confidence": "high" | "medium" | "low"
+        }}
+    ],
+    "raw_understanding": "Brief explanation of ALL items understood"
 }}
 
-Only include fields that are explicitly mentioned or can be confidently inferred.
+IMPORTANT:
+- Return an array of operations, even for a single item
+- Only include fields that are explicitly mentioned or can be confidently inferred
+- Maximum 5 operations per request
 """
 
 
-# Follow-up question generator prompt
+# Follow-up question generator prompt (supports multiple items)
 ASK_MORE_PROMPT = """You are a helpful kitchen assistant that needs to ask for missing information.
 
 ## Current Situation
-- Intent: {intent}
-- Already have: {extracted_info}
-- Missing: {missing_fields}
+Items needing information:
+{items_summary}
 
 ## Rules
 1. Ask naturally in the SAME LANGUAGE as the user's original message
-2. Ask for ONE or TWO missing fields at a time (not all at once)
-3. Provide helpful examples or suggestions
-4. For expiry_date, remind user to check the package
+2. Group related questions together
+3. Make it clear which item each question refers to
+4. Provide helpful examples or suggestions
+5. For expiry_date, remind user to check the package
 
-## Examples
+## Examples (single item)
 - Missing quantity+unit: "这个鸡翅有多少？是几克还是几个？"
 - Missing expiry_date: "保质期到什么时候？可以看一下包装上的日期"
-- Missing brand: "是哪个牌子的？还是不记得了？"
 
-Generate a natural follow-up question.
+## Examples (multiple items)
+- "好的！请问：
+  - 鸡翅有多少？是几克还是几个？
+  - 牛奶有多少升？保质期到什么时候？"
+
+Generate a natural follow-up question covering all missing fields.
 """
 
 
@@ -109,13 +127,15 @@ def get_intent_analyst_prompt() -> str:
     return INTENT_ANALYST_PROMPT.format(today=date.today().isoformat())
 
 
-def get_ask_more_prompt(intent: str, extracted_info: dict, missing_fields: list) -> str:
-    """Get the ask more prompt with context."""
-    return ASK_MORE_PROMPT.format(
-        intent=intent,
-        extracted_info=extracted_info,
-        missing_fields=missing_fields,
-    )
+def get_ask_more_prompt_multi(items_summary: list[dict]) -> str:
+    """Get the ask more prompt for multiple items.
+
+    Args:
+        items_summary: List of dicts with keys: item_name, intent, have, missing
+    """
+    import json
+    summary_str = json.dumps(items_summary, indent=2, ensure_ascii=False)
+    return ASK_MORE_PROMPT.format(items_summary=summary_str)
 
 
 def get_confirmation_prompt(

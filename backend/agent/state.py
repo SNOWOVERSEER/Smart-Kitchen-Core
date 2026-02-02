@@ -6,15 +6,23 @@ from typing_extensions import TypedDict
 from langgraph.graph.message import add_messages
 
 
-class PendingAction(TypedDict, total=False):
-    """Represents a pending action awaiting confirmation or more info."""
+class PendingActionItem(TypedDict, total=False):
+    """Single item within a multi-item operation."""
 
+    index: int  # Position in the list (for tracking)
     intent: Literal["ADD", "CONSUME", "DISCARD", "QUERY"]
-    extracted_info: dict[str, Any]  # Info extracted from user input
-    missing_fields: list[str]  # Required fields still missing
+    extracted_info: dict[str, Any]  # Info extracted for this item
+    missing_fields: list[str]  # Required fields still missing for this item
+    fefo_plan: list[dict[str, Any]]  # FEFO deduction plan (for CONSUME)
+
+
+class PendingAction(TypedDict, total=False):
+    """Container for one or more pending actions (multi-item support)."""
+
+    items: list[PendingActionItem]  # List of pending items
     needs_confirmation: bool  # Whether human confirmation is needed
     confirmation_message: str  # Message to show user for confirmation
-    fefo_plan: list[dict[str, Any]]  # FEFO deduction plan for consume
+    all_complete: bool  # True when all items have required info
 
 
 class AgentState(TypedDict, total=False):

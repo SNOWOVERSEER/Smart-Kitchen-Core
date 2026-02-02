@@ -192,13 +192,20 @@ def run_agent(
             else:
                 print(f"[CLEANUP] Note: Could not clear thread {thread_id}: {e}")
 
-    # Format pending_action for response
+    # Format pending_action for response (multi-item support)
     pending_dict = None
     if pending_action:
+        items = pending_action.get("items", [])
         pending_dict = {
-            "intent": pending_action.get("intent"),
-            "extracted_info": pending_action.get("extracted_info"),
-            "missing_fields": pending_action.get("missing_fields"),
+            "items": [
+                {
+                    "index": item.get("index", i),
+                    "intent": item.get("intent"),
+                    "extracted_info": item.get("extracted_info"),
+                    "missing_fields": item.get("missing_fields"),
+                }
+                for i, item in enumerate(items)
+            ],
             "confirmation_message": pending_action.get("confirmation_message"),
         }
 
