@@ -1,28 +1,47 @@
-import os
-from sqlmodel import SQLModel, Session, create_engine
+"""Supabase client initialization with per-request user authentication."""
 
-# Database URL Configuration
-# Inside Docker, POSTGRES_HOST resolves to "db" (internal network)
-USER = os.getenv("POSTGRES_USER", "user")
-PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
-DB_NAME = os.getenv("POSTGRES_DB", "db")
-HOST = os.getenv("POSTGRES_HOST", "localhost")
+import contextvars
 
-DATABASE_URL = f"postgresql://{USER}:{PASSWORD}@{HOST}/{DB_NAME}"
+from supabase import create_client, Client
 
-# Create engine - the core connection to the database
-engine = create_engine(DATABASE_URL, echo=True)
+from config import SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY
 
-
-def create_db_and_tables() -> None:
-    """Create all tables defined by SQLModel subclasses."""
-    SQLModel.metadata.create_all(engine)
+# Context variable to store the current user's JWT per-request.
+# FastAPI runs each request in its own async context, so this is safe.
+_current_access_token: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "access_token", default=None
+)
 
 
-def get_db():
+def set_current_token(token: str) -> None:
+    """Store the current user's JWT for downstream Supabase calls."""
+    _current_access_token.set(token)
+
+
+def get_supabase_client() -> Client:
+    """Get Supabase client for server-side operations.
+
+    Priority:
+    1. If a user JWT is set (via auth middleware), creates a client
+       authenticated as that user. RLS policies apply.
+    2. If SUPABASE_SECRET_KEY is configured, uses secret key
+       (bypasses RLS). Used for admin operations.
+    3. Falls back to publishable key.
     """
-    Dependency injection for FastAPI.
-    Yields a database session for each request, auto-closes on completion.
-    """
-    with Session(engine) as session:
-        yield session
+    token = _current_access_token.get()
+    if token:
+        # User-authenticated client: publishable key + user JWT
+        # PostgREST uses the JWT for RLS evaluation
+        client = create_client(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+        client.postgrest.auth(token)
+        return client
+
+    if SUPABASE_SECRET_KEY:
+        return create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
+
+    return create_client(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+
+
+def get_supabase_anon_client() -> Client:
+    """Get Supabase client with publishable key (for auth operations)."""
+    return create_client(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)

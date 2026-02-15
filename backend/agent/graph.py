@@ -1,11 +1,9 @@
 """LangGraph construction for the Smart Kitchen agent."""
 
-import asyncio
 import uuid
 from typing import Literal
 
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
 
 from agent.state import AgentState
 from agent.nodes import (
@@ -15,22 +13,18 @@ from agent.nodes import (
     confirm,
     tool_executor,
 )
+from database import get_supabase_client
 
 
 def route_after_validator(state: AgentState) -> Literal["ask_more", "confirm", "execute", "end"]:
-    """
-    Router function: decides next node after validation.
-    """
-    # Check if already completed
+    """Router function: decides next node after validation."""
     if state.get("status") == "completed":
         return "end"
 
-    # Check the next step set by validator
     next_step = state.get("next")
     if next_step:
         return next_step
 
-    # Default based on status
     status = state.get("status")
     if status == "awaiting_info":
         return "ask_more"
@@ -43,39 +37,30 @@ def route_after_validator(state: AgentState) -> Literal["ask_more", "confirm", "
 
 
 def route_after_intent(state: AgentState) -> Literal["validator", "execute", "end"]:
-    """
-    Router function: decides next node after intent analysis.
-    """
+    """Router function: decides next node after intent analysis."""
     status = state.get("status")
 
     if status == "completed":
         return "end"
 
     if status == "confirmed":
-        # User confirmed - go directly to execution
         return "execute"
 
-    # Otherwise, go to validation
     return "validator"
 
 
 def build_graph() -> StateGraph:
     """Build and return the agent graph."""
-
-    # Create the graph
     graph = StateGraph(AgentState)
 
-    # Add nodes
     graph.add_node("intent_analyst", intent_analyst)
     graph.add_node("validator", information_validator)
     graph.add_node("ask_more", ask_more)
     graph.add_node("confirm", confirm)
     graph.add_node("execute", tool_executor)
 
-    # Set entry point
     graph.set_entry_point("intent_analyst")
 
-    # Add edges with routing
     graph.add_conditional_edges(
         "intent_analyst",
         route_after_intent,
@@ -97,7 +82,6 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # Terminal nodes go to END
     graph.add_edge("ask_more", END)
     graph.add_edge("confirm", END)
     graph.add_edge("execute", END)
@@ -105,61 +89,88 @@ def build_graph() -> StateGraph:
     return graph
 
 
-# Global memory saver for checkpointing
-memory_saver = MemorySaver()
+class SupabaseCheckpointer:
+    """Custom checkpointer backed by Supabase agent_conversations table."""
+
+    def get(self, thread_id: str) -> dict | None:
+        supabase = get_supabase_client()
+        result = (
+            supabase.table("agent_conversations")
+            .select("checkpoint_data")
+            .eq("thread_id", thread_id)
+            .eq("status", "active")
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return result.data[0]["checkpoint_data"]
+        return None
+
+    def put(self, thread_id: str, user_id: str, data: dict):
+        supabase = get_supabase_client()
+        supabase.table("agent_conversations").upsert({
+            "thread_id": thread_id,
+            "user_id": user_id,
+            "checkpoint_data": data,
+            "status": "active",
+        }, on_conflict="thread_id").execute()
+
+    def complete(self, thread_id: str, final_messages: list[dict]):
+        """Mark conversation completed and save final message history."""
+        supabase = get_supabase_client()
+        supabase.table("agent_conversations").update({
+            "status": "completed",
+            "checkpoint_data": {"messages": final_messages},
+        }).eq("thread_id", thread_id).execute()
 
 
-def get_compiled_graph():
-    """Get the compiled graph with checkpointer."""
-    graph = build_graph()
-    return graph.compile(
-        checkpointer=memory_saver,
-        # interrupt_before=["confirm"],  # Pause before confirmation
-    )
+checkpointer = SupabaseCheckpointer()
 
 
 def run_agent(
     text: str,
+    user_id: str,
     thread_id: str | None = None,
     confirm_action: bool | None = None,
 ) -> dict:
     """
-    Run the agent with user input.
+    Run the agent with user input, scoped to a specific user.
 
     Args:
         text: User's natural language input
+        user_id: Authenticated user's UUID
         thread_id: Thread ID for conversation continuity (None = new conversation)
         confirm_action: Explicit confirmation (True/False) or None for natural language
 
     Returns:
         dict with response, thread_id, status, pending_action, tool_calls
     """
-    # Generate thread_id if not provided
     if not thread_id:
         thread_id = str(uuid.uuid4())
 
-    # Get compiled graph
-    app = get_compiled_graph()
+    # Load existing state from checkpoint
+    existing_state = checkpointer.get(thread_id)
 
-    # Build input message
+    # Build graph (no LangGraph checkpointer - we manage state manually)
+    graph = build_graph()
+    app = graph.compile()
+
+    # Build input
     if confirm_action is not None:
-        # Explicit confirmation (internal message, use English)
         input_text = "confirm" if confirm_action else "cancel"
     else:
         input_text = text
 
-    # Prepare input state
-    input_state = {
-        "messages": [{"role": "user", "content": input_text}],
-        "thread_id": thread_id,
-    }
+    # Merge with existing state if continuing conversation
+    input_state = existing_state or {}
+    input_state["messages"] = input_state.get("messages", []) + [
+        {"role": "user", "content": input_text}
+    ]
+    input_state["thread_id"] = thread_id
+    input_state["user_id"] = user_id
 
-    # Configuration for checkpointing
-    config = {"configurable": {"thread_id": thread_id}}
-
-    # Run the graph
     try:
-        result = app.invoke(input_state, config)
+        result = app.invoke(input_state)
     except Exception as e:
         print(f"[ERROR] Graph execution failed: {e}")
         return {
@@ -170,29 +181,34 @@ def run_agent(
             "tool_calls": [],
         }
 
-    # Extract results
     response = result.get("response", "")
     status = result.get("status", "completed")
     pending_action = result.get("pending_action")
     tool_calls = result.get("tool_calls", [])
 
-    # Clear checkpoint if conversation completed to invalidate thread_id
-    if status == "completed":
-        try:
-            # Try async delete first (LangGraph official API)
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(memory_saver.adelete_thread(thread_id))
-            loop.close()
-            print(f"[CLEANUP] Thread {thread_id} checkpoint cleared")
-        except Exception as e:
-            # Fallback: direct storage access for MemorySaver
-            if hasattr(memory_saver, "storage"):
-                memory_saver.storage.pop(thread_id, None)
-                print(f"[CLEANUP] Thread {thread_id} cleared via storage")
-            else:
-                print(f"[CLEANUP] Note: Could not clear thread {thread_id}: {e}")
+    # Build message history including AI response
+    messages_to_save = [
+        {"role": getattr(m, "type", "user"), "content": getattr(m, "content", str(m))}
+        for m in result.get("messages", [])
+    ]
+    if response:
+        messages_to_save.append({"role": "assistant", "content": response})
 
-    # Format pending_action for response (multi-item support)
+    # Save or clear checkpoint
+    if status == "completed":
+        checkpointer.complete(thread_id, messages_to_save)
+        print(f"[CLEANUP] Thread {thread_id} completed")
+    else:
+        checkpoint = {
+            "messages": messages_to_save,
+            "pending_action": pending_action,
+            "status": status,
+            "user_id": user_id,
+            "thread_id": thread_id,
+        }
+        checkpointer.put(thread_id, user_id, checkpoint)
+
+    # Format pending_action for response
     pending_dict = None
     if pending_action:
         items = pending_action.get("items", [])

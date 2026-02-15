@@ -1,11 +1,8 @@
-"""Business logic services for inventory management."""
+"""Business logic services using Supabase client."""
 
-from datetime import datetime, timezone
 from typing import Any
 
-from sqlmodel import Session, select, func, case, nulls_last
-
-from models import InventoryItem, TransactionLog
+from database import get_supabase_client
 from schemas import (
     InventoryItemCreate,
     ConsumeResult,
@@ -14,132 +11,163 @@ from schemas import (
 )
 
 
-#Inventory CRUD
+# ── Inventory CRUD ──
 
-def add_inventory_item(db: Session, item: InventoryItemCreate) -> InventoryItem:
-    """Add a new inventory batch to the database."""
-    db_item = InventoryItem(**item.model_dump())
-    db.add(db_item)
-    db.commit()
-    db.refresh(db_item)
+def add_inventory_item(
+    user_id: str,
+    item: InventoryItemCreate,
+    thread_id: str | None = None,
+    raw_input: str | None = None,
+) -> dict:
+    """Add a new inventory batch."""
+    supabase = get_supabase_client()
 
-    # Log the transaction
+    data = {
+        "user_id": user_id,
+        **item.model_dump(),
+    }
+    # Convert date to string for JSON
+    if data.get("expiry_date"):
+        data["expiry_date"] = str(data["expiry_date"])
+
+    result = supabase.table("inventory").insert(data).execute()
+    row = result.data[0]
+
     log_transaction(
-        db=db,
+        user_id=user_id,
         intent="INBOUND",
+        thread_id=thread_id,
+        raw_input=raw_input,
         operation_details={
             "action": "add",
-            "batch_id": db_item.id,
-            "item_name": db_item.item_name,
-            "quantity": db_item.quantity,
-            "unit": db_item.unit,
+            "batch_id": row["id"],
+            "item_name": row["item_name"],
+            "quantity": row["quantity"],
+            "unit": row["unit"],
         },
     )
 
-    return db_item
+    return row
 
 
-def get_inventory_grouped(db: Session) -> list[InventoryGroupResponse]:
-    """Get all inventory items grouped by item_name."""
-    # Get all items with quantity > 0, ordered by item_name
-    statement = (
-        select(InventoryItem)
-        .where(InventoryItem.quantity > 0)
-        .order_by(InventoryItem.item_name)
+def get_inventory_grouped(user_id: str) -> list[InventoryGroupResponse]:
+    """Get inventory grouped by item_name for a user."""
+    supabase = get_supabase_client()
+
+    result = (
+        supabase.table("inventory")
+        .select("*")
+        .eq("user_id", user_id)
+        .gt("quantity", 0)
+        .order("item_name")
+        .execute()
     )
-    items = db.exec(statement).all()
 
     # Group by item_name
-    groups: dict[str, list[InventoryItem]] = {}
-    for item in items:
-        if item.item_name not in groups:
-            groups[item.item_name] = []
-        groups[item.item_name].append(item)
+    groups: dict[str, list[dict]] = {}
+    for row in result.data:
+        name = row["item_name"]
+        if name not in groups:
+            groups[name] = []
+        groups[name].append(row)
 
-    # Build response
-    result = []
+    output = []
     for item_name, batches in groups.items():
-        total_qty = sum(b.quantity for b in batches)
-        unit = batches[0].unit if batches else ""
-        result.append(
+        total_qty = sum(b["quantity"] for b in batches)
+        unit = batches[0]["unit"] if batches else ""
+        output.append(
             InventoryGroupResponse(
                 item_name=item_name,
                 total_quantity=total_qty,
                 unit=unit,
-                batches=[InventoryItemResponse.model_validate(b) for b in batches],
+                batches=[InventoryItemResponse(**b) for b in batches],
             )
         )
 
-    return result
+    return output
 
 
-def get_all_inventory(db: Session) -> list[InventoryItem]:
-    """Get all inventory items (including depleted)."""
-    statement = select(InventoryItem).order_by(InventoryItem.item_name)
-    return list(db.exec(statement).all())
+def get_all_inventory(user_id: str) -> list[dict]:
+    """Get all inventory batches for a user."""
+    supabase = get_supabase_client()
+    result = (
+        supabase.table("inventory")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("item_name")
+        .execute()
+    )
+    return result.data
 
 
-def discard_batch(db: Session, batch_id: int) -> InventoryItem | None:
-    """Discard (delete) a specific batch by ID."""
-    item = db.get(InventoryItem, batch_id)
-    if not item:
+def discard_batch(
+    user_id: str,
+    batch_id: int,
+    thread_id: str | None = None,
+    raw_input: str | None = None,
+) -> dict | None:
+    """Discard a specific batch by ID."""
+    supabase = get_supabase_client()
+
+    # Fetch first to get details for logging
+    fetch = (
+        supabase.table("inventory")
+        .select("*")
+        .eq("id", batch_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not fetch.data:
         return None
 
-    # Log before deletion
+    item = fetch.data[0]
+
     log_transaction(
-        db=db,
+        user_id=user_id,
         intent="DISCARD",
+        thread_id=thread_id,
+        raw_input=raw_input,
         operation_details={
             "action": "discard",
-            "batch_id": item.id,
-            "item_name": item.item_name,
-            "remaining_quantity": item.quantity,
+            "batch_id": item["id"],
+            "item_name": item["item_name"],
+            "remaining_quantity": item["quantity"],
         },
     )
 
-    db.delete(item)
-    db.commit()
+    supabase.table("inventory").delete().eq("id", batch_id).eq("user_id", user_id).execute()
     return item
 
 
-#Smart Consumption (FEFO)
+# ── Smart Consumption (FEFO) ──
 
 def consume_item(
-    db: Session,
+    user_id: str,
     item_name: str,
     amount: float,
     brand: str | None = None,
+    thread_id: str | None = None,
     raw_input: str | None = None,
     ai_reasoning: str | None = None,
 ) -> ConsumeResult:
-    """
-    Smart consumption with FEFO (First Expired, First Out) logic.
+    """FEFO consumption scoped to user."""
+    supabase = get_supabase_client()
 
-    Priority:
-    1. is_open == True (consume open items first)
-    2. expiry_date ASC (consume items expiring soonest, NULL last)
-
-    If brand is specified, filter by brand BEFORE applying sort.
-    Cascades across multiple batches if needed.
-    """
-    # Build query with filters
-    statement = (
-        select(InventoryItem)
-        .where(InventoryItem.item_name == item_name)
-        .where(InventoryItem.quantity > 0)
+    # Build query
+    query = (
+        supabase.table("inventory")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("item_name", item_name)
+        .gt("quantity", 0)
     )
 
-    # Apply brand filter if specified
     if brand:
-        statement = statement.where(InventoryItem.brand == brand)
+        query = query.eq("brand", brand)
 
-    # FEFO Sort: is_open DESC (True first), then expiry_date ASC (NULL last)
-    statement = statement.order_by(
-        InventoryItem.is_open.desc(),
-        nulls_last(InventoryItem.expiry_date.asc()),
-    )
-
-    batches = list(db.exec(statement).all())
+    # FEFO sort: is_open DESC, expiry_date ASC (nulls last)
+    result = query.order("is_open", desc=True).order("expiry_date", nullsfirst=False).execute()
+    batches = result.data
 
     if not batches:
         return ConsumeResult(
@@ -151,8 +179,7 @@ def consume_item(
             + (f" (brand: {brand})" if brand else ""),
         )
 
-    # Calculate total available
-    total_available = sum(b.quantity for b in batches)
+    total_available = sum(b["quantity"] for b in batches)
     if total_available < amount:
         return ConsumeResult(
             success=False,
@@ -170,35 +197,35 @@ def consume_item(
         if remaining <= 0:
             break
 
-        deduct = min(batch.quantity, remaining)
-        old_qty = batch.quantity
-        batch.quantity = round(batch.quantity - deduct, 3)  # Avoid float precision issues
+        deduct = min(batch["quantity"], remaining)
+        old_qty = batch["quantity"]
+        new_qty = round(batch["quantity"] - deduct, 3)
         remaining = round(remaining - deduct, 3)
 
-        # If batch is now empty or nearly empty (float precision), mark as closed
-        if batch.quantity <= 0.001:
-            batch.quantity = 0
-            batch.is_open = False
+        update_data: dict[str, Any] = {}
+        if new_qty <= 0.001:
+            update_data = {"quantity": 0, "is_open": False}
+            new_qty = 0
+        elif not batch["is_open"] and deduct > 0:
+            update_data = {"quantity": new_qty, "is_open": True}
+        else:
+            update_data = {"quantity": new_qty}
 
-        # If we're consuming from this batch, mark it as open
-        elif not batch.is_open and deduct > 0:
-            batch.is_open = True
+        supabase.table("inventory").update(update_data).eq("id", batch["id"]).execute()
 
         affected.append({
-            "batch_id": batch.id,
-            "brand": batch.brand,
-            "expiry_date": str(batch.expiry_date) if batch.expiry_date else None,
+            "batch_id": batch["id"],
+            "brand": batch.get("brand"),
+            "expiry_date": batch.get("expiry_date"),
             "deducted": deduct,
             "old_quantity": old_qty,
-            "new_quantity": batch.quantity,
+            "new_quantity": new_qty,
         })
 
-    db.commit()
-
-    # Log the transaction
     log_transaction(
-        db=db,
+        user_id=user_id,
         intent="CONSUME",
+        thread_id=thread_id,
         raw_input=raw_input,
         ai_reasoning=ai_reasoning,
         operation_details={
@@ -219,34 +246,39 @@ def consume_item(
     )
 
 
-#Transaction Logging
+# ── Transaction Logging ──
 
 def log_transaction(
-    db: Session,
+    user_id: str,
     intent: str,
+    thread_id: str | None = None,
     raw_input: str | None = None,
     ai_reasoning: str | None = None,
     operation_details: dict[str, Any] | None = None,
-) -> TransactionLog:
+) -> dict:
     """Log a transaction for audit trail."""
-    log = TransactionLog(
-        intent=intent,
-        raw_input=raw_input,
-        ai_reasoning=ai_reasoning,
-        operation_details=operation_details,
-        timestamp=datetime.now(timezone.utc),
-    )
-    db.add(log)
-    db.commit()
-    db.refresh(log)
-    return log
+    supabase = get_supabase_client()
+    data = {
+        "user_id": user_id,
+        "intent": intent,
+        "thread_id": thread_id,
+        "raw_input": raw_input,
+        "ai_reasoning": ai_reasoning,
+        "operation_details": operation_details,
+    }
+    result = supabase.table("transaction_logs").insert(data).execute()
+    return result.data[0]
 
 
-def get_transaction_logs(db: Session, limit: int = 50) -> list[TransactionLog]:
-    """Get recent transaction logs."""
-    statement = (
-        select(TransactionLog)
-        .order_by(TransactionLog.timestamp.desc())
+def get_transaction_logs(user_id: str, limit: int = 50) -> list[dict]:
+    """Get recent transaction logs for a user."""
+    supabase = get_supabase_client()
+    result = (
+        supabase.table("transaction_logs")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
         .limit(limit)
+        .execute()
     )
-    return list(db.exec(statement).all())
+    return result.data

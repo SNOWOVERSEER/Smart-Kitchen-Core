@@ -6,11 +6,53 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-#Inventory Schemas
+# ── Auth Schemas ──
+
+class SignUpRequest(BaseModel):
+    email: str = Field(..., description="User email")
+    password: str = Field(..., min_length=6, description="Password (min 6 chars)")
+    display_name: str | None = Field(None, description="Optional display name")
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class AuthResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    user_id: str
+    email: str
+
+class ProfileResponse(BaseModel):
+    id: str
+    email: str | None = None
+    display_name: str | None = None
+    preferred_language: str = "en"
+
+class ProfileUpdate(BaseModel):
+    display_name: str | None = None
+    preferred_language: str | None = None
+
+
+# ── AI Config Schemas ──
+
+class AIConfigCreate(BaseModel):
+    provider: str = Field(..., description="'openai' or 'anthropic'")
+    api_key: str = Field(..., description="API key (will be encrypted)")
+    model_id: str = Field(..., description="e.g. 'gpt-4o', 'claude-sonnet-4-5-20250929'")
+
+class AIConfigResponse(BaseModel):
+    id: str
+    provider: str
+    model_id: str
+    is_active: bool
+    api_key_preview: str  # "sk-...abc" (masked)
+    created_at: datetime | None = None
+
+
+# ── Inventory Schemas ──
 
 class InventoryItemCreate(BaseModel):
-    """Schema for adding a new inventory batch."""
-
     item_name: str = Field(..., min_length=1, description="Normalized item name")
     brand: str | None = None
     quantity: float = Field(..., gt=0)
@@ -19,12 +61,9 @@ class InventoryItemCreate(BaseModel):
     category: str | None = None
     expiry_date: date | None = None
     is_open: bool = False
-    location: str = "Pantry"
-
+    location: str = Field(..., min_length=1, description="Fridge, Freezer, or Pantry")
 
 class InventoryItemResponse(BaseModel):
-    """Schema for returning a single inventory batch."""
-
     id: int
     item_name: str
     brand: str | None
@@ -35,33 +74,23 @@ class InventoryItemResponse(BaseModel):
     expiry_date: date | None
     is_open: bool
     location: str
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
+    created_at: datetime | None
 
 class InventoryGroupResponse(BaseModel):
-    """Schema for grouped inventory view (by item_name)."""
-
     item_name: str
     total_quantity: float
     unit: str
     batches: list[InventoryItemResponse]
 
 
-#Consumption Schemas
+# ── Consumption Schemas ──
 
 class ConsumeRequest(BaseModel):
-    """Schema for consuming inventory."""
-
     item_name: str = Field(..., description="Item to consume")
     amount: float = Field(..., gt=0, description="Amount to consume")
-    brand: str | None = Field(None, description="Optional: specific brand to consume")
-
+    brand: str | None = Field(None, description="Optional: specific brand")
 
 class ConsumeResult(BaseModel):
-    """Schema for consumption operation result."""
-
     success: bool
     consumed_amount: float
     remaining_to_consume: float
@@ -69,57 +98,37 @@ class ConsumeResult(BaseModel):
     message: str
 
 
-#Transaction Log Schemas
+# ── Transaction Log Schemas ──
 
 class TransactionLogResponse(BaseModel):
-    """Schema for returning transaction log entries."""
-
     id: int
     intent: str
     raw_input: str | None
     ai_reasoning: str | None
     operation_details: dict[str, Any] | None
-    timestamp: datetime
-
-    model_config = {"from_attributes": True}
+    created_at: datetime | None
 
 
-#Agent Schemas
+# ── Agent Schemas ──
 
 class AgentActionRequest(BaseModel):
-    """Schema for agent action request."""
-
     text: str = Field(default="", description="Natural language command")
     thread_id: str | None = Field(None, description="Thread ID for conversation continuity")
-    confirm: bool | None = Field(None, description="Explicit confirmation (True/False)")
-
+    confirm: bool | None = Field(None, description="Explicit confirmation")
 
 class PendingActionItemResponse(BaseModel):
-    """Schema for a single pending action item (multi-item support)."""
-
     index: int = 0
     intent: str | None = None
     extracted_info: dict[str, Any] | None = None
     missing_fields: list[str] | None = None
 
-
 class PendingActionResponse(BaseModel):
-    """Schema for pending action details in response (multi-item support)."""
-
     items: list[PendingActionItemResponse] | None = None
     confirmation_message: str | None = None
 
-
 class AgentActionResponse(BaseModel):
-    """Schema for agent action response."""
-
     response: str = Field(..., description="Agent's response message")
     thread_id: str = Field(..., description="Thread ID for next request")
     status: str = Field(..., description="completed | awaiting_info | awaiting_confirm")
-    pending_action: PendingActionResponse | None = Field(
-        None, description="Pending action details for UI"
-    )
-    tool_calls: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="List of tools called during execution",
-    )
+    pending_action: PendingActionResponse | None = None
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)

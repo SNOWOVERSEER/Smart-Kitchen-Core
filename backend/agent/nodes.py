@@ -1,31 +1,19 @@
 """Node implementations for the LangGraph agent."""
 
 import json
-import os
 from datetime import date
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
-from sqlmodel import Session
 
 from agent.prompts import (
     get_intent_analyst_prompt,
     get_ask_more_prompt_multi,
 )
 from agent.state import AgentState, PendingAction, PendingActionItem, REQUIRED_FIELDS
-from database import engine
+from agent.llm_factory import get_user_llm
 from services import consume_item, add_inventory_item, discard_batch, get_inventory_grouped
 from schemas import InventoryItemCreate
-
-
-def get_llm() -> ChatOpenAI:
-    """Get the LLM instance."""
-    return ChatOpenAI(
-        model="gpt-4o",
-        temperature=0,
-        api_key=os.getenv("OPENAI_API_KEY"),
-    )
 
 
 def log_node(node_name: str, input_state: dict, output: dict) -> None:
@@ -61,7 +49,8 @@ def intent_analyst(state: AgentState) -> dict:
         return handle_additional_info(state, user_input)
 
     # Fresh intent analysis
-    llm = get_llm()
+    user_id = state.get("user_id", "")
+    llm = get_user_llm(user_id)
     system_prompt = get_intent_analyst_prompt()
 
     response = llm.invoke([
@@ -132,11 +121,9 @@ def handle_confirmation_response(state: AgentState, user_input: str) -> dict:
     user_lang = detect_language(messages)
 
     # Check for EXPLICIT confirmation/cancellation patterns
-    # These are checked first as they're unambiguous
     explicit_confirm = ["confirm", "确认", "确定", "执行"]
     explicit_cancel = ["cancel", "取消", "算了", "不要了", "不执行"]
 
-    # Check explicit patterns first (higher priority)
     if any(p == user_input_lower or user_input_lower.startswith(p) for p in explicit_confirm):
         return {"pending_action": pending, "status": "confirmed"}
     if any(n == user_input_lower or user_input_lower.startswith(n) for n in explicit_cancel):
@@ -144,11 +131,8 @@ def handle_confirmation_response(state: AgentState, user_input: str) -> dict:
         return {"pending_action": None, "status": "completed", "response": cancel_msg}
 
     # Check for negation patterns (must check BEFORE simple positive patterns)
-    # "不对" (wrong), "不是" (not that), "不行" (no way) indicate rejection or correction
     negation_patterns = ["不对", "不是", "不行", "错了", "wrong", "not right", "wait"]
     if any(neg in user_input_lower for neg in negation_patterns):
-        # User is correcting - treat as modification request, not simple cancel
-        # For now, cancel and ask them to try again with correct info
         correction_msg = "好的，已取消。请重新告诉我正确的操作。" if user_lang == "zh" else "OK, cancelled. Please tell me the correct operation."
         return {"pending_action": None, "status": "completed", "response": correction_msg}
 
@@ -156,7 +140,6 @@ def handle_confirmation_response(state: AgentState, user_input: str) -> dict:
     simple_yes = ["yes", "y", "ok", "是", "好", "可以", "行", "嗯", "对"]
     simple_no = ["no", "n", "否", "不"]
 
-    # For simple patterns, require them to be standalone or at start
     for yes in simple_yes:
         if user_input_lower == yes or user_input_lower.startswith(yes + " "):
             return {"pending_action": pending, "status": "confirmed"}
@@ -175,20 +158,10 @@ def handle_additional_info(state: AgentState, user_input: str) -> dict:
     """Handle additional info provided by user for slot filling (multi-item support)."""
     pending = state.get("pending_action", {})
     items = pending.get("items", [])
-
-    # Collect all missing fields with item context
-    all_missing = []
-    for item in items:
-        for field in item.get("missing_fields", []):
-            all_missing.append({
-                "index": item["index"],
-                "item_name": item["extracted_info"].get("item_name", "unknown"),
-                "intent": item["intent"],
-                "field": field,
-            })
+    user_id = state.get("user_id", "")
 
     # Use LLM to extract additional info for all items
-    llm = get_llm()
+    llm = get_user_llm(user_id)
     items_context = json.dumps([{
         "index": i["index"],
         "item": i["extracted_info"].get("item_name", "unknown"),
@@ -197,7 +170,10 @@ def handle_additional_info(state: AgentState, user_input: str) -> dict:
         "missing": i["missing_fields"],
     } for i in items if i.get("missing_fields")], ensure_ascii=False)
 
+    today = date.today().isoformat()
     prompt = f"""The user is providing additional information for multiple items.
+
+Today's date: {today}
 
 Items needing info:
 {items_context}
@@ -207,18 +183,18 @@ User's response: {user_input}
 Extract new information and map to correct items. Return JSON:
 {{
     "updates": [
-        {{"index": 0, "quantity": 0.5, "unit": "kg", "expiry_date": "2024-02-20"}},
+        {{"index": 0, "quantity": 0.5, "unit": "kg", "expiry_date": "2026-02-20", "location": "Fridge"}},
         {{"index": 1, "quantity": 10, "unit": "pcs"}}
     ]
 }}
 
-IMPORTANT: Use actual field names as keys (quantity, unit, expiry_date, brand, etc.), NOT "field_name".
+IMPORTANT: Use actual field names as keys (quantity, unit, expiry_date, brand, location, etc.), NOT "field_name".
 Only include fields that the user actually provided.
 
 Remember:
 - Translate Chinese food names to English
 - Convert units: ml→L (÷1000), g→kg (÷1000)
-- Dates in YYYY-MM-DD format
+- Dates in YYYY-MM-DD format. When year is not specified, use the current year ({today[:4]})
 - Match info to the correct item by context
 """
 
@@ -290,21 +266,18 @@ def information_validator(state: AgentState) -> dict:
     pending["items"] = items
 
     if not all_complete:
-        # Need more info for some items
         output = {
             "pending_action": pending,
             "status": "awaiting_info",
             "next": "ask_more",
         }
     elif needs_confirmation:
-        # Need confirmation for write operations
         output = {
             "pending_action": pending,
             "status": "processing",
             "next": "confirm",
         }
     else:
-        # Can execute directly (QUERY, ADD with all info)
         output = {
             "pending_action": pending,
             "status": "processing",
@@ -338,6 +311,7 @@ def ask_more(state: AgentState) -> dict:
     """
     pending = state.get("pending_action", {})
     items = pending.get("items", [])
+    user_id = state.get("user_id", "")
 
     # Build summary of items needing info
     items_summary = []
@@ -354,7 +328,7 @@ def ask_more(state: AgentState) -> dict:
     messages = state.get("messages", [])
     user_lang = detect_language(messages)
 
-    llm = get_llm()
+    llm = get_user_llm(user_id)
     prompt = get_ask_more_prompt_multi(items_summary)
 
     # Add language hint
@@ -379,7 +353,6 @@ def detect_language(messages: list) -> str:
     """Detect if user is speaking Chinese or English."""
     for msg in reversed(messages):
         content = msg.content if hasattr(msg, "content") else str(msg)
-        # Simple heuristic: check for Chinese characters
         if any("\u4e00" <= char <= "\u9fff" for char in content):
             return "zh"
     return "en"
@@ -390,10 +363,10 @@ def detect_language(messages: list) -> str:
 def confirm(state: AgentState) -> dict:
     """
     Generate confirmation message and prepare FEFO plan (multi-item support).
-    This node uses interrupt_before to pause for user confirmation.
     """
     pending = state.get("pending_action", {})
     items = pending.get("items", [])
+    user_id = state.get("user_id", "")
 
     messages = state.get("messages", [])
     user_lang = detect_language(messages)
@@ -402,6 +375,7 @@ def confirm(state: AgentState) -> dict:
     for item in items:
         if item["intent"] == "CONSUME":
             item["fefo_plan"] = calculate_fefo_plan(
+                user_id=user_id,
                 item_name=item["extracted_info"].get("item_name", ""),
                 amount=item["extracted_info"].get("amount", 0),
                 brand=item["extracted_info"].get("brand"),
@@ -453,6 +427,8 @@ def build_item_confirmation_zh(num: int, item: dict) -> str:
         msg += f"{info.get('quantity', 0)}{info.get('unit', '')} {info.get('item_name', '')}"
         if info.get("expiry_date"):
             msg += f", 过期日 {info['expiry_date']}"
+        if info.get("location"):
+            msg += f", 位置 {info['location']}"
         msg += "\n"
     elif intent == "DISCARD":
         msg += f"批次 #{info.get('batch_id', '?')}\n"
@@ -482,6 +458,8 @@ def build_item_confirmation_en(num: int, item: dict) -> str:
         msg += f"{info.get('quantity', 0)}{info.get('unit', '')} {info.get('item_name', '')}"
         if info.get("expiry_date"):
             msg += f", expires {info['expiry_date']}"
+        if info.get("location"):
+            msg += f", location {info['location']}"
         msg += "\n"
     elif intent == "DISCARD":
         msg += f"batch #{info.get('batch_id', '?')}\n"
@@ -491,97 +469,108 @@ def build_item_confirmation_en(num: int, item: dict) -> str:
     return msg + "\n"
 
 
-def calculate_fefo_plan(item_name: str, amount: float, brand: str | None) -> list[dict]:
+def calculate_fefo_plan(
+    user_id: str,
+    item_name: str,
+    amount: float,
+    brand: str | None,
+) -> list[dict]:
     """
     Calculate FEFO deduction plan without executing.
     Returns list of batches that would be affected.
     """
-    with Session(engine) as db:
-        groups = get_inventory_grouped(db)
+    groups = get_inventory_grouped(user_id)
 
-        # Find the item group
-        target_group = None
-        for group in groups:
-            if group.item_name.lower() == item_name.lower():
-                target_group = group
-                break
+    # Find the item group
+    target_group = None
+    for group in groups:
+        if group.item_name.lower() == item_name.lower():
+            target_group = group
+            break
 
-        if not target_group:
-            return []
+    if not target_group:
+        return []
 
-        # Filter by brand if specified
-        batches = target_group.batches
-        if brand:
-            batches = [b for b in batches if b.brand and b.brand.lower() == brand.lower()]
+    # Filter by brand if specified
+    batches = target_group.batches
+    if brand:
+        batches = [b for b in batches if b.brand and b.brand.lower() == brand.lower()]
 
-        # Sort by FEFO: is_open DESC, expiry_date ASC
-        batches = sorted(
-            batches,
-            key=lambda b: (not b.is_open, b.expiry_date or date.max),
-        )
+    # Sort by FEFO: is_open DESC, expiry_date ASC
+    batches = sorted(
+        batches,
+        key=lambda b: (not b.is_open, b.expiry_date or date.max),
+    )
 
-        # Calculate deduction plan
-        plan = []
-        remaining = amount
-        for batch in batches:
-            if remaining <= 0:
-                break
-            deduct = min(batch.quantity, remaining)
-            plan.append({
-                "batch_id": batch.id,
-                "brand": batch.brand,
-                "expiry_date": str(batch.expiry_date) if batch.expiry_date else None,
-                "current_quantity": batch.quantity,
-                "deduct_amount": deduct,
-                "new_quantity": batch.quantity - deduct,
-            })
-            remaining -= deduct
+    # Calculate deduction plan
+    plan = []
+    remaining = amount
+    for batch in batches:
+        if remaining <= 0:
+            break
+        deduct = min(batch.quantity, remaining)
+        plan.append({
+            "batch_id": batch.id,
+            "brand": batch.brand,
+            "expiry_date": str(batch.expiry_date) if batch.expiry_date else None,
+            "current_quantity": batch.quantity,
+            "deduct_amount": round(deduct, 3),
+            "new_quantity": round(batch.quantity - deduct, 3),
+        })
+        remaining = round(remaining - deduct, 3)
 
-        return plan
+    return plan
 
 
 # ============ Node 5: Tool Executor ============
 
 def tool_executor(state: AgentState) -> dict:
     """
-    Execute the actual database operations (multi-item support with transaction).
+    Execute the actual database operations (multi-item support).
     """
     pending = state.get("pending_action", {})
     items = pending.get("items", [])
+    user_id = state.get("user_id", "")
+    thread_id = state.get("thread_id", "")
 
     messages = state.get("messages", [])
     user_lang = detect_language(messages)
+
+    # Extract original user request for audit trail (skip confirm/cancel messages)
+    raw_input = ""
+    skip_words = {"confirm", "cancel", "确认", "取消", "是", "否", "yes", "no", "ok", "好"}
+    for msg in messages:
+        content = msg.content if hasattr(msg, "content") else str(msg)
+        msg_type = getattr(msg, "type", None) or (msg.get("role") if isinstance(msg, dict) else None)
+        if msg_type in ("human", "user") and content.strip().lower() not in skip_words:
+            raw_input = content
+            break
 
     tool_calls = state.get("tool_calls", [])
     results = []
 
     try:
-        with Session(engine) as db:
-            # Execute all operations in a transaction
-            for item in items:
-                intent = item["intent"]
-                extracted = item["extracted_info"]
+        for item in items:
+            intent = item["intent"]
+            extracted = item["extracted_info"]
 
-                if intent == "ADD":
-                    result = execute_add(db, extracted, user_lang)
-                elif intent == "CONSUME":
-                    result = execute_consume(db, extracted, item.get("fefo_plan", []), user_lang)
-                elif intent == "DISCARD":
-                    result = execute_discard(db, extracted, user_lang)
-                elif intent == "QUERY":
-                    result = execute_query(db, extracted, user_lang)
-                else:
-                    result = f"Unknown intent: {intent}"
+            if intent == "ADD":
+                result = execute_add(user_id, extracted, user_lang, thread_id, raw_input)
+            elif intent == "CONSUME":
+                result = execute_consume(user_id, extracted, item.get("fefo_plan", []), user_lang, thread_id, raw_input)
+            elif intent == "DISCARD":
+                result = execute_discard(user_id, extracted, user_lang, thread_id, raw_input)
+            elif intent == "QUERY":
+                result = execute_query(user_id, extracted, user_lang)
+            else:
+                result = f"Unknown intent: {intent}"
 
-                results.append(result)
-                tool_calls.append({
-                    "tool": f"execute_{intent.lower()}",
-                    "args": extracted,
-                    "result": "success",
-                })
-
-            # Commit all at once (transaction)
-            db.commit()
+            results.append(result)
+            tool_calls.append({
+                "tool": f"execute_{intent.lower()}",
+                "args": extracted,
+                "result": "success",
+            })
 
     except Exception as e:
         error_msg = f"操作失败: {str(e)}" if user_lang == "zh" else f"Operation failed: {str(e)}"
@@ -606,7 +595,7 @@ def tool_executor(state: AgentState) -> dict:
     return output
 
 
-def execute_add(db: Session, info: dict, lang: str) -> str:
+def execute_add(user_id: str, info: dict, lang: str, thread_id: str = "", raw_input: str = "") -> str:
     """Execute ADD operation."""
     print(f"[TOOL CALL] add_inventory({info})")
 
@@ -629,30 +618,32 @@ def execute_add(db: Session, info: dict, lang: str) -> str:
         location=info.get("location") or "Fridge",
     )
 
-    item = add_inventory_item(db, item_data)
-    print(f"[TOOL RESULT] Added batch #{item.id}")
+    row = add_inventory_item(user_id, item_data, thread_id=thread_id or None, raw_input=raw_input or None)
+    print(f"[TOOL RESULT] Added batch #{row['id']}")
 
     if lang == "zh":
-        return f"✅ 已添加: {item.quantity}{item.unit} {item.item_name}" + \
-               (f" ({item.brand})" if item.brand else "") + \
-               f"\n   批次ID: #{item.id}, 位置: {item.location}" + \
-               (f", 过期日: {item.expiry_date}" if item.expiry_date else "")
+        return f"✅ 已添加: {row['quantity']}{row['unit']} {row['item_name']}" + \
+               (f" ({row.get('brand')})" if row.get("brand") else "") + \
+               f"\n   批次ID: #{row['id']}, 位置: {row['location']}" + \
+               (f", 过期日: {row.get('expiry_date')}" if row.get("expiry_date") else "")
     else:
-        return f"✅ Added: {item.quantity}{item.unit} {item.item_name}" + \
-               (f" ({item.brand})" if item.brand else "") + \
-               f"\n   Batch ID: #{item.id}, Location: {item.location}" + \
-               (f", Expires: {item.expiry_date}" if item.expiry_date else "")
+        return f"✅ Added: {row['quantity']}{row['unit']} {row['item_name']}" + \
+               (f" ({row.get('brand')})" if row.get("brand") else "") + \
+               f"\n   Batch ID: #{row['id']}, Location: {row['location']}" + \
+               (f", Expires: {row.get('expiry_date')}" if row.get("expiry_date") else "")
 
 
-def execute_consume(db: Session, info: dict, fefo_plan: list, lang: str) -> str:
+def execute_consume(user_id: str, info: dict, fefo_plan: list, lang: str, thread_id: str = "", raw_input: str = "") -> str:
     """Execute CONSUME operation."""
     print(f"[TOOL CALL] consume_item({info})")
 
     result = consume_item(
-        db=db,
+        user_id=user_id,
         item_name=info.get("item_name", ""),
         amount=info.get("amount", 0),
         brand=info.get("brand"),
+        thread_id=thread_id or None,
+        raw_input=raw_input or None,
     )
 
     print(f"[TOOL RESULT] {result}")
@@ -678,7 +669,7 @@ def execute_consume(db: Session, info: dict, fefo_plan: list, lang: str) -> str:
         return msg
 
 
-def execute_discard(db: Session, info: dict, lang: str) -> str:
+def execute_discard(user_id: str, info: dict, lang: str, thread_id: str = "", raw_input: str = "") -> str:
     """Execute DISCARD operation."""
     batch_id = info.get("batch_id")
     print(f"[TOOL CALL] discard_batch({batch_id})")
@@ -686,24 +677,24 @@ def execute_discard(db: Session, info: dict, lang: str) -> str:
     if not batch_id:
         return "❌ 需要批次ID才能丢弃" if lang == "zh" else "❌ Batch ID required for discard"
 
-    item = discard_batch(db, batch_id)
+    item = discard_batch(user_id, batch_id, thread_id=thread_id or None, raw_input=raw_input or None)
     print(f"[TOOL RESULT] Discarded batch #{batch_id}")
 
     if not item:
         return f"❌ 找不到批次 #{batch_id}" if lang == "zh" else f"❌ Batch #{batch_id} not found"
 
     if lang == "zh":
-        return f"✅ 已丢弃批次 #{batch_id}: {item.item_name} ({item.quantity}{item.unit})"
+        return f"✅ 已丢弃批次 #{batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
     else:
-        return f"✅ Discarded batch #{batch_id}: {item.item_name} ({item.quantity}{item.unit})"
+        return f"✅ Discarded batch #{batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
 
 
-def execute_query(db: Session, info: dict, lang: str) -> str:
+def execute_query(user_id: str, info: dict, lang: str) -> str:
     """Execute QUERY operation."""
     item_filter = info.get("item_name")
     print(f"[TOOL CALL] query_inventory(item_name={item_filter})")
 
-    groups = get_inventory_grouped(db)
+    groups = get_inventory_grouped(user_id)
 
     if item_filter:
         groups = [g for g in groups if item_filter.lower() in g.item_name.lower()]
@@ -721,7 +712,7 @@ def execute_query(db: Session, info: dict, lang: str) -> str:
                 status = "🔓 已开封" if batch.is_open else "🔒 未开封"
                 expiry = f"过期 {batch.expiry_date}" if batch.expiry_date else "无过期日"
                 brand = f"({batch.brand})" if batch.brand else ""
-                lines.append(f"   - #{batch.id} {brand}: {batch.quantity}{batch.unit}, {status}, {expiry}")
+                lines.append(f"   - #{batch.id} {brand}: {batch.quantity}{batch.unit}, {status}, {expiry}, {batch.location}")
         return "\n".join(lines)
     else:
         lines = ["Current Inventory:"]
@@ -731,5 +722,5 @@ def execute_query(db: Session, info: dict, lang: str) -> str:
                 status = "🔓 OPEN" if batch.is_open else "🔒 sealed"
                 expiry = f"expires {batch.expiry_date}" if batch.expiry_date else "no expiry"
                 brand = f"({batch.brand})" if batch.brand else ""
-                lines.append(f"   - #{batch.id} {brand}: {batch.quantity}{batch.unit}, {status}, {expiry}")
+                lines.append(f"   - #{batch.id} {brand}: {batch.quantity}{batch.unit}, {status}, {expiry}, {batch.location}")
         return "\n".join(lines)

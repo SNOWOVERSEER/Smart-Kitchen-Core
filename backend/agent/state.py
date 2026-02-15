@@ -31,6 +31,7 @@ class AgentState(TypedDict, total=False):
     messages: Annotated[list, add_messages]  # Conversation history
     pending_action: PendingAction | None  # Current pending action
     thread_id: str  # For multi-turn conversation tracking
+    user_id: str  # Scopes all DB operations to this user
     status: Literal["processing", "awaiting_info", "awaiting_confirm", "confirmed", "completed"]
     response: str  # Final response to user
     tool_calls: list[dict[str, Any]]  # Tool call history for debugging
@@ -39,7 +40,7 @@ class AgentState(TypedDict, total=False):
 
 # Required fields per intent
 REQUIRED_FIELDS = {
-    "ADD": ["item_name", "quantity", "unit", "expiry_date"],
+    "ADD": ["item_name", "quantity", "unit", "expiry_date", "location"],  # location now required
     "CONSUME": ["item_name", "amount"],
     "DISCARD": ["batch_id"],  # Or item_name + description
     "QUERY": [],  # No required fields
@@ -47,7 +48,7 @@ REQUIRED_FIELDS = {
 
 # Optional fields per intent
 OPTIONAL_FIELDS = {
-    "ADD": ["brand", "category", "location"],
+    "ADD": ["brand", "category"],  # location removed from optional
     "CONSUME": ["brand", "unit"],
     "DISCARD": ["item_name", "reason"],
     "QUERY": ["item_name"],

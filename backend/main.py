@@ -1,22 +1,23 @@
-import os
-from contextlib import asynccontextmanager
+"""FastAPI application with Supabase Auth and multi-user support."""
 
 from fastapi import FastAPI, Depends, HTTPException
-from sqlmodel import Session
+from fastapi.middleware.cors import CORSMiddleware
 
-from database import create_db_and_tables, get_db
-from models import InventoryItem, TransactionLog  #Required for table creation
+from auth import get_current_user
+from database import get_supabase_client, get_supabase_anon_client
 from schemas import (
-    InventoryItemCreate,
-    InventoryItemResponse,
-    InventoryGroupResponse,
-    ConsumeRequest,
-    ConsumeResult,
+    # Auth
+    SignUpRequest, LoginRequest, AuthResponse, ProfileResponse, ProfileUpdate,
+    # AI Config
+    AIConfigCreate, AIConfigResponse,
+    # Inventory
+    InventoryItemCreate, InventoryItemResponse, InventoryGroupResponse,
+    ConsumeRequest, ConsumeResult,
+    # Logs
     TransactionLogResponse,
-    AgentActionRequest,
-    AgentActionResponse,
-    PendingActionResponse,
-    PendingActionItemResponse,
+    # Agent
+    AgentActionRequest, AgentActionResponse,
+    PendingActionResponse, PendingActionItemResponse,
 )
 from agent import run_agent
 from services import (
@@ -29,113 +30,250 @@ from services import (
 )
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup and shutdown events for the application."""
-    create_db_and_tables()
-    yield
+app = FastAPI(title="SmartKitchen Core")
+
+# CORS for cross-platform frontends
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Restrict in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-app = FastAPI(title="SmartKitchen Core", lifespan=lifespan)
-
-
-#Health Check
+# ── Health Check ──
 
 @app.get("/")
 def health_check():
-    """Root endpoint: Confirms API is online."""
-    db_host = os.getenv("POSTGRES_HOST", "Local/Not Found")
-    return {
-        "status": "online",
-        "service": "SmartKitchen Backend",
-        "container_check": {
-            "is_running_in_docker": db_host == "db",
-            "connected_db_host": db_host,
-        },
+    return {"status": "online", "service": "SmartKitchen Core"}
+
+
+# ── Auth Endpoints ──
+
+@app.post("/auth/signup", response_model=AuthResponse)
+def signup(request: SignUpRequest):
+    supabase = get_supabase_anon_client()
+    try:
+        result = supabase.auth.sign_up({
+            "email": request.email,
+            "password": request.password,
+            "options": {"data": {"display_name": request.display_name}},
+        })
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not result.session:
+        raise HTTPException(status_code=400, detail="Signup failed. Check email for confirmation.")
+    return AuthResponse(
+        access_token=result.session.access_token,
+        refresh_token=result.session.refresh_token,
+        user_id=result.user.id,
+        email=result.user.email,
+    )
+
+
+@app.post("/auth/login", response_model=AuthResponse)
+def login(request: LoginRequest):
+    supabase = get_supabase_anon_client()
+    try:
+        result = supabase.auth.sign_in_with_password({
+            "email": request.email,
+            "password": request.password,
+        })
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    return AuthResponse(
+        access_token=result.session.access_token,
+        refresh_token=result.session.refresh_token,
+        user_id=result.user.id,
+        email=result.user.email,
+    )
+
+
+@app.post("/auth/logout")
+def logout(user_id: str = Depends(get_current_user)):
+    return {"message": "Logged out successfully"}
+
+
+@app.post("/auth/refresh", response_model=AuthResponse)
+def refresh_token(refresh_token: str):
+    supabase = get_supabase_anon_client()
+    try:
+        result = supabase.auth.refresh_session(refresh_token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    return AuthResponse(
+        access_token=result.session.access_token,
+        refresh_token=result.session.refresh_token,
+        user_id=result.user.id,
+        email=result.user.email,
+    )
+
+
+@app.get("/auth/me", response_model=ProfileResponse)
+def get_profile(user_id: str = Depends(get_current_user)):
+    supabase = get_supabase_client()
+    result = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
+    profile = result.data
+    return ProfileResponse(
+        id=profile["id"],
+        display_name=profile.get("display_name"),
+        preferred_language=profile.get("preferred_language", "en"),
+    )
+
+
+@app.patch("/auth/me", response_model=ProfileResponse)
+def update_profile(update: ProfileUpdate, user_id: str = Depends(get_current_user)):
+    supabase = get_supabase_client()
+    data = {k: v for k, v in update.model_dump().items() if v is not None}
+    if not data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    result = supabase.table("profiles").update(data).eq("id", user_id).execute()
+    profile = result.data[0]
+    return ProfileResponse(
+        id=profile["id"],
+        display_name=profile.get("display_name"),
+        preferred_language=profile.get("preferred_language", "en"),
+    )
+
+
+# ── AI Config Endpoints ──
+
+@app.get("/api/v1/settings/ai", response_model=list[AIConfigResponse])
+def list_ai_configs(user_id: str = Depends(get_current_user)):
+    supabase = get_supabase_client()
+    result = supabase.table("user_ai_configs").select("*").eq("user_id", user_id).execute()
+    configs = []
+    for row in result.data:
+        # Mask API key - get first/last 4 chars
+        secret = supabase.rpc("get_decrypted_secret", {"secret_id": row["api_key_secret_id"]}).execute()
+        key = secret.data or ""
+        preview = f"{key[:7]}...{key[-4:]}" if len(key) > 11 else "****"
+        configs.append(AIConfigResponse(
+            id=row["id"],
+            provider=row["provider"],
+            model_id=row["model_id"],
+            is_active=row["is_active"],
+            api_key_preview=preview,
+            created_at=row.get("created_at"),
+        ))
+    return configs
+
+
+@app.post("/api/v1/settings/ai", response_model=AIConfigResponse)
+def upsert_ai_config(config: AIConfigCreate, user_id: str = Depends(get_current_user)):
+    supabase = get_supabase_client()
+
+    # Store API key in Vault
+    vault_result = supabase.rpc("vault_create_secret", {"secret": config.api_key}).execute()
+    secret_id = vault_result.data
+
+    # Upsert config
+    data = {
+        "user_id": user_id,
+        "provider": config.provider,
+        "api_key_secret_id": secret_id,
+        "model_id": config.model_id,
+        "is_active": True,
     }
+    result = supabase.table("user_ai_configs").upsert(
+        data, on_conflict="user_id,provider"
+    ).execute()
+
+    # Deactivate other providers for this user
+    supabase.table("user_ai_configs").update(
+        {"is_active": False}
+    ).eq("user_id", user_id).neq("provider", config.provider).execute()
+
+    row = result.data[0]
+    preview = f"{config.api_key[:7]}...{config.api_key[-4:]}"
+    return AIConfigResponse(
+        id=row["id"],
+        provider=row["provider"],
+        model_id=row["model_id"],
+        is_active=True,
+        api_key_preview=preview,
+    )
 
 
-#Inventory Endpoints
+@app.delete("/api/v1/settings/ai/{provider}")
+def delete_ai_config(provider: str, user_id: str = Depends(get_current_user)):
+    supabase = get_supabase_client()
+    supabase.table("user_ai_configs").delete().eq(
+        "user_id", user_id
+    ).eq("provider", provider).execute()
+    return {"message": f"AI config for {provider} deleted"}
+
+
+@app.put("/api/v1/settings/ai/{provider}/activate")
+def activate_ai_config(provider: str, user_id: str = Depends(get_current_user)):
+    supabase = get_supabase_client()
+    # Deactivate all
+    supabase.table("user_ai_configs").update(
+        {"is_active": False}
+    ).eq("user_id", user_id).execute()
+    # Activate selected
+    supabase.table("user_ai_configs").update(
+        {"is_active": True}
+    ).eq("user_id", user_id).eq("provider", provider).execute()
+    return {"message": f"{provider} activated"}
+
+
+# ── Inventory Endpoints (auth required) ──
 
 @app.get("/api/v1/inventory", response_model=list[InventoryGroupResponse])
-def list_inventory_grouped(db: Session = Depends(get_db)):
-    """Get inventory grouped by item name with nested batch details."""
-    return get_inventory_grouped(db)
+def list_inventory_grouped(user_id: str = Depends(get_current_user)):
+    return get_inventory_grouped(user_id)
 
 
 @app.get("/api/v1/inventory/all", response_model=list[InventoryItemResponse])
-def list_all_inventory(db: Session = Depends(get_db)):
-    """Get all inventory batches (flat list)."""
-    return get_all_inventory(db)
+def list_all_inventory(user_id: str = Depends(get_current_user)):
+    return get_all_inventory(user_id)
 
 
 @app.post("/api/v1/inventory", response_model=InventoryItemResponse, status_code=201)
-def create_inventory_item(item: InventoryItemCreate, db: Session = Depends(get_db)):
-    """Add a new inventory batch."""
-    return add_inventory_item(db, item)
+def create_inventory_item(item: InventoryItemCreate, user_id: str = Depends(get_current_user)):
+    row = add_inventory_item(user_id, item)
+    return row
 
 
 @app.delete("/api/v1/inventory/{batch_id}")
-def delete_inventory_batch(batch_id: int, db: Session = Depends(get_db)):
-    """Discard a specific inventory batch."""
-    item = discard_batch(db, batch_id)
+def delete_inventory_batch(batch_id: int, user_id: str = Depends(get_current_user)):
+    item = discard_batch(user_id, batch_id)
     if not item:
         raise HTTPException(status_code=404, detail="Batch not found")
-    return {"message": f"Batch {batch_id} discarded", "item_name": item.item_name}
+    return {"message": f"Batch {batch_id} discarded", "item_name": item["item_name"]}
 
-
-#Smart Consumption (FEFO)
 
 @app.post("/api/v1/inventory/consume", response_model=ConsumeResult)
-def consume_inventory(request: ConsumeRequest, db: Session = Depends(get_db)):
-    """
-    Smart consumption with FEFO logic.
-
-    - Consumes from open items first
-    - Then by earliest expiry date
-    - Cascades across batches if needed
-    - Optional: specify brand to filter
-    """
-    result = consume_item(
-        db=db,
-        item_name=request.item_name,
-        amount=request.amount,
-        brand=request.brand,
-    )
+def consume_inventory(request: ConsumeRequest, user_id: str = Depends(get_current_user)):
+    result = consume_item(user_id, request.item_name, request.amount, request.brand)
     if not result.success:
         raise HTTPException(status_code=400, detail=result.message)
     return result
 
 
-#Transaction Logs
+# ── Transaction Logs ──
 
 @app.get("/api/v1/logs", response_model=list[TransactionLogResponse])
-def list_transaction_logs(limit: int = 50, db: Session = Depends(get_db)):
-    """Get recent transaction logs for audit trail."""
-    return get_transaction_logs(db, limit)
+def list_transaction_logs(limit: int = 50, user_id: str = Depends(get_current_user)):
+    return get_transaction_logs(user_id, limit)
 
 
-#AI Agent
+# ── AI Agent ──
 
 @app.post("/api/v1/agent/action", response_model=AgentActionResponse)
-def agent_action(request: AgentActionRequest):
-    """
-    Process natural language commands using AI agent.
-
-    Supports multi-turn conversation with slot filling and confirmation.
-
-    For multi-turn:
-    - First request: send text, get back thread_id
-    - Follow-up: send text + thread_id to continue conversation
-    - Confirmation: send confirm=true/false + thread_id
-    """
+def agent_action(request: AgentActionRequest, user_id: str = Depends(get_current_user)):
     result = run_agent(
         text=request.text,
+        user_id=user_id,
         thread_id=request.thread_id,
         confirm_action=request.confirm,
     )
 
-    # Build pending action response if exists (multi-item support)
     pending = None
     if result.get("pending_action"):
         pa = result["pending_action"]
@@ -160,4 +298,3 @@ def agent_action(request: AgentActionRequest):
         pending_action=pending,
         tool_calls=result.get("tool_calls", []),
     )
-
