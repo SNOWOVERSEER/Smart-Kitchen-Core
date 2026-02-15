@@ -10,6 +10,10 @@ from schemas import (
     SignUpRequest, LoginRequest, AuthResponse, ProfileResponse, ProfileUpdate,
     # AI Config
     AIConfigCreate, AIConfigResponse,
+    # Barcode
+    BarcodeResponse, BarcodeProduct,
+    # Photo Recognition
+    PhotoRecognizeRequest, PhotoRecognizeResponse, RecognizedItem,
     # Inventory
     InventoryItemCreate, InventoryItemResponse, InventoryGroupResponse,
     ConsumeRequest, ConsumeResult,
@@ -19,6 +23,8 @@ from schemas import (
     AgentActionRequest, AgentActionResponse,
     PendingActionResponse, PendingActionItemResponse,
 )
+from barcode import lookup_barcode
+from photo_recognize import recognize_image, build_agent_text_from_items
 from agent import run_agent
 from services import (
     add_inventory_item,
@@ -220,6 +226,80 @@ def activate_ai_config(provider: str, user_id: str = Depends(get_current_user)):
         {"is_active": True}
     ).eq("user_id", user_id).eq("provider", provider).execute()
     return {"message": f"{provider} activated"}
+
+
+# ── Barcode Lookup ──
+
+@app.get("/api/v1/barcode/{barcode}", response_model=BarcodeResponse)
+def barcode_lookup(barcode: str, user_id: str = Depends(get_current_user)):
+    result = lookup_barcode(barcode)
+    if not result:
+        return BarcodeResponse(found=False, barcode=barcode, product=None)
+    return BarcodeResponse(
+        found=True,
+        barcode=barcode,
+        product=BarcodeProduct(**result),
+    )
+
+
+# ── Photo Recognition ──
+
+@app.post("/api/v1/agent/photo-recognize", response_model=PhotoRecognizeResponse)
+def photo_recognize(request: PhotoRecognizeRequest, user_id: str = Depends(get_current_user)):
+    # Step 1: Recognize items in photo
+    try:
+        recognition = recognize_image(user_id, request.image_base64)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    items = recognition.get("items", [])
+    description = recognition.get("description", "")
+
+    if not items:
+        raise HTTPException(
+            status_code=422,
+            detail="No grocery items recognized in the photo. Please try again or use manual entry.",
+        )
+
+    # Step 2: Convert to text and feed into agent
+    agent_text = build_agent_text_from_items(items)
+    agent_result = run_agent(
+        text=agent_text,
+        user_id=user_id,
+        thread_id=request.thread_id,
+    )
+
+    # Step 3: Build response
+    pending = None
+    if agent_result.get("pending_action"):
+        pa = agent_result["pending_action"]
+        pending_items = pa.get("items", [])
+        pending = PendingActionResponse(
+            items=[
+                PendingActionItemResponse(
+                    index=item.get("index", i),
+                    intent=item.get("intent"),
+                    extracted_info=item.get("extracted_info"),
+                    missing_fields=item.get("missing_fields"),
+                )
+                for i, item in enumerate(pending_items)
+            ] if pending_items else None,
+            confirmation_message=pa.get("confirmation_message"),
+        )
+
+    agent_response = AgentActionResponse(
+        response=agent_result.get("response", ""),
+        thread_id=agent_result.get("thread_id", ""),
+        status=agent_result.get("status", "completed"),
+        pending_action=pending,
+        tool_calls=agent_result.get("tool_calls", []),
+    )
+
+    return PhotoRecognizeResponse(
+        recognized_items=[RecognizedItem(**item) for item in items],
+        description=description,
+        agent_response=agent_response,
+    )
 
 
 # ── Inventory Endpoints (auth required) ──

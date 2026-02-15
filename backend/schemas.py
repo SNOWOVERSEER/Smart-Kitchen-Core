@@ -50,6 +50,37 @@ class AIConfigResponse(BaseModel):
     created_at: datetime | None = None
 
 
+# ── Barcode Schemas ──
+
+class BarcodeProduct(BaseModel):
+    item_name: str
+    brand: str | None = None
+    category: str | None = None
+    unit: str = "pcs"
+    default_quantity: float | None = None
+    image_url: str | None = None
+
+class BarcodeResponse(BaseModel):
+    found: bool
+    barcode: str
+    product: BarcodeProduct | None = None
+
+
+# ── Photo Recognition Schemas ──
+
+class RecognizedItem(BaseModel):
+    item_name: str
+    brand: str | None = None
+    quantity: float = 1.0
+    unit: str = "pcs"
+    category: str | None = None
+    confidence: str = "medium"
+
+class PhotoRecognizeRequest(BaseModel):
+    image_base64: str = Field(..., description="Base64-encoded image (with or without data URI prefix)")
+    thread_id: str | None = Field(None, description="Thread ID for continuing conversation")
+
+
 # ── Inventory Schemas ──
 
 class InventoryItemCreate(BaseModel):
@@ -132,3 +163,11 @@ class AgentActionResponse(BaseModel):
     status: str = Field(..., description="completed | awaiting_info | awaiting_confirm")
     pending_action: PendingActionResponse | None = None
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+
+
+# ── Photo Recognition Response (after AgentActionResponse to avoid forward ref) ──
+
+class PhotoRecognizeResponse(BaseModel):
+    recognized_items: list[RecognizedItem]
+    description: str
+    agent_response: AgentActionResponse
