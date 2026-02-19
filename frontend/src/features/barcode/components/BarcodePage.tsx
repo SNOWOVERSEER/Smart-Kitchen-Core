@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ScanBarcode, Search, Package, ExternalLink, Plus, Bot, Clock } from 'lucide-react'
+import { ScanBarcode, Search, Package, ExternalLink, Plus, Bot, Clock, Camera, CameraOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,6 +37,9 @@ export function BarcodePage() {
   const [addOpen, setAddOpen] = useState(false)
   const [recent, setRecent] = useState<string[]>(getRecent)
   const [currentCode, setCurrentCode] = useState('')
+  const [cameraOn, setCameraOn] = useState(true)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const [scanFlash, setScanFlash] = useState(false)
   const scannerContainerRef = useRef<HTMLDivElement>(null)
   const scanControlsRef = useRef<{ stop: () => void } | null>(null)
   const lastScanned = useRef<string>('')
@@ -67,38 +70,82 @@ export function BarcodePage() {
       setProduct(null)
       lookupMutation.mutate(code.trim())
     },
-    [lookupMutation]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lookupMutation.mutate]
   )
 
-  // Camera scanner setup using @zxing/browser
+  // Stable ref so the scanner callback always calls the latest handleLookup
+  // without being listed as an effect dependency (avoids restarting camera on every render)
+  const handleLookupRef = useRef(handleLookup)
+  handleLookupRef.current = handleLookup
+
+  // Camera scanner — only restarts when cameraOn changes
   useEffect(() => {
+    if (!cameraOn) return
+    setCameraError(null)
     let cancelled = false
     async function startScanner() {
       try {
         const { BrowserMultiFormatReader } = await import('@zxing/browser')
-        const reader = new BrowserMultiFormatReader()
+        // Import hints from @zxing/library (peer dep of @zxing/browser, always present)
+        // TRY_HARDER=3 enables multi-angle, multi-size, rotated barcode detection
+        // POSSIBLE_FORMATS=2 limits to grocery-relevant formats for speed
+        const { DecodeHintType, BarcodeFormat } = await import('@zxing/library')
+        const hints = new Map<number, unknown>([
+          [DecodeHintType.TRY_HARDER, true],
+          [DecodeHintType.POSSIBLE_FORMATS, [
+            BarcodeFormat.EAN_13,   // most common grocery barcode
+            BarcodeFormat.EAN_8,
+            BarcodeFormat.UPC_A,
+            BarcodeFormat.UPC_E,
+            BarcodeFormat.CODE_128,
+            BarcodeFormat.CODE_39,
+            BarcodeFormat.QR_CODE,
+            BarcodeFormat.DATA_MATRIX,
+          ]],
+        ])
+        const reader = new BrowserMultiFormatReader(hints)
         const videoEl = document.getElementById('barcode-video') as HTMLVideoElement | null
         if (!videoEl || cancelled) return
 
-        const controls = await reader.decodeFromVideoDevice(undefined, videoEl, (result) => {
-          if (!result) return
-          const code = result.getText()
-          if (code === lastScanned.current) return
-          lastScanned.current = code
-          // Debounce 1s to avoid duplicate calls
-          if (debounceRef.current) clearTimeout(debounceRef.current)
-          debounceRef.current = setTimeout(() => {
-            lastScanned.current = ''
-            handleLookup(code)
-          }, 1000)
-        })
+        // High resolution improves detection at distance; environment = rear camera on mobile
+        const controls = await reader.decodeFromConstraints(
+          { video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          }},
+          videoEl,
+          (result) => {
+            if (!result) return
+            const code = result.getText()
+            if (code === lastScanned.current) return
+            lastScanned.current = code
+
+            // Immediate feedback: full-area flash + haptic on mobile
+            setScanFlash(true)
+            setTimeout(() => setScanFlash(false), 900)
+            if (navigator.vibrate) navigator.vibrate(80)
+
+            // Debounce the API lookup to avoid duplicate calls
+            if (debounceRef.current) clearTimeout(debounceRef.current)
+            debounceRef.current = setTimeout(() => {
+              lastScanned.current = ''
+              handleLookupRef.current(code)
+            }, 800)
+          }
+        )
         if (!cancelled) {
           scanControlsRef.current = controls
         } else {
           controls.stop()
         }
-      } catch {
-        // Camera not available — user will use manual input
+      } catch (err) {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : 'Camera unavailable'
+          setCameraError(msg)
+          setCameraOn(false)
+        }
       }
     }
     void startScanner()
@@ -108,7 +155,18 @@ export function BarcodePage() {
       scanControlsRef.current?.stop()
       scanControlsRef.current = null
     }
-  }, [handleLookup])
+  }, [cameraOn])
+
+  const toggleCamera = () => {
+    if (cameraOn) {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      scanControlsRef.current?.stop()
+      scanControlsRef.current = null
+    } else {
+      setCameraError(null)
+    }
+    setCameraOn((prev) => !prev)
+  }
 
   const prefill = product
     ? {
@@ -134,13 +192,45 @@ export function BarcodePage() {
               ref={scannerContainerRef}
               className="relative aspect-video bg-muted rounded-xl overflow-hidden border border-border flex items-center justify-center"
             >
-              <video id="barcode-video" className="absolute inset-0 w-full h-full object-cover" />
-              <div className="relative z-10 flex flex-col items-center gap-2 text-muted-foreground">
-                <ScanBarcode className="w-8 h-8" />
-                <p className="text-xs">Point camera at barcode</p>
-              </div>
-              {/* Corner brackets */}
-              {[
+              {/* Mirrored video feed — scaleX(-1) so moving left = image moves left */}
+              <video
+                id="barcode-video"
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ transform: 'scaleX(-1)', display: cameraOn ? 'block' : 'none' }}
+              />
+
+              {/* Camera-off placeholder */}
+              {!cameraOn && (
+                <div className="relative z-10 flex flex-col items-center gap-3 text-center px-4">
+                  <CameraOff className="w-8 h-8 text-muted-foreground" />
+                  {cameraError ? (
+                    <>
+                      <p className="text-xs text-destructive font-medium">Camera error</p>
+                      <p className="text-[11px] text-muted-foreground max-w-[200px]">{cameraError}</p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Camera is off</p>
+                  )}
+                  <button
+                    onClick={toggleCamera}
+                    className="flex items-center gap-1.5 text-xs font-medium text-foreground bg-card border border-border rounded-lg px-3 py-1.5 hover:bg-muted transition-colors cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    {cameraError ? 'Retry' : 'Start Camera'}
+                  </button>
+                </div>
+              )}
+
+              {/* Idle guide — only when camera on and not flashing */}
+              {cameraOn && !scanFlash && (
+                <div className="relative z-10 flex flex-col items-center gap-2 text-muted-foreground pointer-events-none">
+                  <ScanBarcode className="w-8 h-8" />
+                  <p className="text-xs">Point camera at barcode</p>
+                </div>
+              )}
+
+              {/* Corner brackets — always visible when camera on */}
+              {cameraOn && [
                 { top: '8px', left: '8px',  borderTop: 2, borderLeft: 2  },
                 { top: '8px', right: '8px', borderTop: 2, borderRight: 2 },
                 { bottom: '8px', left: '8px',  borderBottom: 2, borderLeft: 2  },
@@ -148,17 +238,44 @@ export function BarcodePage() {
               ].map((pos, i) => (
                 <div
                   key={i}
-                  className="absolute w-5 h-5 z-20"
+                  className="absolute w-5 h-5 z-20 pointer-events-none"
                   style={{ ...pos, borderColor: '#C97B5C', borderStyle: 'solid' }}
                 />
               ))}
-              {/* Scanning indicator */}
-              <motion.div
-                className="absolute inset-x-8 h-0.5 z-20"
-                style={{ backgroundColor: 'rgba(201, 123, 92, 0.7)' }}
-                animate={{ top: ['20%', '80%', '20%'] }}
-                transition={{ duration: 2.5, repeat: Infinity, ease: 'linear' }}
-              />
+
+              {/* Scan success flash — full-area green overlay with checkmark */}
+              <AnimatePresence>
+                {scanFlash && (
+                  <motion.div
+                    key="flash"
+                    className="absolute inset-0 z-25 rounded-xl pointer-events-none flex flex-col items-center justify-center gap-2"
+                    style={{ backgroundColor: 'rgba(34,197,94,0.18)' }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center"
+                      style={{ backgroundColor: 'rgba(34,197,94,0.9)' }}
+                    >
+                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <p className="text-xs font-semibold text-white drop-shadow">Scanned</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Camera toggle button — always visible in top-right */}
+              <button
+                onClick={toggleCamera}
+                title={cameraOn ? 'Turn off camera' : 'Turn on camera'}
+                className="absolute top-2 right-2 z-30 w-8 h-8 flex items-center justify-center rounded-lg bg-black/40 text-white hover:bg-black/60 transition-colors cursor-pointer"
+              >
+                {cameraOn ? <CameraOff className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
+              </button>
             </div>
 
             {/* Manual input */}
