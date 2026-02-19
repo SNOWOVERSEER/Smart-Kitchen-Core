@@ -113,6 +113,15 @@ class InventoryGroupResponse(BaseModel):
     unit: str
     batches: list[InventoryItemResponse]
 
+class InventoryItemUpdate(BaseModel):
+    quantity: float | None = None
+    total_volume: float | None = None
+    brand: str | None = None
+    category: str | None = None
+    expiry_date: date | None = None
+    is_open: bool | None = None
+    location: str | None = None
+
 
 # ── Consumption Schemas ──
 

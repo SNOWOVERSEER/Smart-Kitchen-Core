@@ -5,6 +5,7 @@ from typing import Any
 from database import get_supabase_client
 from schemas import (
     InventoryItemCreate,
+    InventoryItemUpdate,
     ConsumeResult,
     InventoryGroupResponse,
     InventoryItemResponse,
@@ -42,6 +43,7 @@ def add_inventory_item(
             "action": "add",
             "batch_id": row["id"],
             "item_name": row["item_name"],
+            "brand": row.get("brand"),
             "quantity": row["quantity"],
             "unit": row["unit"],
         },
@@ -132,6 +134,7 @@ def discard_batch(
             "batch_id": item["id"],
             "item_name": item["item_name"],
             "remaining_quantity": item["quantity"],
+            "unit": item["unit"],
         },
     )
 
@@ -268,6 +271,38 @@ def log_transaction(
     }
     result = supabase.table("transaction_logs").insert(data).execute()
     return result.data[0]
+
+
+def update_inventory_item(
+    user_id: str,
+    batch_id: int,
+    update: InventoryItemUpdate,
+) -> dict | None:
+    """Partially update an existing inventory batch."""
+    supabase = get_supabase_client()
+
+    data = {k: v for k, v in update.model_dump().items() if v is not None}
+    if "expiry_date" in data:
+        data["expiry_date"] = str(data["expiry_date"])
+
+    if not data:
+        fetch = (
+            supabase.table("inventory")
+            .select("*")
+            .eq("id", batch_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return fetch.data[0] if fetch.data else None
+
+    result = (
+        supabase.table("inventory")
+        .update(data)
+        .eq("id", batch_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return result.data[0] if result.data else None
 
 
 def get_transaction_logs(user_id: str, limit: int = 50) -> list[dict]:

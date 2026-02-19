@@ -18,12 +18,16 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 
 | Layer        | Technology                                         |
 | ------------ | -------------------------------------------------- |
+| Frontend     | React 19 + TypeScript + Vite 6                     |
+| UI           | Tailwind CSS v4 + shadcn/ui + Framer Motion        |
+| Routing      | TanStack Router v1 (file-based)                    |
+| Server State | TanStack Query v5                                  |
+| Client State | Zustand v5                                         |
 | Backend      | Python 3.11+ / FastAPI                             |
 | Database     | Supabase (Hosted PostgreSQL + Auth + Vault)        |
 | Auth         | Supabase Auth (email/password JWT)                 |
 | AI Framework | LangChain / LangGraph                              |
 | LLM          | OpenAI GPT-4o / Anthropic Claude (per-user config) |
-| Frontend     | React + TypeScript + Tailwind (Phase 4)            |
 
 ## Quick Start
 
@@ -64,7 +68,17 @@ docker-compose up -d --build
 
 The API will be available at `http://localhost:8001`
 
-### 4. Verify Installation
+### 4. Start the Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The app will be available at `http://localhost:5173`
+
+### 5. Verify Installation
 
 ```bash
 curl http://localhost:8001/
@@ -459,13 +473,37 @@ smart-kitchen-core/
 │       ├── nodes.py         # Graph node implementations
 │       ├── graph.py         # LangGraph + SupabaseCheckpointer
 │       └── llm_factory.py   # Multi-provider LLM factory
+├── frontend/
+│   └── src/
+│       ├── features/
+│       │   ├── auth/        # Login, signup pages + auth API
+│       │   ├── inventory/   # Dashboard, item cards, add/consume sheets
+│       │   ├── chat/        # Agent drawer (desktop) + chat page (mobile)
+│       │   ├── history/     # Transaction log table with filters
+│       │   ├── barcode/     # Camera scanner + product lookup
+│       │   └── settings/    # Profile + AI provider config
+│       ├── shared/
+│       │   ├── components/  # Layout, Sidebar, BottomNav, TopBar, FAB
+│       │   ├── hooks/       # useMediaQuery, useDebounce
+│       │   ├── lib/         # axios (JWT interceptor), queryClient, api.types, utils
+│       │   └── stores/      # authStore (Zustand)
+│       └── routes/          # TanStack Router file-based route tree
 ├── docker-compose.yml       # API service
-└── README.md               # This file
+└── README.md                # This file
 ```
 
 ## Development
 
-### Running with Docker
+### Frontend
+
+```bash
+cd frontend
+npm run dev       # Start dev server at localhost:5173
+npm run build     # Production build
+npm run typecheck # TypeScript validation
+```
+
+### Backend (Docker)
 
 ```bash
 # Build and start

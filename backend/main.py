@@ -15,7 +15,7 @@ from schemas import (
     # Photo Recognition
     PhotoRecognizeRequest, PhotoRecognizeResponse, RecognizedItem,
     # Inventory
-    InventoryItemCreate, InventoryItemResponse, InventoryGroupResponse,
+    InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse, InventoryGroupResponse,
     ConsumeRequest, ConsumeResult,
     # Logs
     TransactionLogResponse,
@@ -32,6 +32,7 @@ from services import (
     get_all_inventory,
     discard_batch,
     consume_item,
+    update_inventory_item,
     get_transaction_logs,
 )
 
@@ -318,6 +319,14 @@ def list_all_inventory(user_id: str = Depends(get_current_user)):
 def create_inventory_item(item: InventoryItemCreate, user_id: str = Depends(get_current_user)):
     row = add_inventory_item(user_id, item)
     return row
+
+
+@app.patch("/api/v1/inventory/{batch_id}", response_model=InventoryItemResponse)
+def edit_inventory_batch(batch_id: int, update: InventoryItemUpdate, user_id: str = Depends(get_current_user)):
+    item = update_inventory_item(user_id, batch_id, update)
+    if not item:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return item
 
 
 @app.delete("/api/v1/inventory/{batch_id}")
