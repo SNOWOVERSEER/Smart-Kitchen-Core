@@ -1,33 +1,34 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @theme {
-  --color-background: #FAFAFA;
-  --color-foreground: #09090B;
-  --color-card: #FFFFFF;
-  --color-card-foreground: #09090B;
-  --color-muted: #F4F4F5;
-  --color-muted-foreground: #71717A;
-  --color-border: #E4E4E7;
-  --color-input: #E4E4E7;
-  --color-primary: #18181B;
-  --color-primary-foreground: #FAFAFA;
-  --color-secondary: #F4F4F5;
-  --color-secondary-foreground: #18181B;
-  --color-accent: #F4F4F5;
-  --color-accent-foreground: #18181B;
-  --color-destructive: #EF4444;
-  --color-destructive-foreground: #FAFAFA;
-  --color-success: #22C55E;
-  --color-warning: #F59E0B;
-  --color-ring: #18181B;
+  --color-background:        #FAFAF7;
+  --color-foreground:        #1C1612;
+  --color-card:              #FFFEF9;
+  --color-card-foreground:   #1C1612;
+  --color-muted:             #F5EFE6;
+  --color-muted-foreground:  #8C7B6E;
+  --color-border:            #E8E2D9;
+  --color-input:             #E8E2D9;
+  --color-primary:           #C97B5C;
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary:         #F5EFE6;
+  --color-secondary-foreground: #1C1612;
+  --color-accent:            #F5EAE4;
+  --color-accent-foreground: #1C1612;
+  --color-destructive:       #DC2626;
+  --color-destructive-foreground: #FFFFFF;
+  --color-success:           #6B7B3C;
+  --color-warning:           #D97706;
+  --color-ring:              #C97B5C;
   --radius-sm: 4px;
   --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --font-family-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --font-family-sans:    "Inter", system-ui, -apple-system, sans-serif;
+  --font-family-display: "DM Serif Display", Georgia, serif;
 }
 
 *, *::before, *::after {
@@ -41,8 +42,8 @@ html {
 
 body {
   margin: 0;
-  background-color: #FAFAFA;
-  color: #09090B;
+  background-color: #FAFAF7;
+  color: #1C1612;
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   font-size: 14px;
   line-height: 1.5;
@@ -66,48 +67,48 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #E4E4E7;
+  background: #E8E2D9;
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #A1A1AA;
+  background: #C97B5C;
 }
 
 /* shadcn/ui compatible CSS variables */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: oklch(0.993 0.004 80);
+  --foreground: oklch(0.13 0.018 50);
+  --card: oklch(0.998 0.003 80);
+  --card-foreground: oklch(0.13 0.018 50);
+  --popover: oklch(0.998 0.003 80);
+  --popover-foreground: oklch(0.13 0.018 50);
+  --primary: oklch(0.593 0.108 41.23);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.963 0.015 79.3);
+  --secondary-foreground: oklch(0.13 0.018 50);
+  --muted: oklch(0.963 0.015 79.3);
+  --muted-foreground: oklch(0.58 0.03 50);
+  --accent: oklch(0.961 0.028 79.6);
+  --accent-foreground: oklch(0.13 0.018 50);
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: 0 0% 98%;
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.91 0.014 70);
+  --input: oklch(0.91 0.014 70);
+  --ring: oklch(0.593 0.108 41.23);
   --radius: 0.625rem;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.998 0.003 80);
+  --sidebar-foreground: oklch(0.13 0.018 50);
+  --sidebar-primary: oklch(0.593 0.108 41.23);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.961 0.028 79.6);
+  --sidebar-accent-foreground: oklch(0.13 0.018 50);
+  --sidebar-border: oklch(0.91 0.014 70);
+  --sidebar-ring: oklch(0.593 0.108 41.23);
 }
 
 @theme inline {
@@ -183,6 +184,11 @@ body {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* Category-colored progress bars */
+[style*="--progress-color"] [role="progressbar"] > div {
+  background-color: var(--progress-color) !important;
 }
 
 @layer base {

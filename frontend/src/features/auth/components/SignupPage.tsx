@@ -39,7 +39,10 @@ export function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: 'radial-gradient(ellipse at 60% 20%, #F5EAE4 0%, #FAFAF7 60%)' }}
+    >
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -47,14 +50,22 @@ export function SignupPage() {
         className="w-full max-w-sm"
       >
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 bg-foreground rounded-2xl flex items-center justify-center mb-4">
-            <ChefHat className="w-6 h-6 text-background" />
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
+            style={{ backgroundColor: '#C97B5C' }}
+          >
+            <ChefHat className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-xl font-semibold text-foreground">Smart Kitchen</h1>
+          <h1
+            className="text-2xl text-foreground"
+            style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
+          >
+            Smart Kitchen
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">Create your account</p>
         </div>
 
-        <Card className="border-border shadow-sm">
+        <Card className="border-border shadow-md">
           <CardHeader className="pb-4" />
           <CardContent>
             <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">

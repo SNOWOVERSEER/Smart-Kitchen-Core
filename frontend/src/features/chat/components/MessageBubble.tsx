@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { ChefHat } from 'lucide-react'
 import { type Message } from '../store'
 import { ConfirmCard } from './ConfirmCard'
 import { cn } from '@/lib/utils'
@@ -19,8 +20,11 @@ export function MessageBubble({ message, onConfirm }: MessageBubbleProps) {
       className={cn('flex gap-2 items-end', isUser && 'flex-row-reverse')}
     >
       {!isUser && (
-        <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0 mb-0.5">
-          AI
+        <div
+          className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mb-0.5"
+          style={{ backgroundColor: '#C97B5C' }}
+        >
+          <ChefHat className="w-3.5 h-3.5 text-white" />
         </div>
       )}
 
@@ -30,7 +34,7 @@ export function MessageBubble({ message, onConfirm }: MessageBubbleProps) {
             'rounded-2xl px-3 py-2 text-sm leading-relaxed',
             isUser
               ? 'bg-foreground text-background rounded-br-sm'
-              : 'bg-muted text-foreground rounded-bl-sm'
+              : 'bg-accent text-foreground rounded-bl-sm'
           )}
         >
           <p className="whitespace-pre-wrap break-words">{message.content}</p>

@@ -6,6 +6,20 @@ import { ExpiryBadge } from './ExpiryBadge'
 import type { InventoryGroupResponse } from '@/shared/lib/api.types'
 import { formatQuantity } from '@/shared/lib/utils'
 
+export const CATEGORY_COLORS: Record<string, string> = {
+  dairy:     '#0EA5E9',
+  meat:      '#EF4444',
+  vegetable: '#22C55E',
+  fruit:     '#22C55E',
+  pantry:    '#92400E',
+  beverage:  '#8B5CF6',
+}
+
+export function getCategoryColor(category: string | null | undefined): string {
+  if (!category) return '#A8A29E'
+  return CATEGORY_COLORS[category.toLowerCase()] ?? '#A8A29E'
+}
+
 interface ItemGroupCardProps {
   group: InventoryGroupResponse
   delay?: number
@@ -24,7 +38,8 @@ export function ItemGroupCard({ group, delay = 0 }: ItemGroupCardProps) {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay }}
-      className="bg-card border border-border rounded-xl overflow-hidden"
+      className="bg-card border border-border rounded-xl overflow-hidden transition-shadow hover:shadow-md cursor-pointer"
+      style={{ borderLeft: `4px solid ${getCategoryColor(group.batches[0]?.category)}` }}
     >
       {/* Header row */}
       <button

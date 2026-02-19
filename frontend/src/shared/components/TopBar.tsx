@@ -1,6 +1,5 @@
-import { Bell, Search } from 'lucide-react'
+import { Bell, Search, ChefHat } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,34 +34,57 @@ export function TopBar({ searchValue, onSearchChange, title }: TopBarProps) {
 
   return (
     <header className="flex items-center gap-3 h-14 px-4 lg:px-6 bg-card border-b border-border shrink-0">
+      {/* Brand mark — mobile/tablet only (sidebar handles branding on desktop) */}
+      <div className="flex lg:hidden items-center gap-2 shrink-0">
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center"
+          style={{ backgroundColor: '#C97B5C' }}
+        >
+          <ChefHat className="w-4 h-4 text-white" />
+        </div>
+        <span
+          className="text-base text-foreground"
+          style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
+        >
+          SmartKitchen
+        </span>
+      </div>
+
+      {/* Page title — desktop only */}
       {title && (
-        <h1 className="font-semibold text-sm text-foreground mr-2 hidden md:block">{title}</h1>
+        <h1
+          className="hidden lg:block text-lg text-foreground mr-2 shrink-0"
+          style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
+        >
+          {title}
+        </h1>
       )}
 
       {onSearchChange !== undefined && (
         <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <Input
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search..."
-            className="pl-8 h-8 text-sm bg-muted border-0"
+            className="pl-9 h-8 text-sm bg-muted border-0 rounded-full"
           />
         </div>
       )}
 
       <div className="flex-1" />
 
-      <button className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+      <button className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer">
         <Bell className="w-4 h-4" />
       </button>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="outline-none">
-            <Avatar className="w-8 h-8 cursor-pointer">
-              <AvatarFallback className="text-xs bg-muted text-foreground">{initials}</AvatarFallback>
-            </Avatar>
+          <button
+            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white cursor-pointer outline-none"
+            style={{ backgroundColor: '#C97B5C' }}
+          >
+            {initials}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
@@ -70,13 +92,16 @@ export function TopBar({ searchValue, onSearchChange, title }: TopBarProps) {
             <p className="text-xs text-muted-foreground truncate">{email}</p>
           </div>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => void navigate({ to: '/settings' })}>
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onClick={() => void navigate({ to: '/settings' })}
+          >
             Settings
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => void handleLogout()}
-            className="text-destructive focus:text-destructive"
+            className="text-destructive focus:text-destructive cursor-pointer"
           >
             Sign out
           </DropdownMenuItem>

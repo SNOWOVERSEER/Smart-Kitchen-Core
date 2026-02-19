@@ -3,7 +3,6 @@ import { motion } from 'framer-motion'
 import { Download, History } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TopBar } from '@/shared/components/TopBar'
@@ -18,10 +17,16 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const INTENT_CONFIG: Record<TransactionIntent, { badge: string; label: string }> = {
-  INBOUND:  { badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Inbound'  },
-  CONSUME:  { badge: 'bg-blue-50   text-blue-700   border-blue-200',   label: 'Consume'  },
-  DISCARD:  { badge: 'bg-red-50    text-red-600    border-red-200',     label: 'Discard'  },
+const INTENT_CONFIG: Record<TransactionIntent, { label: string }> = {
+  INBOUND:  { label: 'Inbound'  },
+  CONSUME:  { label: 'Consume'  },
+  DISCARD:  { label: 'Discard'  },
+}
+
+const INTENT_COLORS: Record<TransactionIntent, string> = {
+  INBOUND: '#6B7B3C',
+  CONSUME: '#0EA5E9',
+  DISCARD: '#DC2626',
 }
 
 type DateFilter = '7d' | '30d' | 'all'
@@ -37,6 +42,17 @@ function formatDateTime(dateStr: string | null): string {
   const date = d.toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })
   const time = d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })
   return `${date} ${time}`
+}
+
+function relativeTime(dateStr: string | null): string {
+  if (!dateStr) return '—'
+  const diff = (Date.now() - new Date(dateStr).getTime()) / 1000
+  if (diff < 60)    return 'just now'
+  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  const days = Math.floor(diff / 86400)
+  if (days < 30) return `${days}d ago`
+  return formatDateTime(dateStr)
 }
 
 // Extract the primary item name + optional brand from operation_details
@@ -200,13 +216,17 @@ export function HistoryPage() {
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.025 }}
-                    className="px-4 py-3 hover:bg-muted/30 transition-colors"
+                    className="px-4 py-4 hover:bg-muted/30 transition-colors"
                   >
                     {/* Desktop row */}
                     <div className="hidden sm:grid grid-cols-[72px_140px_100px_1fr_110px] gap-4 items-center">
-                      <Badge variant="outline" className={cn('text-[10px] font-medium w-fit', cfg.badge)}>
-                        {cfg.label}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-1 h-8 rounded-full shrink-0"
+                          style={{ backgroundColor: INTENT_COLORS[log.intent] }}
+                        />
+                        <span className="text-xs font-medium text-foreground">{cfg.label}</span>
+                      </div>
 
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">{item.name}</p>
@@ -231,8 +251,11 @@ export function HistoryPage() {
                         )}
                       </div>
 
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDateTime(log.created_at)}
+                      <span
+                        title={formatDateTime(log.created_at)}
+                        className="text-xs text-muted-foreground whitespace-nowrap cursor-default"
+                      >
+                        {relativeTime(log.created_at)}
                       </span>
                     </div>
 
@@ -240,9 +263,13 @@ export function HistoryPage() {
                     <div className="sm:hidden flex flex-col gap-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className={cn('text-[10px] font-medium', cfg.badge)}>
-                            {cfg.label}
-                          </Badge>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="w-1 h-5 rounded-full shrink-0"
+                              style={{ backgroundColor: INTENT_COLORS[log.intent] }}
+                            />
+                            <span className="text-xs font-medium text-foreground">{cfg.label}</span>
+                          </div>
                           <span className="text-sm font-medium text-foreground">
                             {item.name}{item.brand ? ` · ${item.brand}` : ''}
                           </span>
@@ -259,7 +286,7 @@ export function HistoryPage() {
                         </span>
                       )}
                       <p className="text-[11px] text-muted-foreground">
-                        {formatDateTime(log.created_at)}
+                        {relativeTime(log.created_at)}
                       </p>
                     </div>
                   </motion.div>

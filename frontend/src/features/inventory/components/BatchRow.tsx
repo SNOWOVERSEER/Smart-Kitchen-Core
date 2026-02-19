@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { getCategoryColor } from './ItemGroupCard'
 import { Trash2, PackageOpen, Package, CheckCheck, Pencil } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Progress } from '@/components/ui/progress'
@@ -52,7 +53,9 @@ export function BatchRow({ batch }: BatchRowProps) {
             <ExpiryBadge date={batch.expiry_date} />
           </div>
           <div className="flex items-center gap-2">
-            <Progress value={pct} className="flex-1 h-1.5" />
+            <div className="flex-1" style={{ '--progress-color': getCategoryColor(batch.category) } as React.CSSProperties}>
+              <Progress value={pct} className="h-1.5" />
+            </div>
             <span className="text-xs text-muted-foreground shrink-0">
               {formatQuantity(batch.quantity, batch.unit)}
             </span>
@@ -69,7 +72,7 @@ export function BatchRow({ batch }: BatchRowProps) {
         </div>
 
         {/* Action buttons — visible on hover */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <div className="flex items-center gap-1 transition-opacity shrink-0 sm:opacity-0 sm:group-hover:opacity-100">
           {/* Edit */}
           <button
             onClick={() => setEditOpen(true)}

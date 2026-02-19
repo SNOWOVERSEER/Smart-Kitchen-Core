@@ -1,4 +1,4 @@
-import { ArrowLeft, Bot, RotateCcw } from 'lucide-react'
+import { ArrowLeft, ChefHat, RotateCcw } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { useChatStore } from '../store'
 import { MessageList } from './MessageList'
@@ -49,11 +49,14 @@ export function ChatPage() {
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-          <Bot className="w-4 h-4 text-muted-foreground" />
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center"
+          style={{ backgroundColor: '#C97B5C' }}
+        >
+          <ChefHat className="w-4 h-4 text-white" />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-semibold">Agent Command</p>
+          <p className="text-sm font-semibold">Kitchen Agent</p>
         </div>
         {messages.length > 0 && (
           <button

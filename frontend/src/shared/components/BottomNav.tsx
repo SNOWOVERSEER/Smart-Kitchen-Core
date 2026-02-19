@@ -18,7 +18,7 @@ export function BottomNav() {
   if (currentPath === '/chat') return null
 
   return (
-    <nav className="flex lg:hidden items-center justify-around h-16 bg-card border-t border-border px-2 shrink-0">
+    <nav className="flex lg:hidden items-center justify-around h-16 bg-card shadow-[0_-2px_12px_rgba(28,22,18,0.06)] px-2 shrink-0">
       {navItems.map(({ to, icon: Icon, label }) => {
         const isActive = to === '/' ? currentPath === '/' : currentPath.startsWith(to)
         return (
@@ -27,7 +27,7 @@ export function BottomNav() {
             to={to}
             className={cn(
               'flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors',
-              isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+              isActive ? 'text-[#C97B5C]' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             <Icon className="w-5 h-5" />

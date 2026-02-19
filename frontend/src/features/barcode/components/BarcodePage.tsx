@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
 import { TopBar } from '@/shared/components/TopBar'
 import { AddItemSheet } from '@/features/inventory/components/AddItemSheet'
+import { getCategoryColor } from '@/features/inventory/components/ItemGroupCard'
 import { lookupBarcode } from '../api'
 import type { BarcodeProduct } from '@/shared/lib/api.types'
 import toast from 'react-hot-toast'
@@ -138,9 +139,23 @@ export function BarcodePage() {
                 <ScanBarcode className="w-8 h-8" />
                 <p className="text-xs">Point camera at barcode</p>
               </div>
+              {/* Corner brackets */}
+              {[
+                { top: '8px', left: '8px',  borderTop: 2, borderLeft: 2  },
+                { top: '8px', right: '8px', borderTop: 2, borderRight: 2 },
+                { bottom: '8px', left: '8px',  borderBottom: 2, borderLeft: 2  },
+                { bottom: '8px', right: '8px', borderBottom: 2, borderRight: 2 },
+              ].map((pos, i) => (
+                <div
+                  key={i}
+                  className="absolute w-5 h-5 z-20"
+                  style={{ ...pos, borderColor: '#C97B5C', borderStyle: 'solid' }}
+                />
+              ))}
               {/* Scanning indicator */}
               <motion.div
-                className="absolute inset-x-8 h-0.5 bg-foreground/40 z-20"
+                className="absolute inset-x-8 h-0.5 z-20"
+                style={{ backgroundColor: 'rgba(201, 123, 92, 0.7)' }}
                 animate={{ top: ['20%', '80%', '20%'] }}
                 transition={{ duration: 2.5, repeat: Infinity, ease: 'linear' }}
               />
@@ -232,7 +247,7 @@ export function BarcodePage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                 >
-                  <Card>
+                  <Card style={{ borderLeft: `4px solid ${getCategoryColor(product.category)}` }}>
                     <CardContent className="p-4">
                       {/* Header */}
                       <div className="flex items-start justify-between gap-2 mb-4">

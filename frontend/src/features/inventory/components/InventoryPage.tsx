@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import { Plus, AlertTriangle, Package, PackageOpen } from 'lucide-react'
+import { Plus, Package } from 'lucide-react'
 import { motion } from 'framer-motion'
 import Masonry from 'react-masonry-css'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TopBar } from '@/shared/components/TopBar'
 import { ItemGroupCard } from './ItemGroupCard'
 import { AddItemSheet } from './AddItemSheet'
@@ -60,37 +59,44 @@ export function InventoryPage() {
             {
               label: 'Expiring Soon',
               value: expiringSoon,
-              icon: AlertTriangle,
-              color: 'text-amber-500',
-              bg: 'bg-amber-50',
+              borderColor: '#D97706',
+              bg: '#FEF3C7',
+              textColor: '#D97706',
             },
             {
               label: 'Total Items',
               value: totalItems,
-              icon: Package,
-              color: 'text-foreground',
-              bg: 'bg-muted',
+              borderColor: '#C97B5C',
+              bg: '#F5EAE4',
+              textColor: '#C97B5C',
             },
             {
               label: 'Open Packages',
               value: openItems,
-              icon: PackageOpen,
-              color: 'text-blue-500',
-              bg: 'bg-blue-50',
+              borderColor: '#6B7B3C',
+              bg: '#EEF2E2',
+              textColor: '#6B7B3C',
             },
-          ].map(({ label, value, icon: Icon, color, bg }, i) => (
+          ].map(({ label, value, borderColor, bg, textColor }, i) => (
             <motion.div
               key={label}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-card border border-border rounded-xl p-3 lg:p-4"
+              className="bg-card border border-border rounded-xl p-4 lg:p-5 overflow-hidden relative"
+              style={{ borderLeft: `4px solid ${borderColor}` }}
             >
-              <div className={`w-8 h-8 rounded-lg ${bg} flex items-center justify-center mb-2`}>
-                <Icon className={`w-4 h-4 ${color}`} />
-              </div>
-              <p className="text-xl font-bold text-foreground">{isLoading ? '—' : value}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
+              <div
+                className="absolute top-0 right-0 w-16 h-16 rounded-bl-full opacity-40"
+                style={{ backgroundColor: bg }}
+              />
+              <p
+                className="text-3xl lg:text-4xl leading-none"
+                style={{ fontFamily: '"DM Serif Display", Georgia, serif', color: textColor }}
+              >
+                {isLoading ? '—' : value}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-2">{label}</p>
             </motion.div>
           ))}
         </div>
@@ -98,15 +104,22 @@ export function InventoryPage() {
         {/* Category filter + Add button */}
         <div className="flex items-center gap-3 mb-4">
           <div className="flex-1 overflow-x-auto">
-            <Tabs value={category} onValueChange={setCategory}>
-              <TabsList className="h-8 gap-1">
-                {CATEGORIES.map((c) => (
-                  <TabsTrigger key={c} value={c} className="text-xs px-2.5 h-6">
-                    {c}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+            <div className="flex gap-1.5 pb-0.5">
+              {CATEGORIES.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setCategory(c)}
+                  className="shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors cursor-pointer"
+                  style={
+                    category === c
+                      ? { backgroundColor: '#C97B5C', borderColor: '#C97B5C', color: '#FFFFFF' }
+                      : { backgroundColor: 'transparent', borderColor: '#E8E2D9', color: '#8C7B6E' }
+                  }
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
           </div>
           <Button
             size="sm"
