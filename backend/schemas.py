@@ -23,6 +23,14 @@ class AuthResponse(BaseModel):
     user_id: str
     email: str
 
+class SignUpResponse(BaseModel):
+    requires_email_verification: bool
+    message: str
+    access_token: str | None = None
+    refresh_token: str | None = None
+    user_id: str | None = None
+    email: str
+
 class ProfileResponse(BaseModel):
     id: str
     email: str | None = None

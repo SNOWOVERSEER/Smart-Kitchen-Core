@@ -28,7 +28,9 @@
     "passwordMinLength": "Min. 8 characters",
     "invalidCredentials": "Invalid email or password",
     "passwordTooShort": "Password must be at least 8 characters",
-    "signupFailed": "Failed to create account. Email may already be in use."
+    "signupFailed": "Failed to create account. Please try again later.",
+    "signupCheckEmail": "Account created. Check your email and confirm before signing in.",
+    "emailAlreadyRegistered": "This email is already registered. Please sign in."
   },
   "inventory": {
     "title": "Inventory",

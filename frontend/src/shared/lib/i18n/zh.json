@@ -28,7 +28,9 @@
     "passwordMinLength": "最少 8 位字符",
     "invalidCredentials": "邮箱或密码错误",
     "passwordTooShort": "密码至少需要 8 位字符",
-    "signupFailed": "注册失败，该邮箱可能已被使用。"
+    "signupFailed": "注册失败，请稍后重试。",
+    "signupCheckEmail": "注册成功，请查收邮箱并点击确认链接后再登录。",
+    "emailAlreadyRegistered": "该邮箱已注册，请直接登录。"
   },
   "inventory": {
     "title": "库存",

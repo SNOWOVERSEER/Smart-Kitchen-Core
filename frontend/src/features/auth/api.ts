@@ -1,6 +1,11 @@
 import axios from 'axios'
 import { apiClient } from '../../shared/lib/axios'
-import type { AuthResponse, ProfileResponse, ProfileUpdateRequest } from '../../shared/lib/api.types'
+import type {
+  AuthResponse,
+  ProfileResponse,
+  ProfileUpdateRequest,
+  SignupResponse,
+} from '../../shared/lib/api.types'
 
 const baseURL = import.meta.env.VITE_API_URL ?? 'http://localhost:8001'
 
@@ -13,8 +18,8 @@ export async function signup(
   email: string,
   password: string,
   display_name: string
-): Promise<AuthResponse> {
-  const response = await axios.post<AuthResponse>(`${baseURL}/auth/signup`, {
+): Promise<SignupResponse> {
+  const response = await axios.post<SignupResponse>(`${baseURL}/auth/signup`, {
     email,
     password,
     display_name,

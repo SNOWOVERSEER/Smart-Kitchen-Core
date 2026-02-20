@@ -6,6 +6,15 @@ export interface AuthResponse {
   email: string
 }
 
+export interface SignupResponse {
+  requires_email_verification: boolean
+  message: string
+  access_token: string | null
+  refresh_token: string | null
+  user_id: string | null
+  email: string
+}
+
 export interface ProfileResponse {
   id: string
   email: string | null

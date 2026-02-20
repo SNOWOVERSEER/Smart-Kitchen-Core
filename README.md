@@ -4,15 +4,14 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 
 ## Highlights
 
-- **Multi-User**: Supabase Auth with email/password, JWT-based API access
 - **Batch-Level Tracking**: Every inventory entry is a distinct "Batch" with its own expiry date, brand, and quantity
-- **FEFO Logic**: First Expired, First Out - automatically prioritizes consuming items that expire soonest
-- **AI-Powered**: Natural language interface supporting both Chinese and English
-- **Per-User AI Keys**: Users can bring their own OpenAI or Anthropic API key (encrypted in Vault)
-- **Multi-Item Operations**: Process multiple items in one command ("I drank milk and ate 3 eggs")
-- **Human-in-the-Loop**: Confirmation flow before destructive operations (consume/discard)
-- **Multi-Turn Conversations**: Slot filling for incomplete commands with correction detection
-- **Row-Level Security**: All data access is scoped to the authenticated user
+- **FEFO Logic**: First Expired, First Out — automatically prioritizes open and soonest-expiring items
+- **AI-Powered Agent**: Natural language interface (Chinese + English) using a tool-calling ReAct loop
+- **Human-in-the-Loop**: Preview + confirmation before any write operation (consume/discard/update)
+- **Multi-Turn Conversations**: Conversation state persisted via Supabase checkpointing
+- **Per-User AI Keys**: Users bring their own OpenAI or Anthropic API key (encrypted in Supabase Vault)
+- **Multi-User**: Supabase Auth with email/password JWT; all data scoped by Row-Level Security
+- **Bilingual UI**: Full EN/ZH i18n; language switches instantly from Settings
 
 ## Tech Stack
 
@@ -23,10 +22,11 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 | Routing      | TanStack Router v1 (file-based)                    |
 | Server State | TanStack Query v5                                  |
 | Client State | Zustand v5                                         |
+| i18n         | react-i18next (EN / ZH)                            |
 | Backend      | Python 3.11+ / FastAPI                             |
 | Database     | Supabase (Hosted PostgreSQL + Auth + Vault)        |
 | Auth         | Supabase Auth (email/password JWT)                 |
-| AI Framework | LangChain / LangGraph                              |
+| AI Framework | LangChain / LangGraph (tool-calling ReAct)         |
 | LLM          | OpenAI GPT-4o / Anthropic Claude (per-user config) |
 
 ## Quick Start
@@ -35,7 +35,7 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 
 - Docker & Docker Compose
 - A Supabase project ([supabase.com](https://supabase.com))
-- OpenAI API Key (optional fallback if users don't bring their own)
+- OpenAI or Anthropic API key (users can also bring their own via Settings)
 
 ### 1. Clone and Setup
 
@@ -103,115 +103,53 @@ Authorization: Bearer <access_token>
 
 ### Auth Endpoints
 
-#### Sign Up
-
 ```http
-POST /auth/signup
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "secure123",
-  "display_name": "Ken"
-}
+POST /auth/signup       {"email", "password", "display_name"}
+POST /auth/login        {"email", "password"}
+POST /auth/refresh      ?refresh_token=<token>
+POST /auth/logout
+GET  /auth/me
+PATCH /auth/me          {"display_name", "preferred_language"}
 ```
 
-**Response:**
+### AI Settings
+
+```http
+GET    /api/v1/settings/ai
+POST   /api/v1/settings/ai              {"provider", "api_key", "model_id"}
+PUT    /api/v1/settings/ai/{provider}/activate
+DELETE /api/v1/settings/ai/{provider}
+```
+
+API keys are encrypted in Supabase Vault and never returned in plaintext.
+
+### Inventory
+
+```http
+GET    /api/v1/inventory                # Grouped by item name
+GET    /api/v1/inventory/all            # Flat batch list
+POST   /api/v1/inventory                # Add batch
+PATCH  /api/v1/inventory/{batch_id}     # Update batch fields
+DELETE /api/v1/inventory/{batch_id}     # Discard batch
+POST   /api/v1/inventory/consume        # FEFO consumption
+```
+
+**Add batch request:**
 ```json
 {
-  "access_token": "eyJ...",
-  "refresh_token": "...",
-  "user_id": "uuid",
-  "email": "user@example.com"
+  "item_name": "Milk",
+  "brand": "A2",
+  "quantity": 2.0,
+  "total_volume": 2.0,
+  "unit": "L",
+  "category": "Dairy",
+  "expiry_date": "2026-03-01",
+  "is_open": false,
+  "location": "Fridge"
 }
 ```
 
-#### Login
-
-```http
-POST /auth/login
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "secure123"
-}
-```
-
-#### Refresh Token
-
-```http
-POST /auth/refresh?refresh_token=<token>
-```
-
-#### Get / Update Profile
-
-```http
-GET /auth/me
-PATCH /auth/me  {"display_name": "New Name", "preferred_language": "zh"}
-```
-
-### AI Settings Endpoints
-
-Users can configure their own AI provider and API key.
-
-#### List AI Configs
-
-```http
-GET /api/v1/settings/ai
-```
-
-**Response:**
-```json
-[
-  {
-    "id": "uuid",
-    "provider": "openai",
-    "model_id": "gpt-4o",
-    "is_active": true,
-    "api_key_preview": "sk-proj...abcd"
-  }
-]
-```
-
-#### Add / Update AI Config
-
-```http
-POST /api/v1/settings/ai
-Content-Type: application/json
-
-{
-  "provider": "openai",
-  "api_key": "sk-proj-your-key",
-  "model_id": "gpt-4o"
-}
-```
-
-The API key is encrypted and stored in Supabase Vault. Only a masked preview is ever returned.
-
-#### Switch Active Provider
-
-```http
-PUT /api/v1/settings/ai/anthropic/activate
-```
-
-#### Delete AI Config
-
-```http
-DELETE /api/v1/settings/ai/openai
-```
-
-### Inventory Endpoints
-
-#### List Inventory (Grouped)
-
-```http
-GET /api/v1/inventory
-```
-
-Returns inventory grouped by item name with nested batch details.
-
-**Response:**
+**Grouped inventory response:**
 ```json
 [
   {
@@ -220,13 +158,12 @@ Returns inventory grouped by item name with nested batch details.
     "unit": "L",
     "batches": [
       {
-        "id": 1,
-        "item_name": "Milk",
+        "id": 42,
         "brand": "A2",
         "quantity": 1.5,
         "total_volume": 2.0,
         "unit": "L",
-        "expiry_date": "2026-02-10",
+        "expiry_date": "2026-03-01",
         "is_open": true,
         "location": "Fridge"
       }
@@ -235,222 +172,124 @@ Returns inventory grouped by item name with nested batch details.
 ]
 ```
 
-#### List All Batches (Flat)
-
-```http
-GET /api/v1/inventory/all
-```
-
-#### Add Inventory
-
-```http
-POST /api/v1/inventory
-Content-Type: application/json
-
-{
-  "item_name": "Milk",
-  "brand": "A2",
-  "quantity": 2.0,
-  "total_volume": 2.0,
-  "unit": "L",
-  "category": "Dairy",
-  "expiry_date": "2026-02-15",
-  "is_open": false,
-  "location": "Fridge"
-}
-```
-
-> `location` is a required field (Fridge, Freezer, or Pantry).
-
-#### Discard Batch
-
-```http
-DELETE /api/v1/inventory/{batch_id}
-```
-
-#### Smart Consume (FEFO)
-
-```http
-POST /api/v1/inventory/consume
-Content-Type: application/json
-
-{
-  "item_name": "Milk",
-  "amount": 0.5,
-  "brand": "A2"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "consumed_amount": 0.5,
-  "remaining_to_consume": 0,
-  "affected_batches": [
-    {"batch_id": 1, "old_quantity": 1.5, "new_quantity": 1.0, "brand": "A2"}
-  ],
-  "message": "Successfully consumed 0.5 Milk"
-}
-```
-
-### AI Agent Endpoint
-
-#### Process Natural Language Command
+### AI Agent
 
 ```http
 POST /api/v1/agent/action
-Content-Type: application/json
+```
 
+```json
 {
   "text": "I drank 200ml of milk",
   "thread_id": "optional-uuid",
-  "confirm": true
+  "confirm": false
 }
 ```
 
 **Response:**
 ```json
 {
-  "response": "System will execute:\n1. Consume 0.2L Milk\n   -> Batch #1, expires 2026-02-10\n\nConfirm? [Yes/No]",
+  "response": "Found 2L A2 Milk in fridge (expires Mar 1). Consume 200ml from batch #42?\n\nConfirm?",
   "thread_id": "uuid-for-next-request",
   "status": "awaiting_confirm",
-  "pending_action": {
-    "items": [
-      {
-        "index": 0,
-        "intent": "CONSUME",
-        "extracted_info": {"item_name": "Milk", "amount": 0.2},
-        "missing_fields": []
-      }
-    ],
-    "confirmation_message": "..."
-  },
+  "pending_action": { "..." : "..." },
   "tool_calls": []
 }
 ```
 
-**Status Values:**
-| Status             | Description                                     |
-| ------------------ | ----------------------------------------------- |
-| `completed`        | Operation finished successfully                 |
-| `awaiting_info`    | Waiting for user to provide missing information |
-| `awaiting_confirm` | Waiting for user confirmation (yes/no)          |
+**Status values:**
 
-### Transaction Logs
+| Status             | Meaning                                         |
+| ------------------ | ----------------------------------------------- |
+| `completed`        | Operation finished                              |
+| `awaiting_info`    | Agent needs more information from user          |
+| `awaiting_confirm` | Previewing write operation, waiting for yes/no  |
+
+### Other Endpoints
 
 ```http
-GET /api/v1/logs?limit=50
+GET  /api/v1/logs?limit=50              # Transaction history
+GET  /api/v1/barcode/{barcode}          # OpenFoodFacts product lookup
+POST /api/v1/agent/photo-recognize      # Recognize groceries from photo (base64)
 ```
 
 ## AI Agent Architecture
 
+The agent is a **tool-calling ReAct loop** (LangGraph). The LLM picks from defined tools via native function calling; write operations require a preview + confirmation.
+
 ```
-                        User Input
-                    "I drank 200ml milk"
-                            |
-                            v
-                    +-----------------+
-                    | Intent_Analyst  |
-                    | - Extract intent|
-                    | - Extract info  |
-                    +-----------------+
-                            |
-                            v
-                  +---------------------+
-                  |Information_Validator|
-                  | - Check required    |
-                  | - Route next step   |
-                  +---------------------+
-                            |
-          +-----------------+-----------------+
-          v                 v                 v
-    +----------+      +----------+      +----------+
-    | Ask_More |      | Confirm  |      | Execute  |
-    |          |      |  (HITL)  |      |          |
-    +----+-----+      +----+-----+      +----+-----+
-         |                 |                  |
-         |                 |                  v
-         |                 |              +------+
-         |                 |              | END  |
-         |                 |              +------+
-         |                 |
-         +--------+--------+
-                  v
-           User Response --> Loop Back
+User Input
+    ↓
+handle_input
+    ↓
+agent_node  ←──────────────┐
+    ↓                       │
+route_agent                  │
+    ├── read tool?  → execute_read ─┘  (loop back with results)
+    ├── write tool? → build_preview → respond  (return preview for confirmation)
+    └── no tools?   → respond  (return final answer)
+
+User confirms → execute_write → respond
 ```
 
-### Nodes
+### Tools
 
-| Node                      | Purpose                                                                              |
-| ------------------------- | ------------------------------------------------------------------------------------ |
-| **Intent_Analyst**        | Extract intent (ADD/CONSUME/DISCARD/QUERY) and structured info from natural language |
-| **Information_Validator** | Check if all required fields are present, determine next step                        |
-| **Ask_More**              | Generate follow-up questions for missing information (slot filling)                  |
-| **Confirm**               | Show FEFO deduction plan, await human confirmation                                   |
-| **Tool_Executor**         | Execute database operations (add/consume/discard/query)                              |
+| Tool | Type | Description |
+|---|---|---|
+| `search_inventory` | Read | Case-insensitive search by name/brand/location |
+| `get_batch_details` | Read | Fetch single batch by ID |
+| `add_item` | Write | Add new batch |
+| `consume_item` | Write | FEFO deduction across batches |
+| `discard_batch` | Write | Remove a batch |
+| `update_item` | Write | Change location, is_open, quantity, or expiry |
 
-### Required Fields by Intent
+### Key Behaviors
 
-| Intent  | Required                                         | Optional          |
-| ------- | ------------------------------------------------ | ----------------- |
-| ADD     | item_name, quantity, unit, expiry_date, location | brand, category   |
-| CONSUME | item_name, amount                                | brand, unit       |
-| DISCARD | batch_id                                         | item_name, reason |
-| QUERY   | -                                                | item_name         |
+- **Search before write**: Agent always searches inventory before consuming or updating
+- **FEFO**: Open items consumed first, then earliest expiry
+- **Case-insensitive**: All brand/item_name matching uses `.ilike()`
+- **Category inference**: Infers category from item name when not specified
+- **Bilingual**: Responds in user's language; internal DB values stay English
+- **Per-user LLM**: Each user configures their own AI provider and API key
 
-### Key Features
+## FEFO Algorithm
 
-- **Multi-Item Operations**: Process multiple items in one request
-  ```
-  User: "I bought milk and eggs, both expire on Feb 15"
-  Bot: "Added: 1L Milk, expires 2026-02-15
-        Added: 12pcs Eggs, expires 2026-02-15"
-  ```
+```sql
+SELECT * FROM inventory
+WHERE item_name ILIKE 'Milk'
+  AND user_id = '<current_user>'
+  AND quantity > 0
+ORDER BY
+  is_open DESC,                -- Open items first
+  expiry_date ASC NULLS LAST   -- Then by soonest expiry
+```
 
-- **Slot Filling**: Incomplete commands trigger follow-up questions
-  ```
-  User: "I bought chicken wings"
-  Bot: "How much? When does it expire? Where to store?"
-  User: "500g, expires Feb 10, in the freezer"
-  Bot: "Added: 0.5kg Chicken Wings, expires 2026-02-10, Freezer"
-  ```
+**Cascade deduction example:**
 
-- **FEFO Preview**: Shows deduction plan before consuming
-  ```
-  Bot: "System will execute:
-        1. Consume 0.2L Milk
-           -> Batch #1 (A2), expires 2/5 [FEFO priority]
-        Confirm? [Yes/No]"
-  ```
+```
+Consume 0.5L Milk
 
-- **Correction Detection**: Handles user corrections gracefully
-  ```
-  User: "I ate 3 eggs and 2 chicken wings"
-  Bot: "Confirm: 3 eggs + 2 chicken wings?"
-  User: "Wait, I meant 2 eggs"
-  Bot: "OK, cancelled. Please tell me the correct operation."
-  ```
+Inventory:
+  Batch #41: 0.3L A2, expires Feb 5, OPEN    ← priority 1
+  Batch #42: 1.0L Coles, expires Feb 10, sealed
 
-- **Per-User AI**: Each user configures their own LLM provider and API key
-- **Multi-Turn**: Conversation state persisted via SupabaseCheckpointer
-- **Bilingual**: Responds in user's language (Chinese/English)
+Result:
+  Batch #41: 0.3L → 0L (depleted)
+  Batch #42: 1.0L → 0.8L (opened, 0.2L consumed)
+  Total consumed: 0.5L ✓
+```
 
 ## Database Schema
-
-### Supabase Tables
 
 | Table                 | Purpose                                |
 | --------------------- | -------------------------------------- |
 | `profiles`            | User profiles (auto-created on signup) |
-| `user_ai_configs`     | Per-user AI provider settings          |
-| `inventory`           | Inventory batches (user-scoped)        |
-| `transaction_logs`    | Audit trail (user-scoped)              |
+| `user_ai_configs`     | Per-user AI provider + encrypted key   |
+| `inventory`           | Inventory batches (RLS scoped)         |
+| `transaction_logs`    | Audit trail — INBOUND/CONSUME/DISCARD/UPDATE |
 | `agent_conversations` | Multi-turn conversation checkpoints    |
 
-All tables have Row-Level Security (RLS) enabled. Users can only read/write their own data.
-
-API keys are encrypted using Supabase Vault and never stored in plaintext.
+All tables have Row-Level Security. API keys are stored encrypted in Supabase Vault.
 
 ## Project Structure
 
@@ -458,38 +297,45 @@ API keys are encrypted using Supabase Vault and never stored in plaintext.
 smart-kitchen-core/
 ├── backend/
 │   ├── main.py              # FastAPI app + all endpoints
-│   ├── config.py            # Environment variable configuration
-│   ├── database.py          # Supabase client initialization
-│   ├── auth.py              # JWT auth middleware
-│   ├── models.py            # Pydantic models (Supabase table schemas)
-│   ├── schemas.py           # Request/response validation schemas
-│   ├── services.py          # FEFO logic, CRUD operations
-│   ├── requirements.txt     # Python dependencies
-│   ├── Dockerfile           # Python 3.11-slim container
+│   ├── config.py            # Environment variables
+│   ├── database.py          # Supabase client
+│   ├── auth.py              # JWT middleware
+│   ├── models.py            # Pydantic table models
+│   ├── schemas.py           # Request/response schemas
+│   ├── services.py          # FEFO logic, CRUD (case-insensitive matching)
+│   ├── barcode.py           # OpenFoodFacts lookup
+│   ├── photo_recognize.py   # Multimodal photo recognition
+│   ├── requirements.txt
+│   ├── Dockerfile
 │   └── agent/
 │       ├── __init__.py      # Exports run_agent
-│       ├── state.py         # AgentState, PendingAction definitions
-│       ├── prompts.py       # LLM prompts for intent analysis
-│       ├── nodes.py         # Graph node implementations
-│       ├── graph.py         # LangGraph + SupabaseCheckpointer
+│       ├── state.py         # AgentState (messages, pending_writes, status)
+│       ├── prompt.py        # Single SYSTEM_PROMPT
+│       ├── tools.py         # Tool definitions (search, add, consume, update, discard)
+│       ├── nodes.py         # Graph nodes (handle_input, agent, execute_read, etc.)
+│       ├── graph.py         # LangGraph wiring + SupabaseCheckpointer
 │       └── llm_factory.py   # Multi-provider LLM factory
 ├── frontend/
 │   └── src/
 │       ├── features/
-│       │   ├── auth/        # Login, signup pages + auth API
-│       │   ├── inventory/   # Dashboard, item cards, add/consume sheets
+│       │   ├── auth/        # Login, Signup
+│       │   ├── inventory/   # Dashboard, item cards, add/edit/consume sheets
 │       │   ├── chat/        # Agent drawer (desktop) + chat page (mobile)
-│       │   ├── history/     # Transaction log table with filters
+│       │   ├── history/     # Transaction log with filters + export
 │       │   ├── barcode/     # Camera scanner + product lookup
-│       │   └── settings/    # Profile + AI provider config
+│       │   └── settings/    # Profile, language, AI provider config
 │       ├── shared/
-│       │   ├── components/  # Layout, Sidebar, BottomNav, TopBar, FAB
-│       │   ├── hooks/       # useMediaQuery, useDebounce
-│       │   ├── lib/         # axios (JWT interceptor), queryClient, api.types, utils
+│       │   ├── lib/
+│       │   │   ├── axios.ts       # JWT interceptor + auto-refresh
+│       │   │   ├── api.types.ts   # Shared TS types
+│       │   │   ├── utils.ts       # formatQuantity, expiryStatus
+│       │   │   └── i18n/          # en.json, zh.json, index.ts
+│       │   ├── components/  # Sidebar, BottomNav, TopBar, FABChatButton
+│       │   ├── hooks/       # useMediaQuery
 │       │   └── stores/      # authStore (Zustand)
-│       └── routes/          # TanStack Router file-based route tree
-├── docker-compose.yml       # API service
-└── README.md                # This file
+│       └── routes/          # TanStack Router file-based routes
+├── docker-compose.yml
+└── README.md
 ```
 
 ## Development
@@ -498,114 +344,54 @@ smart-kitchen-core/
 
 ```bash
 cd frontend
-npm run dev       # Start dev server at localhost:5173
-npm run build     # Production build
-npm run typecheck # TypeScript validation
+npm run dev        # Dev server at localhost:5173 (proxies /api + /auth to :8001)
+npm run build      # Production build
+npm run typecheck  # TypeScript check
 ```
+
+Frontend env file:
+
+```env
+# frontend/.env.local
+VITE_API_URL=http://localhost:8001
+```
+
+**Key patterns:**
+- `access_token` stored in Zustand memory; `refresh_token` in `localStorage` (`sk_refresh_token`)
+- 401 auto-refresh handled in `src/shared/lib/axios.ts`
+- UI language syncs automatically from `profile.preferred_language` via `TopBar`
+- Never edit `src/routeTree.gen.ts` — it is auto-generated by the TanStack Router Vite plugin
+- Use Tailwind responsive prefixes (`sm:`, `lg:`) for layout, not `useMediaQuery`
 
 ### Backend (Docker)
 
 ```bash
-# Build and start
-docker-compose up -d --build
-
-# View logs
-docker-compose logs -f api
-
-# Restart after code changes (hot-reload enabled)
-docker-compose restart api
+docker-compose up -d --build   # Build and start
+docker-compose logs -f api     # Stream logs
+docker-compose restart api     # Restart after changes
 ```
 
-### Manual Testing
+### Manual API Testing
 
 ```bash
-# 1. Sign up
+# Sign up and capture token
 TOKEN=$(curl -s -X POST http://localhost:8001/auth/signup \
   -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com", "password": "test123", "display_name": "Test"}' \
+  -d '{"email":"test@example.com","password":"test1234","display_name":"Test"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
-# 2. Check profile
-curl http://localhost:8001/auth/me \
-  -H "Authorization: Bearer $TOKEN"
-
-# 3. Add inventory
+# Add inventory
 curl -X POST http://localhost:8001/api/v1/inventory \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"item_name": "Milk", "quantity": 2, "total_volume": 2, "unit": "L", "expiry_date": "2026-02-20", "location": "Fridge"}'
+  -d '{"item_name":"Milk","quantity":2,"total_volume":2,"unit":"L","expiry_date":"2026-03-01","location":"Fridge"}'
 
-# 4. Query inventory
-curl http://localhost:8001/api/v1/inventory \
-  -H "Authorization: Bearer $TOKEN"
-
-# 5. Natural language command
+# Natural language command
 curl -X POST http://localhost:8001/api/v1/agent/action \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"text": "What do I have in the fridge?"}'
-
-# 6. Multi-turn conversation
-THREAD_ID=$(curl -s -X POST http://localhost:8001/api/v1/agent/action \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"text": "I bought chicken wings"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['thread_id'])")
-
-curl -X POST http://localhost:8001/api/v1/agent/action \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d "{\"text\": \"500g, expires Feb 10, in the freezer\", \"thread_id\": \"$THREAD_ID\"}"
-
-# 7. Configure your own AI key
-curl -X POST http://localhost:8001/api/v1/settings/ai \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"provider": "openai", "api_key": "sk-proj-your-key", "model_id": "gpt-4o"}'
+  -d '{"text":"What do I have in the fridge?"}'
 ```
-
-### Debug Logging
-
-The agent outputs debug logs to stdout:
-
-```
-[Intent_Analyst] Input: {...}
-[Intent_Analyst] Output: {...}
-[Information_Validator] Routing to: confirm
-[TOOL CALL] consume_inventory(item_name=Milk, amount=0.2)
-[TOOL RESULT] Consumed 0.2L from batch #1
-[CLEANUP] Thread abc123 checkpoint cleared
-```
-
-## FEFO Algorithm
-
-The **First Expired, First Out** algorithm ensures optimal inventory rotation:
-
-```sql
-SELECT * FROM inventory
-WHERE item_name = 'Milk'
-  AND user_id = '<current_user>'
-  AND quantity > 0
-ORDER BY
-  is_open DESC,                -- Open items first
-  expiry_date ASC NULLS LAST   -- Then by expiry
-```
-
-### Cascade Deduction Example
-
-```
-Request: Consume 0.5L Milk
-
-Inventory:
-  Batch #1: 0.3L, A2, expires 2/5, OPEN
-  Batch #2: 1.0L, Coles, expires 2/10, sealed
-
-Result:
-  Batch #1: 0.3L -> 0L (depleted, closed)
-  Batch #2: 1.0L -> 0.8L (0.2L consumed, marked OPEN)
-  Total consumed: 0.5L
-```
-
 
 ## License
 

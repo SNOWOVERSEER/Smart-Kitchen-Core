@@ -3,6 +3,7 @@ import { useNavigate, Link } from '@tanstack/react-router'
 import { motion } from 'framer-motion'
 import { ChefHat, Eye, EyeOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import axios from 'axios'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,10 +32,24 @@ export function SignupPage() {
     setLoading(true)
     try {
       const data = await signup(email, password, displayName)
-      setAuth(data)
+      if (data.requires_email_verification || !data.access_token || !data.refresh_token || !data.user_id) {
+        toast.success(t('auth.signupCheckEmail'))
+        void navigate({ to: '/login' })
+        return
+      }
+      setAuth({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        user_id: data.user_id,
+        email: data.email,
+      })
       void navigate({ to: '/' })
-    } catch {
-      toast.error(t('auth.signupFailed'))
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        toast.error(t('auth.emailAlreadyRegistered'))
+      } else {
+        toast.error(t('auth.signupFailed'))
+      }
     } finally {
       setLoading(false)
     }

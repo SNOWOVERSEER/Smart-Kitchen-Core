@@ -7,7 +7,7 @@ from auth import get_current_user
 from database import get_supabase_client, get_supabase_anon_client
 from schemas import (
     # Auth
-    SignUpRequest, LoginRequest, AuthResponse, ProfileResponse, ProfileUpdate,
+    SignUpRequest, LoginRequest, AuthResponse, SignUpResponse, ProfileResponse, ProfileUpdate,
     # AI Config
     AIConfigCreate, AIConfigResponse,
     # Barcode
@@ -58,7 +58,7 @@ def health_check():
 
 # ── Auth Endpoints ──
 
-@app.post("/auth/signup", response_model=AuthResponse)
+@app.post("/auth/signup", response_model=SignUpResponse)
 def signup(request: SignUpRequest):
     supabase = get_supabase_anon_client()
     try:
@@ -68,15 +68,29 @@ def signup(request: SignUpRequest):
             "options": {"data": {"display_name": request.display_name}},
         })
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        error_detail = str(e)
+        if "already registered" in error_detail.lower():
+            raise HTTPException(status_code=409, detail="Email already registered")
+        raise HTTPException(status_code=400, detail=error_detail)
 
-    if not result.session:
-        raise HTTPException(status_code=400, detail="Signup failed. Check email for confirmation.")
-    return AuthResponse(
-        access_token=result.session.access_token,
-        refresh_token=result.session.refresh_token,
+    if not result.user:
+        raise HTTPException(status_code=400, detail="Signup failed")
+
+    if result.session:
+        return SignUpResponse(
+            requires_email_verification=False,
+            message="Signup successful",
+            access_token=result.session.access_token,
+            refresh_token=result.session.refresh_token,
+            user_id=result.user.id,
+            email=result.user.email or request.email,
+        )
+
+    return SignUpResponse(
+        requires_email_verification=True,
+        message="Check your email for confirmation link.",
         user_id=result.user.id,
-        email=result.user.email,
+        email=result.user.email or request.email,
     )
 
 
