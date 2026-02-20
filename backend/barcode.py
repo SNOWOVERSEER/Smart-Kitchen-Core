@@ -15,12 +15,17 @@ _api = API(
     environment=Environment.org,
 )
 
-# Map OFF categories to our category enum
+# Map OFF categories to our category enum.
+# Keys are substrings matched against OFF tag slugs (case-insensitive).
 CATEGORY_MAP = {
+    # Dairy
     "dairy": "Dairy",
     "milk": "Dairy",
     "cheese": "Dairy",
     "yogurt": "Dairy",
+    "butter": "Dairy",
+    "cream": "Dairy",
+    # Meat / seafood
     "meat": "Meat",
     "poultry": "Meat",
     "chicken": "Meat",
@@ -28,15 +33,45 @@ CATEGORY_MAP = {
     "pork": "Meat",
     "fish": "Meat",
     "seafood": "Meat",
-    "vegetable": "Veg",
-    "fruit": "Veg",
+    # Produce
+    "vegetable": "Vegetable",
+    "vegetal": "Vegetable",   # OFF uses French-influenced slugs
+    "fruit": "Fruit",
+    # Beverages — must come before generic pantry keywords
+    "beverage": "Beverage",
+    "drink": "Beverage",
+    "juice": "Beverage",
+    "water": "Beverage",
+    "soda": "Beverage",
+    "cola": "Beverage",
+    "coffee": "Beverage",
+    "tea": "Beverage",
+    "beer": "Beverage",
+    "wine": "Beverage",
+    # Snacks
+    "snack": "Snack",
+    "chip": "Snack",
+    "crisp": "Snack",
+    "biscuit": "Snack",
+    "cookie": "Snack",
+    "chocolate": "Snack",
+    "candy": "Snack",
+    "sweet": "Snack",
+    "popcorn": "Snack",
+    "cracker": "Snack",
+    # Pantry / dry goods
     "bread": "Pantry",
     "cereal": "Pantry",
     "pasta": "Pantry",
     "rice": "Pantry",
-    "snack": "Pantry",
-    "beverage": "Pantry",
-    "drink": "Pantry",
+    "flour": "Pantry",
+    "sauce": "Pantry",
+    "oil": "Pantry",
+    "spice": "Pantry",
+    "condiment": "Pantry",
+    "vinegar": "Pantry",
+    "sugar": "Pantry",
+    "salt": "Pantry",
 }
 
 
@@ -92,20 +127,32 @@ def _map_category(tags: list[str]) -> str | None:
 
 
 def _parse_unit(quantity_str: str) -> str:
-    """Parse unit from OFF quantity string like '1L', '500ml', '200g'."""
+    """Parse unit from OFF quantity string like '1L', '500ml', '200g', '1.5kg'.
+
+    Liquids (ml/cl/L) → "L"
+    Grams → "g"
+    Kilograms → "kg"
+    Everything else → "pcs"
+    """
     if not quantity_str:
         return "pcs"
 
     q = quantity_str.lower().strip()
-    if re.search(r"\d\s*(ml|cl|l)\b", q):
+    if re.search(r"[\d.]\s*(ml|cl|l)\b", q):
         return "L"
-    if re.search(r"\d\s*(kg|g)\b", q):
+    if re.search(r"[\d.]\s*kg\b", q):
         return "kg"
+    if re.search(r"[\d.]\s*g\b", q):
+        return "g"
     return "pcs"
 
 
 def _parse_quantity(quantity_str: str) -> float | None:
-    """Parse numeric quantity from OFF string, standardized to L/kg."""
+    """Parse numeric quantity from OFF string.
+
+    Liquids are converted to L (ml/cl → L).
+    Solid weights keep their natural unit (g stays g, kg stays kg).
+    """
     if not quantity_str:
         return None
 
@@ -119,9 +166,8 @@ def _parse_quantity(quantity_str: str) -> float | None:
     unit = match.group(2)
 
     if unit == "ml":
-        return round(value / 1000, 3)
+        return round(value / 1000, 3)   # 500ml → 0.5 L
     if unit == "cl":
-        return round(value / 100, 3)
-    if unit == "g":
-        return round(value / 1000, 3)
+        return round(value / 100, 3)    # 33cl → 0.33 L
+    # g, kg, l, pcs — keep as-is
     return value

@@ -1,487 +1,435 @@
-"""Node implementations for the LangGraph agent."""
+"""Node implementations for the tool-calling LangGraph agent."""
 
 import json
 from datetime import date
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 
-from agent.prompts import (
-    get_intent_analyst_prompt,
-    get_ask_more_prompt_multi,
-)
-from agent.state import AgentState, PendingAction, PendingActionItem, REQUIRED_FIELDS
+from agent.prompt import get_system_prompt
+from agent.state import AgentState, READ_TOOLS, WRITE_TOOLS
+from agent.tools import ALL_TOOLS
 from agent.llm_factory import get_user_llm
-from services import consume_item, add_inventory_item, discard_batch, get_inventory_grouped
+from services import (
+    search_inventory,
+    update_batch,
+    consume_item as svc_consume_item,
+    add_inventory_item,
+    discard_batch as svc_discard_batch,
+    get_inventory_grouped,
+)
 from schemas import InventoryItemCreate
+from database import get_supabase_client
 
 
-def log_node(node_name: str, input_state: dict, output: dict) -> None:
-    """Log node execution for observability."""
-    print(f"\n{'='*50}")
-    print(f"[NODE: {node_name}]")
-    print(f"[INPUT] status={input_state.get('status')}, pending={input_state.get('pending_action')}")
-    print(f"[OUTPUT] {output}")
-    print(f"{'='*50}\n")
+def _detect_language(messages: list) -> str:
+    """Detect if user is speaking Chinese or English from human messages only.
 
-
-# ============ Node 1: Intent Analyst ============
-
-def intent_analyst(state: AgentState) -> dict:
+    Only checks human/user messages (not system or tool messages) to avoid
+    false positives from Chinese examples in the system prompt.
+    Skips pure confirmation/cancellation words.
     """
-    Analyze user input to extract intent and information.
-    First node in the graph.
-    """
-    messages = state.get("messages", [])
-    if not messages:
-        return {"status": "completed", "response": "No input received."}
-
-    # Get the last user message
-    last_message = messages[-1]
-    user_input = last_message.content if hasattr(last_message, "content") else str(last_message)
-
-    # Check if this is a confirmation response
-    if state.get("status") == "awaiting_confirm":
-        return handle_confirmation_response(state, user_input)
-
-    # Check if this is a follow-up with more info
-    if state.get("status") == "awaiting_info" and state.get("pending_action"):
-        return handle_additional_info(state, user_input)
-
-    # Fresh intent analysis
-    user_id = state.get("user_id", "")
-    llm = get_user_llm(user_id)
-    system_prompt = get_intent_analyst_prompt()
-
-    response = llm.invoke([
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=f"Analyze this message: {user_input}"),
-    ])
-
-    # Parse the response
-    try:
-        # Extract JSON from response
-        content = response.content
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0]
-
-        analysis = json.loads(content.strip())
-    except (json.JSONDecodeError, IndexError):
-        print(f"[WARN] Failed to parse intent analysis: {response.content}")
-        analysis = {
-            "operations": [{"intent": "QUERY", "extracted_info": {}}],
-            "raw_understanding": "Could not parse user input",
-        }
-
-    # Handle operations array (multi-item support)
-    operations = analysis.get("operations", [])
-    if not operations:
-        # Backward compatibility: single item format
-        operations = [{
-            "intent": analysis.get("intent", "QUERY"),
-            "extracted_info": analysis.get("extracted_info", {}),
-        }]
-
-    # Build items list from operations
-    items: list[PendingActionItem] = []
-    for idx, op in enumerate(operations[:5]):  # Max 5 items
-        items.append({
-            "index": idx,
-            "intent": op.get("intent", "QUERY"),
-            "extracted_info": op.get("extracted_info", {}),
-            "missing_fields": [],
-            "fefo_plan": [],
-        })
-
-    # Create pending action with items
-    pending_action: PendingAction = {
-        "items": items,
-        "needs_confirmation": False,
-        "confirmation_message": "",
-        "all_complete": False,
+    skip_content = {
+        "confirm", "cancel", "yes", "no", "y", "n", "ok",
+        "是", "好", "确认", "确定", "执行", "否", "不", "取消", "算了",
     }
-
-    output = {
-        "pending_action": pending_action,
-        "status": "processing",
-    }
-
-    log_node("Intent_Analyst", state, output)
-    return output
-
-
-def handle_confirmation_response(state: AgentState, user_input: str) -> dict:
-    """Handle user's confirmation response (yes/no)."""
-    user_input_lower = user_input.lower().strip()
-
-    pending = state.get("pending_action")
-    messages = state.get("messages", [])
-    user_lang = detect_language(messages)
-
-    # Check for EXPLICIT confirmation/cancellation patterns
-    explicit_confirm = ["confirm", "确认", "确定", "执行"]
-    explicit_cancel = ["cancel", "取消", "算了", "不要了", "不执行"]
-
-    if any(p == user_input_lower or user_input_lower.startswith(p) for p in explicit_confirm):
-        return {"pending_action": pending, "status": "confirmed"}
-    if any(n == user_input_lower or user_input_lower.startswith(n) for n in explicit_cancel):
-        cancel_msg = "好的，已取消操作。还有什么需要帮忙的吗？" if user_lang == "zh" else "OK, operation cancelled. Anything else I can help with?"
-        return {"pending_action": None, "status": "completed", "response": cancel_msg}
-
-    # Check for negation patterns (must check BEFORE simple positive patterns)
-    negation_patterns = ["不对", "不是", "不行", "错了", "wrong", "not right", "wait"]
-    if any(neg in user_input_lower for neg in negation_patterns):
-        correction_msg = "好的，已取消。请重新告诉我正确的操作。" if user_lang == "zh" else "OK, cancelled. Please tell me the correct operation."
-        return {"pending_action": None, "status": "completed", "response": correction_msg}
-
-    # Simple yes/no patterns (lower priority)
-    simple_yes = ["yes", "y", "ok", "是", "好", "可以", "行", "嗯", "对"]
-    simple_no = ["no", "n", "否", "不"]
-
-    for yes in simple_yes:
-        if user_input_lower == yes or user_input_lower.startswith(yes + " "):
-            return {"pending_action": pending, "status": "confirmed"}
-
-    for no in simple_no:
-        if user_input_lower == no or user_input_lower.startswith(no + " "):
-            cancel_msg = "好的，已取消操作。还有什么需要帮忙的吗？" if user_lang == "zh" else "OK, operation cancelled. Anything else I can help with?"
-            return {"pending_action": None, "status": "completed", "response": cancel_msg}
-
-    # Unclear response - ask again
-    retry_msg = "请确认是否执行？回复'确认'或'取消'" if user_lang == "zh" else "Please confirm: reply 'yes' or 'no'"
-    return {"pending_action": pending, "status": "awaiting_confirm", "response": retry_msg}
-
-
-def handle_additional_info(state: AgentState, user_input: str) -> dict:
-    """Handle additional info provided by user for slot filling (multi-item support)."""
-    pending = state.get("pending_action", {})
-    items = pending.get("items", [])
-    user_id = state.get("user_id", "")
-
-    # Use LLM to extract additional info for all items
-    llm = get_user_llm(user_id)
-    items_context = json.dumps([{
-        "index": i["index"],
-        "item": i["extracted_info"].get("item_name", "unknown"),
-        "intent": i["intent"],
-        "have": i["extracted_info"],
-        "missing": i["missing_fields"],
-    } for i in items if i.get("missing_fields")], ensure_ascii=False)
-
-    today = date.today().isoformat()
-    prompt = f"""The user is providing additional information for multiple items.
-
-Today's date: {today}
-
-Items needing info:
-{items_context}
-
-User's response: {user_input}
-
-Extract new information and map to correct items. Return JSON:
-{{
-    "updates": [
-        {{"index": 0, "quantity": 0.5, "unit": "kg", "expiry_date": "2026-02-20", "location": "Fridge"}},
-        {{"index": 1, "quantity": 10, "unit": "pcs"}}
-    ]
-}}
-
-IMPORTANT: Use actual field names as keys (quantity, unit, expiry_date, brand, location, etc.), NOT "field_name".
-Only include fields that the user actually provided.
-
-Remember:
-- Translate Chinese food names to English
-- Convert units: ml→L (÷1000), g→kg (÷1000)
-- Dates in YYYY-MM-DD format. When year is not specified, use the current year ({today[:4]})
-- Match info to the correct item by context
-"""
-
-    response = llm.invoke([HumanMessage(content=prompt)])
-
-    try:
-        content = response.content
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0]
-        result = json.loads(content.strip())
-        updates = result.get("updates", [])
-    except (json.JSONDecodeError, IndexError):
-        updates = []
-
-    # Apply updates to correct items
-    for update in updates:
-        idx = update.pop("index", 0)
-        if idx < len(items):
-            items[idx]["extracted_info"].update(update)
-            items[idx]["missing_fields"] = get_missing_fields(
-                items[idx]["intent"],
-                items[idx]["extracted_info"]
-            )
-
-    pending["items"] = items
-
-    return {
-        "pending_action": pending,
-        "status": "processing",
-    }
-
-
-# ============ Node 2: Information Validator ============
-
-def information_validator(state: AgentState) -> dict:
-    """
-    Validate extracted information and decide next step (multi-item support).
-    Routes to: ask_more, confirm, or execute.
-    """
-    pending = state.get("pending_action")
-    if not pending:
-        output = {"status": "completed", "response": "No action pending."}
-        log_node("Information_Validator", state, output)
-        return output
-
-    items = pending.get("items", [])
-    if not items:
-        output = {"status": "completed", "response": "No items to process."}
-        log_node("Information_Validator", state, output)
-        return output
-
-    # Check missing fields for ALL items
-    all_complete = True
-    needs_confirmation = False
-
-    for item in items:
-        missing = get_missing_fields(item["intent"], item["extracted_info"])
-        item["missing_fields"] = missing
-
-        if missing:
-            all_complete = False
-
-        if item["intent"] in ["CONSUME", "DISCARD"]:
-            needs_confirmation = True
-
-    pending["all_complete"] = all_complete
-    pending["items"] = items
-
-    if not all_complete:
-        output = {
-            "pending_action": pending,
-            "status": "awaiting_info",
-            "next": "ask_more",
-        }
-    elif needs_confirmation:
-        output = {
-            "pending_action": pending,
-            "status": "processing",
-            "next": "confirm",
-        }
-    else:
-        output = {
-            "pending_action": pending,
-            "status": "processing",
-            "next": "execute",
-        }
-
-    log_node("Information_Validator", state, output)
-    return output
-
-
-def get_missing_fields(intent: str, extracted: dict) -> list[str]:
-    """Get list of missing required fields for an intent."""
-    required = REQUIRED_FIELDS.get(intent, [])
-    missing = []
-
-    for field in required:
-        if field not in extracted or extracted[field] is None:
-            # Special case: DISCARD can use item_name instead of batch_id
-            if field == "batch_id" and "item_name" in extracted:
-                continue
-            missing.append(field)
-
-    return missing
-
-
-# ============ Node 3: Ask More ============
-
-def ask_more(state: AgentState) -> dict:
-    """
-    Generate follow-up question for missing information (multi-item support).
-    """
-    pending = state.get("pending_action", {})
-    items = pending.get("items", [])
-    user_id = state.get("user_id", "")
-
-    # Build summary of items needing info
-    items_summary = []
-    for item in items:
-        if item.get("missing_fields"):
-            items_summary.append({
-                "item_name": item["extracted_info"].get("item_name", "unknown"),
-                "intent": item["intent"],
-                "have": item["extracted_info"],
-                "missing": item["missing_fields"],
-            })
-
-    # Get the original user language from messages
-    messages = state.get("messages", [])
-    user_lang = detect_language(messages)
-
-    llm = get_user_llm(user_id)
-    prompt = get_ask_more_prompt_multi(items_summary)
-
-    # Add language hint
-    lang_hint = "Respond in Chinese." if user_lang == "zh" else "Respond in English."
-
-    response = llm.invoke([
-        SystemMessage(content=prompt),
-        HumanMessage(content=f"{lang_hint}\nGenerate a natural follow-up question for all missing fields."),
-    ])
-
-    output = {
-        "pending_action": pending,
-        "status": "awaiting_info",
-        "response": response.content,
-    }
-
-    log_node("Ask_More", state, output)
-    return output
-
-
-def detect_language(messages: list) -> str:
-    """Detect if user is speaking Chinese or English."""
     for msg in reversed(messages):
-        content = msg.content if hasattr(msg, "content") else str(msg)
+        # Determine message type
+        msg_type = getattr(msg, "type", None)
+        if msg_type is None and isinstance(msg, dict):
+            msg_type = msg.get("role")
+        # Only check human/user messages
+        if msg_type not in ("human", "user"):
+            continue
+        content = msg.content if hasattr(msg, "content") else msg.get("content", "")
+        if not isinstance(content, str):
+            continue
+        # Skip pure confirmation/cancellation words
+        if content.strip().lower() in skip_content:
+            continue
+        # Detect language from first substantive human message
         if any("\u4e00" <= char <= "\u9fff" for char in content):
             return "zh"
+        if content.strip():
+            return "en"
     return "en"
 
 
-# ============ Node 4: Confirm ============
+def _get_user_language(user_id: str) -> str:
+    """Get user's preferred language from profile."""
+    try:
+        supabase = get_supabase_client()
+        result = supabase.table("profiles").select("preferred_language").eq("id", user_id).limit(1).execute()
+        if result.data:
+            return result.data[0].get("preferred_language", "en")
+    except Exception:
+        pass
+    return "en"
 
-def confirm(state: AgentState) -> dict:
+
+# ============ Node: handle_input ============
+
+def handle_input(state: AgentState) -> dict:
     """
-    Generate confirmation message and prepare FEFO plan (multi-item support).
+    Prepare the initial state. Adds system message if this is the first turn.
+    Handles confirm/cancel for pending writes.
     """
-    pending = state.get("pending_action", {})
-    items = pending.get("items", [])
+    messages = list(state.get("messages", []))
     user_id = state.get("user_id", "")
 
+    # Check if this is a confirmation of pending writes
+    pending_writes = state.get("pending_writes")
+    if pending_writes and messages:
+        last_msg = messages[-1]
+        last_content = (last_msg.content if hasattr(last_msg, "content") else str(last_msg)).lower().strip()
+
+        # Check for explicit confirmation
+        confirm_words = {"confirm", "yes", "y", "ok", "是", "好", "可以", "行", "嗯", "对", "确认", "确定", "执行"}
+        cancel_words = {"cancel", "no", "n", "否", "不", "取消", "算了", "不要了", "不执行"}
+        negation_patterns = ["不对", "不是", "不行", "错了", "wrong", "not right", "wait"]
+
+        # Check negation first (higher priority)
+        if any(neg in last_content for neg in negation_patterns):
+            user_lang = _detect_language(messages)
+            cancel_msg = "OK, cancelled. Please tell me the correct operation." if user_lang == "en" else "好的，已取消。请重新告诉我正确的操作。"
+            return {
+                "pending_writes": None,
+                "status": "completed",
+                "response": cancel_msg,
+            }
+
+        if last_content in confirm_words:
+            # Route to execute_write — keep pending_writes, set status
+            return {"status": "confirmed"}
+
+        if last_content in cancel_words:
+            user_lang = _detect_language(messages)
+            cancel_msg = "OK, operation cancelled. Anything else I can help with?" if user_lang == "en" else "好的，已取消操作。还有什么需要帮忙的吗？"
+            return {
+                "pending_writes": None,
+                "status": "completed",
+                "response": cancel_msg,
+            }
+
+    # Ensure system message is present
+    has_system = any(
+        isinstance(m, SystemMessage) or (isinstance(m, dict) and m.get("role") == "system")
+        for m in messages
+    )
+
+    if not has_system:
+        user_lang = _get_user_language(user_id)
+        # Also detect from current message
+        msg_lang = _detect_language(messages)
+        if msg_lang == "zh":
+            user_lang = "zh"
+
+        system_msg = SystemMessage(content=get_system_prompt(user_lang))
+        return {
+            "messages": [system_msg],
+            "pending_writes": None,
+            "status": "processing",
+        }
+
+    return {"pending_writes": None, "status": "processing"}
+
+
+# ============ Node: agent_node ============
+
+def agent_node(state: AgentState) -> dict:
+    """
+    Call the LLM with bound tools. The LLM decides what to do:
+    - Call a read tool to gather information
+    - Call a write tool to modify inventory
+    - Respond directly with text (ask follow-up, answer query, etc.)
+    """
+    user_id = state.get("user_id", "")
     messages = state.get("messages", [])
-    user_lang = detect_language(messages)
 
-    # Calculate FEFO plan for all CONSUME items
-    for item in items:
-        if item["intent"] == "CONSUME":
-            item["fefo_plan"] = calculate_fefo_plan(
-                user_id=user_id,
-                item_name=item["extracted_info"].get("item_name", ""),
-                amount=item["extracted_info"].get("amount", 0),
-                brand=item["extracted_info"].get("brand"),
-            )
+    llm = get_user_llm(user_id)
+    llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
-    # Build multi-item confirmation message
+    response = llm_with_tools.invoke(messages)
+
+    return {"messages": [response]}
+
+
+# ============ Router: route_agent ============
+
+def route_agent(state: AgentState) -> str:
+    """
+    Route based on the LLM's response:
+    - If it called read tools -> "execute_read"
+    - If it called write tools -> "build_preview"
+    - If no tool calls -> "respond"
+    """
+    # Check for confirmed status (from handle_input)
+    if state.get("status") == "confirmed":
+        return "execute_write"
+
+    messages = state.get("messages", [])
+    if not messages:
+        return "respond"
+
+    last_message = messages[-1]
+
+    # Check if it's an AIMessage with tool calls
+    if isinstance(last_message, AIMessage) and last_message.tool_calls:
+        tool_names = {tc["name"] for tc in last_message.tool_calls}
+
+        # If any write tools, route to preview
+        if tool_names & WRITE_TOOLS:
+            return "build_preview"
+
+        # If only read tools, execute them
+        if tool_names & READ_TOOLS:
+            return "execute_read"
+
+    return "respond"
+
+
+# ============ Node: execute_read_tools ============
+
+def execute_read_tools(state: AgentState) -> dict:
+    """Execute read tool calls and return results as ToolMessages."""
+    messages = state.get("messages", [])
+    user_id = state.get("user_id", "")
+    tool_calls_log = list(state.get("tool_calls_log", []))
+
+    last_message = messages[-1]
+    if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+        return {}
+
+    tool_messages = []
+
+    for tc in last_message.tool_calls:
+        tool_name = tc["name"]
+        args = tc["args"]
+
+        print(f"[READ TOOL] {tool_name}({args})")
+
+        try:
+            if tool_name == "search_inventory":
+                result = search_inventory(
+                    user_id=user_id,
+                    item_name=args.get("item_name"),
+                    brand=args.get("brand"),
+                    location=args.get("location"),
+                )
+            elif tool_name == "get_batch_details":
+                supabase = get_supabase_client()
+                fetch = (
+                    supabase.table("inventory")
+                    .select("*")
+                    .eq("id", args["batch_id"])
+                    .eq("user_id", user_id)
+                    .execute()
+                )
+                result = fetch.data[0] if fetch.data else None
+            else:
+                result = f"Unknown read tool: {tool_name}"
+
+            print(f"[READ RESULT] {tool_name}: {json.dumps(result, default=str)[:200]}")
+
+        except Exception as e:
+            result = f"Error executing {tool_name}: {str(e)}"
+            print(f"[READ ERROR] {tool_name}: {e}")
+
+        tool_messages.append(
+            ToolMessage(content=json.dumps(result, default=str), tool_call_id=tc["id"])
+        )
+        tool_calls_log.append({
+            "tool": tool_name,
+            "args": args,
+            "result": "success" if not isinstance(result, str) or not result.startswith("Error") else "error",
+        })
+
+    return {"messages": tool_messages, "tool_calls_log": tool_calls_log}
+
+
+# ============ Node: build_preview ============
+
+def build_write_preview(state: AgentState) -> dict:
+    """
+    Dry-run write tool calls to build a confirmation preview.
+    Stores the pending writes for later execution.
+    """
+    messages = state.get("messages", [])
+    user_id = state.get("user_id", "")
+    user_lang = _detect_language(messages)
+
+    last_message = messages[-1]
+    if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+        return {"status": "completed", "response": "No operations to preview."}
+
+    pending_writes = []
+    preview_parts = []
+
+    for i, tc in enumerate(last_message.tool_calls):
+        tool_name = tc["name"]
+        args = tc["args"]
+
+        print(f"[PREVIEW] {tool_name}({args})")
+
+        if tool_name == "add_item":
+            preview = _preview_add(args, user_lang)
+        elif tool_name == "consume_item":
+            preview = _preview_consume(args, user_id, user_lang)
+        elif tool_name == "discard_batch":
+            preview = _preview_discard(args, user_id, user_lang)
+        elif tool_name == "update_item":
+            preview = _preview_update(args, user_id, user_lang)
+        else:
+            preview = f"Unknown write tool: {tool_name}"
+
+        pending_writes.append({"tool": tool_name, "args": args, "tool_call_id": tc["id"]})
+        preview_parts.append(f"{i + 1}. {preview}")
+
+    # Build confirmation message
     if user_lang == "zh":
-        msg = "系统将执行以下操作：\n\n"
-        for i, item in enumerate(items, 1):
-            msg += build_item_confirmation_zh(i, item)
-        msg += "\n确认执行所有操作？[是/否]"
+        header = "将执行以下操作：\n\n"
+        footer = "\n\n确认执行？回复 '确认' 或 '取消'"
     else:
-        msg = "System will execute:\n\n"
-        for i, item in enumerate(items, 1):
-            msg += build_item_confirmation_en(i, item)
-        msg += "\nConfirm all operations? [Yes/No]"
+        header = "The following operations will be performed:\n\n"
+        footer = "\n\nConfirm? Reply 'yes' or 'cancel'"
 
-    pending["confirmation_message"] = msg
-    pending["items"] = items
+    confirmation = header + "\n".join(preview_parts) + footer
 
-    output = {
-        "pending_action": pending,
+    # Add a ToolMessage for each tool call so the message history stays valid
+    tool_messages = []
+    for pw in pending_writes:
+        tool_messages.append(
+            ToolMessage(
+                content="[Preview generated - awaiting confirmation]",
+                tool_call_id=pw["tool_call_id"],
+            )
+        )
+
+    return {
+        "messages": tool_messages + [AIMessage(content=confirmation)],
+        "pending_writes": pending_writes,
+        "preview_message": confirmation,
         "status": "awaiting_confirm",
-        "response": msg,
+        "response": confirmation,
     }
 
-    log_node("Confirm", state, output)
-    return output
+
+def _preview_add(args: dict, lang: str) -> str:
+    """Build preview text for add_item."""
+    name = args.get("item_name", "?")
+    qty = args.get("quantity", "?")
+    unit = args.get("unit", "?")
+    loc = args.get("location", "?")
+    brand = f" ({args['brand']})" if args.get("brand") else ""
+    expiry = f", expires {args['expiry_date']}" if args.get("expiry_date") else ""
+    cat = f", category: {args['category']}" if args.get("category") else ""
+
+    if lang == "zh":
+        return f"添加: {qty}{unit} {name}{brand}, 位置: {loc}{expiry}{cat}"
+    return f"Add: {qty}{unit} {name}{brand}, location: {loc}{expiry}{cat}"
 
 
-def build_item_confirmation_zh(num: int, item: dict) -> str:
-    """Build Chinese confirmation for single item."""
-    intent = item["intent"]
-    info = item["extracted_info"]
+def _preview_consume(args: dict, user_id: str, lang: str) -> str:
+    """Build preview text for consume_item with FEFO plan."""
+    name = args.get("item_name", "?")
+    amount = args.get("amount", 0)
+    brand = args.get("brand")
+    unit = args.get("unit", "")
 
-    emoji = {"ADD": "📥", "CONSUME": "📦", "DISCARD": "🗑️", "QUERY": "🔍"}
-    action = {"ADD": "添加", "CONSUME": "消耗", "DISCARD": "丢弃", "QUERY": "查询"}
+    # Calculate FEFO plan
+    plan = _calculate_fefo_plan(user_id, name, amount, brand)
 
-    msg = f"{num}️⃣ {emoji.get(intent, '')} {action.get(intent, '')} "
+    if not plan:
+        if lang == "zh":
+            return f"消耗: {amount}{unit} {name} - 未找到匹配的库存"
+        return f"Consume: {amount}{unit} {name} - no matching inventory found"
 
-    if intent == "CONSUME":
-        msg += f"{info.get('amount', 0)}{info.get('unit', '')} {info.get('item_name', '')}\n"
-        for batch in item.get("fefo_plan", []):
+    if lang == "zh":
+        lines = [f"消耗: {amount}{unit} {name}"]
+        for batch in plan:
             brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
-            msg += f"   → Batch #{batch['batch_id']}{brand_str}, "
-            msg += f"过期 {batch.get('expiry_date', 'N/A')}, "
-            msg += f"扣除 {batch['deduct_amount']}\n"
-    elif intent == "ADD":
-        msg += f"{info.get('quantity', 0)}{info.get('unit', '')} {info.get('item_name', '')}"
-        if info.get("expiry_date"):
-            msg += f", 过期日 {info['expiry_date']}"
-        if info.get("location"):
-            msg += f", 位置 {info['location']}"
-        msg += "\n"
-    elif intent == "DISCARD":
-        msg += f"批次 #{info.get('batch_id', '?')}\n"
+            lines.append(
+                f"   Batch #{batch['batch_id']}{brand_str}: "
+                f"{batch['current_quantity']} -> {batch['new_quantity']}, "
+                f"过期: {batch.get('expiry_date', 'N/A')}"
+            )
+        return "\n".join(lines)
     else:
-        msg += f"{info.get('item_name', 'all')}\n"
-
-    return msg + "\n"
-
-
-def build_item_confirmation_en(num: int, item: dict) -> str:
-    """Build English confirmation for single item."""
-    intent = item["intent"]
-    info = item["extracted_info"]
-
-    emoji = {"ADD": "📥", "CONSUME": "📦", "DISCARD": "🗑️", "QUERY": "🔍"}
-
-    msg = f"{num}️⃣ {emoji.get(intent, '')} {intent} "
-
-    if intent == "CONSUME":
-        msg += f"{info.get('amount', 0)}{info.get('unit', '')} {info.get('item_name', '')}\n"
-        for batch in item.get("fefo_plan", []):
+        lines = [f"Consume: {amount}{unit} {name}"]
+        for batch in plan:
             brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
-            msg += f"   → Batch #{batch['batch_id']}{brand_str}, "
-            msg += f"expires {batch.get('expiry_date', 'N/A')}, "
-            msg += f"deduct {batch['deduct_amount']}\n"
-    elif intent == "ADD":
-        msg += f"{info.get('quantity', 0)}{info.get('unit', '')} {info.get('item_name', '')}"
-        if info.get("expiry_date"):
-            msg += f", expires {info['expiry_date']}"
-        if info.get("location"):
-            msg += f", location {info['location']}"
-        msg += "\n"
-    elif intent == "DISCARD":
-        msg += f"batch #{info.get('batch_id', '?')}\n"
-    else:
-        msg += f"{info.get('item_name', 'all')}\n"
-
-    return msg + "\n"
+            lines.append(
+                f"   Batch #{batch['batch_id']}{brand_str}: "
+                f"{batch['current_quantity']} -> {batch['new_quantity']}, "
+                f"expires: {batch.get('expiry_date', 'N/A')}"
+            )
+        return "\n".join(lines)
 
 
-def calculate_fefo_plan(
+def _preview_discard(args: dict, user_id: str, lang: str) -> str:
+    """Build preview text for discard_batch."""
+    batch_id = args.get("batch_id", "?")
+
+    supabase = get_supabase_client()
+    fetch = (
+        supabase.table("inventory")
+        .select("*")
+        .eq("id", batch_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    if not fetch.data:
+        if lang == "zh":
+            return f"丢弃: Batch #{batch_id} - 未找到"
+        return f"Discard: Batch #{batch_id} - not found"
+
+    item = fetch.data[0]
+    if lang == "zh":
+        return f"丢弃: Batch #{batch_id} - {item['item_name']} ({item['quantity']}{item['unit']})"
+    return f"Discard: Batch #{batch_id} - {item['item_name']} ({item['quantity']}{item['unit']})"
+
+
+def _preview_update(args: dict, user_id: str, lang: str) -> str:
+    """Build preview text for update_item."""
+    batch_id = args.get("batch_id", "?")
+    updates = {k: v for k, v in args.items() if k != "batch_id" and v is not None}
+
+    supabase = get_supabase_client()
+    fetch = (
+        supabase.table("inventory")
+        .select("*")
+        .eq("id", batch_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    if not fetch.data:
+        if lang == "zh":
+            return f"更新: Batch #{batch_id} - 未找到"
+        return f"Update: Batch #{batch_id} - not found"
+
+    item = fetch.data[0]
+    changes = []
+    for key, new_val in updates.items():
+        old_val = item.get(key, "?")
+        changes.append(f"{key}: {old_val} -> {new_val}")
+
+    changes_str = ", ".join(changes)
+    if lang == "zh":
+        return f"更新: {item['item_name']} (Batch #{batch_id}) - {changes_str}"
+    return f"Update: {item['item_name']} (Batch #{batch_id}) - {changes_str}"
+
+
+def _calculate_fefo_plan(
     user_id: str,
     item_name: str,
     amount: float,
     brand: str | None,
 ) -> list[dict]:
-    """
-    Calculate FEFO deduction plan without executing.
-    Returns list of batches that would be affected.
-    """
+    """Calculate FEFO deduction plan without executing."""
     groups = get_inventory_grouped(user_id)
 
-    # Find the item group
     target_group = None
     for group in groups:
         if group.item_name.lower() == item_name.lower():
@@ -491,18 +439,15 @@ def calculate_fefo_plan(
     if not target_group:
         return []
 
-    # Filter by brand if specified
     batches = target_group.batches
     if brand:
         batches = [b for b in batches if b.brand and b.brand.lower() == brand.lower()]
 
-    # Sort by FEFO: is_open DESC, expiry_date ASC
     batches = sorted(
         batches,
         key=lambda b: (not b.is_open, b.expiry_date or date.max),
     )
 
-    # Calculate deduction plan
     plan = []
     remaining = amount
     for batch in batches:
@@ -522,205 +467,212 @@ def calculate_fefo_plan(
     return plan
 
 
-# ============ Node 5: Tool Executor ============
+# ============ Node: execute_write_tools ============
 
-def tool_executor(state: AgentState) -> dict:
-    """
-    Execute the actual database operations (multi-item support).
-    """
-    pending = state.get("pending_action", {})
-    items = pending.get("items", [])
+def execute_write_tools(state: AgentState) -> dict:
+    """Execute the confirmed write operations."""
+    pending_writes = state.get("pending_writes", [])
     user_id = state.get("user_id", "")
-    thread_id = state.get("thread_id", "")
-
     messages = state.get("messages", [])
-    user_lang = detect_language(messages)
+    user_lang = _detect_language(messages)
+    tool_calls_log = list(state.get("tool_calls_log", []))
 
-    # Extract original user request for audit trail (skip confirm/cancel messages)
+    # Extract the most recent user message that triggered this action (not a confirmation).
+    # Iterate in reverse so multi-turn conversations pick the latest substantive input,
+    # not an old query from earlier in the thread.
     raw_input = ""
-    skip_words = {"confirm", "cancel", "确认", "取消", "是", "否", "yes", "no", "ok", "好"}
-    for msg in messages:
+    skip_words = {
+        "confirm", "cancel", "yes", "no", "y", "n", "ok",
+        "是", "好", "确认", "确定", "执行", "否", "不", "取消", "算了",
+    }
+    for msg in reversed(messages):
         content = msg.content if hasattr(msg, "content") else str(msg)
         msg_type = getattr(msg, "type", None) or (msg.get("role") if isinstance(msg, dict) else None)
         if msg_type in ("human", "user") and content.strip().lower() not in skip_words:
             raw_input = content
             break
 
-    tool_calls = state.get("tool_calls", [])
     results = []
 
-    try:
-        for item in items:
-            intent = item["intent"]
-            extracted = item["extracted_info"]
+    for pw in pending_writes or []:
+        tool_name = pw["tool"]
+        args = pw["args"]
 
-            if intent == "ADD":
-                result = execute_add(user_id, extracted, user_lang, thread_id, raw_input)
-            elif intent == "CONSUME":
-                result = execute_consume(user_id, extracted, item.get("fefo_plan", []), user_lang, thread_id, raw_input)
-            elif intent == "DISCARD":
-                result = execute_discard(user_id, extracted, user_lang, thread_id, raw_input)
-            elif intent == "QUERY":
-                result = execute_query(user_id, extracted, user_lang)
+        print(f"[EXECUTE] {tool_name}({args})")
+
+        try:
+            if tool_name == "add_item":
+                result_text = _execute_add(user_id, args, user_lang, raw_input)
+            elif tool_name == "consume_item":
+                result_text = _execute_consume(user_id, args, user_lang, raw_input)
+            elif tool_name == "discard_batch":
+                result_text = _execute_discard(user_id, args, user_lang, raw_input)
+            elif tool_name == "update_item":
+                result_text = _execute_update(user_id, args, user_lang, raw_input)
             else:
-                result = f"Unknown intent: {intent}"
+                result_text = f"Unknown tool: {tool_name}"
 
-            results.append(result)
-            tool_calls.append({
-                "tool": f"execute_{intent.lower()}",
-                "args": extracted,
+            results.append(result_text)
+            tool_calls_log.append({
+                "tool": tool_name,
+                "args": args,
                 "result": "success",
             })
 
-    except Exception as e:
-        error_msg = f"操作失败: {str(e)}" if user_lang == "zh" else f"Operation failed: {str(e)}"
-        results.append(error_msg)
-        tool_calls.append({
-            "tool": "batch_execute",
-            "args": {"items_count": len(items)},
-            "result": f"error: {str(e)}",
-        })
+        except Exception as e:
+            error_msg = f"Operation failed: {str(e)}" if user_lang == "en" else f"操作失败: {str(e)}"
+            results.append(error_msg)
+            tool_calls_log.append({
+                "tool": tool_name,
+                "args": args,
+                "result": f"error: {str(e)}",
+            })
 
-    # Combine results
-    combined_response = "\n\n".join(results)
+    combined = "\n\n".join(results)
 
-    output = {
-        "pending_action": None,
+    return {
+        "messages": [AIMessage(content=combined)],
+        "pending_writes": None,
         "status": "completed",
-        "response": combined_response,
-        "tool_calls": tool_calls,
+        "response": combined,
+        "tool_calls_log": tool_calls_log,
     }
 
-    log_node("Tool_Executor", state, output)
-    return output
 
-
-def execute_add(user_id: str, info: dict, lang: str, thread_id: str = "", raw_input: str = "") -> str:
-    """Execute ADD operation."""
-    print(f"[TOOL CALL] add_inventory({info})")
-
-    # Parse expiry date
+def _execute_add(user_id: str, args: dict, lang: str, raw_input: str = "") -> str:
+    """Execute add_item operation."""
     expiry = None
-    if info.get("expiry_date"):
+    if args.get("expiry_date"):
         try:
-            expiry = date.fromisoformat(info["expiry_date"])
+            expiry = date.fromisoformat(args["expiry_date"])
         except ValueError:
             pass
 
+    total_vol = args.get("total_volume") or args.get("quantity", 1)
+
     item_data = InventoryItemCreate(
-        item_name=info.get("item_name") or "Unknown",
-        brand=info.get("brand"),
-        quantity=info.get("quantity") or 1,
-        total_volume=info.get("quantity") or 1,
-        unit=info.get("unit") or "pcs",
-        category=info.get("category"),
+        item_name=args.get("item_name", "Unknown"),
+        brand=args.get("brand"),
+        quantity=args.get("quantity", 1),
+        total_volume=total_vol,
+        unit=args.get("unit", "pcs"),
+        category=args.get("category"),
         expiry_date=expiry,
-        location=info.get("location") or "Fridge",
+        is_open=args.get("is_open", False),
+        location=args.get("location", "Fridge"),
     )
 
-    row = add_inventory_item(user_id, item_data, thread_id=thread_id or None, raw_input=raw_input or None)
-    print(f"[TOOL RESULT] Added batch #{row['id']}")
+    row = add_inventory_item(user_id, item_data, raw_input=raw_input or None)
 
     if lang == "zh":
-        return f"✅ 已添加: {row['quantity']}{row['unit']} {row['item_name']}" + \
-               (f" ({row.get('brand')})" if row.get("brand") else "") + \
-               f"\n   批次ID: #{row['id']}, 位置: {row['location']}" + \
-               (f", 过期日: {row.get('expiry_date')}" if row.get("expiry_date") else "")
+        msg = f"已添加: {row['quantity']}{row['unit']} {row['item_name']}"
+        if row.get("brand"):
+            msg += f" ({row['brand']})"
+        msg += f"\n   Batch #{row['id']}, 位置: {row['location']}"
+        if row.get("expiry_date"):
+            msg += f", 过期日: {row['expiry_date']}"
+        return msg
     else:
-        return f"✅ Added: {row['quantity']}{row['unit']} {row['item_name']}" + \
-               (f" ({row.get('brand')})" if row.get("brand") else "") + \
-               f"\n   Batch ID: #{row['id']}, Location: {row['location']}" + \
-               (f", Expires: {row.get('expiry_date')}" if row.get("expiry_date") else "")
+        msg = f"Added: {row['quantity']}{row['unit']} {row['item_name']}"
+        if row.get("brand"):
+            msg += f" ({row['brand']})"
+        msg += f"\n   Batch #{row['id']}, Location: {row['location']}"
+        if row.get("expiry_date"):
+            msg += f", Expires: {row['expiry_date']}"
+        return msg
 
 
-def execute_consume(user_id: str, info: dict, fefo_plan: list, lang: str, thread_id: str = "", raw_input: str = "") -> str:
-    """Execute CONSUME operation."""
-    print(f"[TOOL CALL] consume_item({info})")
-
-    result = consume_item(
+def _execute_consume(user_id: str, args: dict, lang: str, raw_input: str = "") -> str:
+    """Execute consume_item operation."""
+    result = svc_consume_item(
         user_id=user_id,
-        item_name=info.get("item_name", ""),
-        amount=info.get("amount", 0),
-        brand=info.get("brand"),
-        thread_id=thread_id or None,
+        item_name=args.get("item_name", ""),
+        amount=args.get("amount", 0),
+        brand=args.get("brand"),
         raw_input=raw_input or None,
     )
 
-    print(f"[TOOL RESULT] {result}")
-
     if not result.success:
-        return f"❌ {result.message}"
+        return result.message
 
     if lang == "zh":
-        msg = f"✅ 已消耗 {result.consumed_amount} {info.get('item_name')}\n"
+        msg = f"已消耗 {result.consumed_amount} {args.get('item_name')}\n"
         msg += "扣除明细:\n"
         for batch in result.affected_batches:
             brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
-            msg += f"   - Batch #{batch['batch_id']}{brand_str}: "
-            msg += f"{batch['old_quantity']} → {batch['new_quantity']}\n"
+            msg += f"   - Batch #{batch['batch_id']}{brand_str}: {batch['old_quantity']} -> {batch['new_quantity']}\n"
         return msg
     else:
-        msg = f"✅ Consumed {result.consumed_amount} {info.get('item_name')}\n"
+        msg = f"Consumed {result.consumed_amount} {args.get('item_name')}\n"
         msg += "Deduction details:\n"
         for batch in result.affected_batches:
             brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
-            msg += f"   - Batch #{batch['batch_id']}{brand_str}: "
-            msg += f"{batch['old_quantity']} → {batch['new_quantity']}\n"
+            msg += f"   - Batch #{batch['batch_id']}{brand_str}: {batch['old_quantity']} -> {batch['new_quantity']}\n"
         return msg
 
 
-def execute_discard(user_id: str, info: dict, lang: str, thread_id: str = "", raw_input: str = "") -> str:
-    """Execute DISCARD operation."""
-    batch_id = info.get("batch_id")
-    print(f"[TOOL CALL] discard_batch({batch_id})")
-
+def _execute_discard(user_id: str, args: dict, lang: str, raw_input: str = "") -> str:
+    """Execute discard_batch operation."""
+    batch_id = args.get("batch_id")
     if not batch_id:
-        return "❌ 需要批次ID才能丢弃" if lang == "zh" else "❌ Batch ID required for discard"
+        return "Batch ID required for discard" if lang == "en" else "需要批次ID才能丢弃"
 
-    item = discard_batch(user_id, batch_id, thread_id=thread_id or None, raw_input=raw_input or None)
-    print(f"[TOOL RESULT] Discarded batch #{batch_id}")
+    item = svc_discard_batch(user_id, batch_id, raw_input=raw_input or None)
 
     if not item:
-        return f"❌ 找不到批次 #{batch_id}" if lang == "zh" else f"❌ Batch #{batch_id} not found"
+        return f"Batch #{batch_id} not found" if lang == "en" else f"找不到批次 #{batch_id}"
 
     if lang == "zh":
-        return f"✅ 已丢弃批次 #{batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
-    else:
-        return f"✅ Discarded batch #{batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
+        return f"已丢弃批次 #{batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
+    return f"Discarded batch #{batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
 
 
-def execute_query(user_id: str, info: dict, lang: str) -> str:
-    """Execute QUERY operation."""
-    item_filter = info.get("item_name")
-    print(f"[TOOL CALL] query_inventory(item_name={item_filter})")
+def _execute_update(user_id: str, args: dict, lang: str, raw_input: str = "") -> str:
+    """Execute update_item operation."""
+    batch_id = args.get("batch_id")
+    if not batch_id:
+        return "Batch ID required for update" if lang == "en" else "需要批次ID才能更新"
 
-    groups = get_inventory_grouped(user_id)
+    updates = {k: v for k, v in args.items() if k != "batch_id" and v is not None}
 
-    if item_filter:
-        groups = [g for g in groups if item_filter.lower() in g.item_name.lower()]
+    row = update_batch(
+        user_id=user_id,
+        batch_id=batch_id,
+        updates=updates,
+        raw_input=raw_input or None,
+    )
 
-    print(f"[TOOL RESULT] Found {len(groups)} item groups")
+    if not row:
+        return f"Batch #{batch_id} not found" if lang == "en" else f"找不到批次 #{batch_id}"
 
-    if not groups:
-        return "库存为空" if lang == "zh" else "Inventory is empty"
-
+    changes_str = ", ".join(f"{k}: {v}" for k, v in updates.items())
     if lang == "zh":
-        lines = ["当前库存:"]
-        for group in groups:
-            lines.append(f"\n📦 {group.item_name}: {group.total_quantity}{group.unit}")
-            for batch in group.batches:
-                status = "🔓 已开封" if batch.is_open else "🔒 未开封"
-                expiry = f"过期 {batch.expiry_date}" if batch.expiry_date else "无过期日"
-                brand = f"({batch.brand})" if batch.brand else ""
-                lines.append(f"   - #{batch.id} {brand}: {batch.quantity}{batch.unit}, {status}, {expiry}, {batch.location}")
-        return "\n".join(lines)
-    else:
-        lines = ["Current Inventory:"]
-        for group in groups:
-            lines.append(f"\n📦 {group.item_name}: {group.total_quantity}{group.unit}")
-            for batch in group.batches:
-                status = "🔓 OPEN" if batch.is_open else "🔒 sealed"
-                expiry = f"expires {batch.expiry_date}" if batch.expiry_date else "no expiry"
-                brand = f"({batch.brand})" if batch.brand else ""
-                lines.append(f"   - #{batch.id} {brand}: {batch.quantity}{batch.unit}, {status}, {expiry}, {batch.location}")
-        return "\n".join(lines)
+        return f"已更新 {row['item_name']} (Batch #{batch_id}): {changes_str}"
+    return f"Updated {row['item_name']} (Batch #{batch_id}): {changes_str}"
+
+
+# ============ Node: respond ============
+
+def respond(state: AgentState) -> dict:
+    """
+    Format the final response. Extracts text from the last AIMessage
+    if no explicit response was set.
+    """
+    # If response was already set (by handle_input or execute_write), use it
+    if state.get("response"):
+        return {}
+
+    messages = state.get("messages", [])
+    if not messages:
+        return {"response": "I'm not sure how to help with that.", "status": "completed"}
+
+    last_message = messages[-1]
+
+    # If the last message is an AIMessage with text content (no tool calls)
+    if isinstance(last_message, AIMessage) and last_message.content:
+        return {
+            "response": last_message.content,
+            "status": state.get("status", "completed"),
+        }
+
+    return {"response": "I'm not sure how to help with that.", "status": "completed"}

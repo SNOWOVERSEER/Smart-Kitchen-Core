@@ -1,90 +1,68 @@
-"""LangGraph construction for the Smart Kitchen agent."""
+"""LangGraph construction for the SmartKitchen tool-calling agent."""
 
 import uuid
-from typing import Literal
+from typing import Any
 
 from langgraph.graph import StateGraph, END
 
 from agent.state import AgentState
 from agent.nodes import (
-    intent_analyst,
-    information_validator,
-    ask_more,
-    confirm,
-    tool_executor,
+    handle_input,
+    agent_node,
+    route_agent,
+    execute_read_tools,
+    build_write_preview,
+    execute_write_tools,
+    respond,
 )
 from database import get_supabase_client
 
 
-def route_after_validator(state: AgentState) -> Literal["ask_more", "confirm", "execute", "end"]:
-    """Router function: decides next node after validation."""
-    if state.get("status") == "completed":
-        return "end"
-
-    next_step = state.get("next")
-    if next_step:
-        return next_step
-
-    status = state.get("status")
-    if status == "awaiting_info":
-        return "ask_more"
-    elif status == "awaiting_confirm":
-        return "confirm"
-    elif status == "confirmed":
-        return "execute"
-
-    return "end"
-
-
-def route_after_intent(state: AgentState) -> Literal["validator", "execute", "end"]:
-    """Router function: decides next node after intent analysis."""
-    status = state.get("status")
-
-    if status == "completed":
-        return "end"
-
-    if status == "confirmed":
-        return "execute"
-
-    return "validator"
-
-
 def build_graph() -> StateGraph:
-    """Build and return the agent graph."""
+    """Build and return the tool-calling agent graph."""
     graph = StateGraph(AgentState)
 
-    graph.add_node("intent_analyst", intent_analyst)
-    graph.add_node("validator", information_validator)
-    graph.add_node("ask_more", ask_more)
-    graph.add_node("confirm", confirm)
-    graph.add_node("execute", tool_executor)
+    graph.add_node("handle_input", handle_input)
+    graph.add_node("agent", agent_node)
+    graph.add_node("execute_read", execute_read_tools)
+    graph.add_node("build_preview", build_write_preview)
+    graph.add_node("execute_write", execute_write_tools)
+    graph.add_node("respond", respond)
 
-    graph.set_entry_point("intent_analyst")
+    graph.set_entry_point("handle_input")
 
+    # After handle_input: if confirmed -> execute_write, otherwise -> agent
     graph.add_conditional_edges(
-        "intent_analyst",
-        route_after_intent,
+        "handle_input",
+        lambda state: "execute_write" if state.get("status") == "confirmed" else (
+            "respond" if state.get("status") == "completed" else "agent"
+        ),
         {
-            "validator": "validator",
-            "execute": "execute",
-            "end": END,
+            "agent": "agent",
+            "execute_write": "execute_write",
+            "respond": "respond",
         },
     )
 
+    # After agent: route based on tool calls
     graph.add_conditional_edges(
-        "validator",
-        route_after_validator,
+        "agent",
+        route_agent,
         {
-            "ask_more": "ask_more",
-            "confirm": "confirm",
-            "execute": "execute",
-            "end": END,
+            "execute_read": "execute_read",
+            "build_preview": "build_preview",
+            "execute_write": "execute_write",
+            "respond": "respond",
         },
     )
 
-    graph.add_edge("ask_more", END)
-    graph.add_edge("confirm", END)
-    graph.add_edge("execute", END)
+    # Read tools loop back to agent for next decision
+    graph.add_edge("execute_read", "agent")
+
+    # Preview and execute both end
+    graph.add_edge("build_preview", "respond")
+    graph.add_edge("execute_write", "respond")
+    graph.add_edge("respond", END)
 
     return graph
 
@@ -127,6 +105,24 @@ class SupabaseCheckpointer:
 checkpointer = SupabaseCheckpointer()
 
 
+def _serialize_messages(messages: list) -> list[dict]:
+    """Convert LangChain messages to serializable dicts for checkpointing."""
+    serialized = []
+    for m in messages:
+        if hasattr(m, "type") and hasattr(m, "content"):
+            msg_dict: dict[str, Any] = {"role": m.type, "content": m.content}
+            # Preserve tool calls on AIMessages
+            if hasattr(m, "tool_calls") and m.tool_calls:
+                msg_dict["tool_calls"] = m.tool_calls
+            # Preserve tool_call_id on ToolMessages
+            if hasattr(m, "tool_call_id") and m.tool_call_id:
+                msg_dict["tool_call_id"] = m.tool_call_id
+            serialized.append(msg_dict)
+        elif isinstance(m, dict):
+            serialized.append(m)
+    return serialized
+
+
 def run_agent(
     text: str,
     user_id: str,
@@ -151,28 +147,40 @@ def run_agent(
     # Load existing state from checkpoint
     existing_state = checkpointer.get(thread_id)
 
-    # Build graph (no LangGraph checkpointer - we manage state manually)
+    # Build graph
     graph = build_graph()
     app = graph.compile()
 
-    # Build input
+    # Build input text
     if confirm_action is not None:
         input_text = "confirm" if confirm_action else "cancel"
     else:
         input_text = text
 
-    # Merge with existing state if continuing conversation
-    input_state = existing_state or {}
+    # Build input state
+    input_state: dict[str, Any] = {}
+
+    if existing_state:
+        # Restore saved state
+        saved_messages = existing_state.get("messages", [])
+        input_state["messages"] = saved_messages
+        input_state["pending_writes"] = existing_state.get("pending_writes")
+        input_state["status"] = existing_state.get("status", "processing")
+    else:
+        input_state["messages"] = []
+
+    # Append new user message
     input_state["messages"] = input_state.get("messages", []) + [
         {"role": "user", "content": input_text}
     ]
-    input_state["thread_id"] = thread_id
     input_state["user_id"] = user_id
 
     try:
         result = app.invoke(input_state)
     except Exception as e:
         print(f"[ERROR] Graph execution failed: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "response": f"Error: {str(e)}",
             "thread_id": thread_id,
@@ -183,16 +191,11 @@ def run_agent(
 
     response = result.get("response", "")
     status = result.get("status", "completed")
-    pending_action = result.get("pending_action")
-    tool_calls = result.get("tool_calls", [])
+    pending_writes = result.get("pending_writes")
+    tool_calls_log = result.get("tool_calls_log", [])
 
-    # Build message history including AI response
-    messages_to_save = [
-        {"role": getattr(m, "type", "user"), "content": getattr(m, "content", str(m))}
-        for m in result.get("messages", [])
-    ]
-    if response:
-        messages_to_save.append({"role": "assistant", "content": response})
+    # Serialize messages for checkpoint
+    messages_to_save = _serialize_messages(result.get("messages", []))
 
     # Save or clear checkpoint
     if status == "completed":
@@ -201,28 +204,38 @@ def run_agent(
     else:
         checkpoint = {
             "messages": messages_to_save,
-            "pending_action": pending_action,
+            "pending_writes": pending_writes,
             "status": status,
             "user_id": user_id,
-            "thread_id": thread_id,
         }
         checkpointer.put(thread_id, user_id, checkpoint)
 
-    # Format pending_action for response
+    # Build pending_action for API response (matches frontend schema)
     pending_dict = None
-    if pending_action:
-        items = pending_action.get("items", [])
+    if pending_writes:
+        items = []
+        for i, pw in enumerate(pending_writes):
+            tool_name = pw["tool"]
+            args = pw["args"]
+
+            # Map tool name to intent for frontend compatibility
+            intent_map = {
+                "add_item": "ADD",
+                "consume_item": "CONSUME",
+                "discard_batch": "DISCARD",
+                "update_item": "UPDATE",
+            }
+
+            items.append({
+                "index": i,
+                "intent": intent_map.get(tool_name, tool_name.upper()),
+                "extracted_info": args,
+                "missing_fields": [],
+            })
+
         pending_dict = {
-            "items": [
-                {
-                    "index": item.get("index", i),
-                    "intent": item.get("intent"),
-                    "extracted_info": item.get("extracted_info"),
-                    "missing_fields": item.get("missing_fields"),
-                }
-                for i, item in enumerate(items)
-            ],
-            "confirmation_message": pending_action.get("confirmation_message"),
+            "items": items,
+            "confirmation_message": result.get("preview_message", ""),
         }
 
     return {
@@ -230,5 +243,5 @@ def run_agent(
         "thread_id": thread_id,
         "status": status,
         "pending_action": pending_dict,
-        "tool_calls": tool_calls,
+        "tool_calls": tool_calls_log,
     }

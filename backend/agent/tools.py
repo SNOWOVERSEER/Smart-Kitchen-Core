@@ -1,171 +1,131 @@
-"""LangChain tools for inventory management. (Legacy!!!!! Not In Use anymore)"""
+"""Tool definitions for the SmartKitchen agent.
 
-from datetime import date
-from typing import Annotated
+These are defined as plain functions with type hints and docstrings.
+LangChain converts them to tool schemas for LLM function calling.
+The actual execution happens in nodes.py — these serve as
+schema definitions that get bound to the LLM via `llm.bind_tools()`.
+"""
+
+from typing import Any
 
 from langchain_core.tools import tool
-from sqlmodel import Session
-
-from database import engine
-from models import InventoryItem
-from schemas import InventoryItemCreate
-from services import (
-    consume_item,
-    add_inventory_item,
-    get_inventory_grouped,
-    discard_batch,
-)
-
-
-def get_session() -> Session:
-    """Create a new database session for tool execution."""
-    return Session(engine)
 
 
 @tool
-def query_inventory(
-    item_name: Annotated[str | None, "Optional: filter by item name"] = None,
-) -> str:
+def search_inventory(
+    item_name: str | None = None,
+    brand: str | None = None,
+    location: str | None = None,
+) -> list[dict[str, Any]]:
+    """Search the user's current inventory for items matching the given criteria.
+    All filters are case-insensitive. Returns matching batches sorted by FEFO order.
+    Use this before consuming, updating, or discarding items to understand current state.
+
+    Args:
+        item_name: Item name to search for (partial match supported). E.g. "Milk", "Chicken"
+        brand: Filter by brand name. E.g. "A2", "Coles"
+        location: Filter by storage location. E.g. "Fridge", "Freezer", "Pantry"
     """
-    Query current inventory status.
-    Use this tool FIRST to see what items are available before consuming.
-    Returns a summary of all inventory grouped by item name.
-    """
-    with get_session() as db:
-        groups = get_inventory_grouped(db)
-
-        if not groups:
-            return "Inventory is empty. No items found."
-
-        # Filter by item_name if provided
-        if item_name:
-            groups = [g for g in groups if item_name.lower() in g.item_name.lower()]
-            if not groups:
-                return f"No items found matching '{item_name}'."
-
-        # Format output for LLM
-        lines = ["Current Inventory:"]
-        for group in groups:
-            lines.append(f"\n📦 {group.item_name}: {group.total_quantity} {group.unit} total")
-            for batch in group.batches:
-                status = "🔓 OPEN" if batch.is_open else "🔒 sealed"
-                expiry = f"expires {batch.expiry_date}" if batch.expiry_date else "no expiry"
-                brand = f"({batch.brand})" if batch.brand else ""
-                lines.append(
-                    f"   - Batch #{batch.id} {brand}: {batch.quantity} {batch.unit}, {status}, {expiry}"
-                )
-
-        return "\n".join(lines)
+    raise NotImplementedError
 
 
 @tool
-def consume_inventory(
-    item_name: Annotated[str, "The item to consume (e.g., 'Milk', 'Eggs')"],
-    amount: Annotated[float, "Amount to consume (e.g., 0.5, 2)"],
-    unit: Annotated[str, "Unit of measurement (e.g., 'L', 'kg', 'pcs')"],
-    brand: Annotated[str | None, "Optional: specific brand to consume"] = None,
-) -> str:
+def get_batch_details(batch_id: int) -> dict[str, Any] | None:
+    """Get detailed information about a specific inventory batch by its ID.
+
+    Args:
+        batch_id: The batch ID number to look up.
     """
-    Consume/use items from inventory using FEFO (First Expired, First Out) logic.
-
-    The system automatically:
-    1. Consumes from OPEN items first
-    2. Then from items expiring soonest
-    3. Cascades across multiple batches if needed
-
-    If brand is specified, only items of that brand will be consumed.
-    """
-    with get_session() as db:
-        result = consume_item(
-            db=db,
-            item_name=item_name,
-            amount=amount,
-            brand=brand,
-        )
-
-        if not result.success:
-            return f"❌ Failed: {result.message}"
-
-        # Format success message
-        lines = [f"✅ Successfully consumed {result.consumed_amount} {unit} of {item_name}"]
-        lines.append("\nAffected batches:")
-        for batch in result.affected_batches:
-            brand_str = f" ({batch['brand']})" if batch.get("brand") else ""
-            lines.append(
-                f"  - Batch #{batch['batch_id']}{brand_str}: "
-                f"{batch['old_quantity']} → {batch['new_quantity']} {unit}"
-            )
-
-        return "\n".join(lines)
+    raise NotImplementedError
 
 
 @tool
-def add_inventory(
-    item_name: Annotated[str, "Item name (e.g., 'Milk', 'Chicken Breast')"],
-    quantity: Annotated[float, "Quantity (e.g., 1.0, 500)"],
-    unit: Annotated[str, "Unit (e.g., 'L', 'kg', 'g', 'pcs')"],
-    brand: Annotated[str | None, "Brand name (e.g., 'A2', 'Coles')"] = None,
-    expiry_date: Annotated[str | None, "Expiry date in YYYY-MM-DD format"] = None,
-    category: Annotated[str | None, "Category: Dairy, Meat, Veg, Pantry, etc."] = None,
-    location: Annotated[str, "Storage location: Fridge, Freezer, or Pantry"] = "Fridge",
-) -> str:
+def add_item(
+    item_name: str,
+    quantity: float,
+    unit: str,
+    location: str,
+    expiry_date: str | None = None,
+    brand: str | None = None,
+    category: str | None = None,
+    total_volume: float | None = None,
+    is_open: bool = False,
+) -> dict[str, Any]:
+    """Add a new item batch to inventory. Always use English for parameter values.
+
+    Args:
+        item_name: Normalized English name. E.g. "Milk", "Chicken Wings", "Rice"
+        quantity: Amount of the item. E.g. 1.0, 2.5, 500
+        unit: Unit of measurement. Use: "L", "ml", "kg", "g", "pcs"
+        location: Storage location. Must be one of: "Fridge", "Freezer", "Pantry"
+        expiry_date: Expiry date in YYYY-MM-DD format. E.g. "2026-03-01"
+        brand: Brand name in English. E.g. "A2", "Coles", "Woolworths"
+        category: Category in English. E.g. "Dairy", "Meat", "Vegetables", "Pantry", "Beverages"
+        total_volume: Original package size (defaults to quantity if not specified)
+        is_open: Whether the package is already opened. Default false.
     """
-    Add a new item batch to inventory.
-    Use this when the user bought or received new groceries.
-    """
-    with get_session() as db:
-        # Parse expiry date if provided
-        parsed_expiry = None
-        if expiry_date:
-            try:
-                parsed_expiry = date.fromisoformat(expiry_date)
-            except ValueError:
-                return f"❌ Invalid date format: {expiry_date}. Use YYYY-MM-DD."
-
-        item_data = InventoryItemCreate(
-            item_name=item_name,
-            brand=brand,
-            quantity=quantity,
-            total_volume=quantity,  # Initial volume equals quantity
-            unit=unit,
-            category=category,
-            expiry_date=parsed_expiry,
-            location=location,
-        )
-
-        item = add_inventory_item(db, item_data)
-
-        brand_str = f" ({item.brand})" if item.brand else ""
-        expiry_str = f", expires {item.expiry_date}" if item.expiry_date else ""
-
-        return (
-            f"✅ Added: {item.quantity} {item.unit} of {item.item_name}{brand_str}\n"
-            f"   Batch ID: #{item.id}, Location: {item.location}{expiry_str}"
-        )
+    raise NotImplementedError
 
 
 @tool
-def discard_inventory(
-    batch_id: Annotated[int, "The batch ID to discard (use query_inventory to find IDs)"],
-) -> str:
+def consume_item(
+    item_name: str,
+    amount: float,
+    unit: str | None = None,
+    brand: str | None = None,
+) -> dict[str, Any]:
+    """Consume an item from inventory using FEFO (First Expired, First Out) logic.
+    The system automatically deducts from open items first, then by earliest expiry.
+
+    Args:
+        item_name: English name of the item to consume. E.g. "Milk", "Eggs"
+        amount: How much to consume. E.g. 0.5, 2, 200
+        unit: Unit of measurement (optional, uses item's stored unit if omitted)
+        brand: Specific brand to consume from (optional, applies FEFO across all brands if omitted)
     """
-    Discard/throw away a specific inventory batch.
-    Use this when an item is expired, spoiled, or no longer needed.
-    You need the batch ID - use query_inventory first to find it.
+    raise NotImplementedError
+
+
+@tool
+def discard_batch(
+    batch_id: int,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Discard an entire batch from inventory (e.g. expired, spoiled).
+
+    Args:
+        batch_id: The ID of the batch to discard.
+        reason: Optional reason for discarding. E.g. "expired", "spoiled"
     """
-    with get_session() as db:
-        item = discard_batch(db, batch_id)
-
-        if not item:
-            return f"❌ Batch #{batch_id} not found."
-
-        return f"✅ Discarded batch #{batch_id}: {item.item_name} ({item.quantity} {item.unit})"
+    raise NotImplementedError
 
 
-# Export all tools
-inventory_tools = [
-    query_inventory,
-    consume_inventory,
-    add_inventory,
-    discard_inventory,
-]
+@tool
+def update_item(
+    batch_id: int,
+    item_name: str | None = None,
+    location: str | None = None,
+    is_open: bool | None = None,
+    quantity: float | None = None,
+    expiry_date: str | None = None,
+    category: str | None = None,
+    brand: str | None = None,
+) -> dict[str, Any]:
+    """Update an existing inventory batch. Use this for moving items, marking as opened,
+    adjusting quantities, correcting information, or renaming an item.
+
+    Args:
+        batch_id: The ID of the batch to update.
+        item_name: New English item name (for renaming, e.g. "Coca Cola" -> "Coke").
+        location: New storage location. Must be: "Fridge", "Freezer", or "Pantry"
+        is_open: Whether the package is open.
+        quantity: New quantity value (for manual adjustments like "I have 3 left").
+        expiry_date: New expiry date in YYYY-MM-DD format.
+        category: New category in English.
+        brand: New brand name in English.
+    """
+    raise NotImplementedError
+
+
+# All tools for LLM binding
+ALL_TOOLS = [search_inventory, get_batch_details, add_item, consume_item, discard_batch, update_item]

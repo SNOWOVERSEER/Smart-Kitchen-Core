@@ -161,12 +161,12 @@ def consume_item(
         supabase.table("inventory")
         .select("*")
         .eq("user_id", user_id)
-        .eq("item_name", item_name)
+        .ilike("item_name", item_name)
         .gt("quantity", 0)
     )
 
     if brand:
-        query = query.eq("brand", brand)
+        query = query.ilike("brand", brand)
 
     # FEFO sort: is_open DESC, expiry_date ASC (nulls last)
     result = query.order("is_open", desc=True).order("expiry_date", nullsfirst=False).execute()
@@ -303,6 +303,82 @@ def update_inventory_item(
         .execute()
     )
     return result.data[0] if result.data else None
+
+
+def search_inventory(
+    user_id: str,
+    item_name: str | None = None,
+    brand: str | None = None,
+    location: str | None = None,
+) -> list[dict]:
+    """Flexible inventory search with case-insensitive matching."""
+    supabase = get_supabase_client()
+    query = (
+        supabase.table("inventory")
+        .select("*")
+        .eq("user_id", user_id)
+        .gt("quantity", 0)
+    )
+
+    if item_name:
+        query = query.ilike("item_name", f"%{item_name}%")
+    if brand:
+        query = query.ilike("brand", brand)
+    if location:
+        query = query.ilike("location", location)
+
+    result = query.order("is_open", desc=True).order("expiry_date", nullsfirst=False).execute()
+    return result.data
+
+
+def update_batch(
+    user_id: str,
+    batch_id: int,
+    updates: dict,
+    thread_id: str | None = None,
+    raw_input: str | None = None,
+) -> dict | None:
+    """Update mutable fields on an inventory batch."""
+    supabase = get_supabase_client()
+
+    # Only allow safe fields (item_name included for renaming)
+    allowed = {"item_name", "location", "is_open", "quantity", "expiry_date", "category", "brand"}
+    safe_updates = {k: v for k, v in updates.items() if k in allowed and v is not None}
+
+    if not safe_updates:
+        return None
+
+    # Convert date to string
+    if "expiry_date" in safe_updates:
+        safe_updates["expiry_date"] = str(safe_updates["expiry_date"])
+
+    result = (
+        supabase.table("inventory")
+        .update(safe_updates)
+        .eq("id", batch_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    if not result.data:
+        return None
+
+    row = result.data[0]
+
+    log_transaction(
+        user_id=user_id,
+        intent="UPDATE",
+        thread_id=thread_id,
+        raw_input=raw_input,
+        operation_details={
+            "action": "update",
+            "batch_id": batch_id,
+            "item_name": row["item_name"],
+            "updates": safe_updates,
+        },
+    )
+
+    return row
 
 
 def get_transaction_logs(user_id: str, limit: int = 50) -> list[dict]:
