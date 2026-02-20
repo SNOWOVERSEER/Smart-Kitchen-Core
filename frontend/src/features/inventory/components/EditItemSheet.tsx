@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { useTranslation } from 'react-i18next'
 import type { InventoryItemResponse } from '@/shared/lib/api.types'
 import { useUpdateBatch } from '../hooks/useInventory'
 
@@ -28,18 +29,18 @@ interface EditItemSheetProps {
   onClose: () => void
 }
 
-const LOCATIONS  = ['Fridge', 'Freezer', 'Pantry', 'Counter']
-const CATEGORIES = ['Dairy', 'Meat', 'Vegetable', 'Fruit', 'Pantry', 'Beverage', 'Snack', 'Other']
+const LOCATIONS = ['Fridge', 'Freezer', 'Pantry', 'Counter']
+const CATEGORIES = ['Dairy', 'Meat', 'Vegetable', 'Fruit', 'Pantry', 'Beverage', 'Snacks', 'Other']
 
 // Numeric fields stored as strings to avoid leading-zero bug
 interface FormState {
-  quantity:     string
+  quantity: string
   total_volume: string
-  brand:        string
-  category:     string
-  expiry_date:  string
-  is_open:      boolean
-  location:     string
+  brand: string
+  category: string
+  expiry_date: string
+  is_open: boolean
+  location: string
 }
 
 type Errors = Partial<Record<keyof FormState, string>>
@@ -58,15 +59,16 @@ function FieldError({ msg }: { msg?: string }) {
 }
 
 export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
+  const { t } = useTranslation()
   const updateMutation = useUpdateBatch()
   const [form, setForm] = useState<FormState>({
-    quantity:     '',
+    quantity: '',
     total_volume: '',
-    brand:        '',
-    category:     '',
-    expiry_date:  '',
-    is_open:      false,
-    location:     'Fridge',
+    brand: '',
+    category: '',
+    expiry_date: '',
+    is_open: false,
+    location: 'Fridge',
   })
   const [errors, setErrors] = useState<Errors>({})
 
@@ -74,13 +76,13 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
   useEffect(() => {
     if (open && batch) {
       setForm({
-        quantity:     String(batch.quantity),
+        quantity: String(batch.quantity),
         total_volume: String(batch.total_volume),
-        brand:        batch.brand        ?? '',
-        category:     batch.category     ?? '',
-        expiry_date:  batch.expiry_date  ?? '',
-        is_open:      batch.is_open,
-        location:     batch.location,
+        brand: batch.brand ?? '',
+        category: batch.category ?? '',
+        expiry_date: batch.expiry_date ?? '',
+        is_open: batch.is_open,
+        location: batch.location,
       })
       setErrors({})
     }
@@ -92,9 +94,9 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
   }
 
   // ── Slider logic ──────────────────────────────────────────────
-  const tv  = parseFloat(form.total_volume)
+  const tv = parseFloat(form.total_volume)
   const qty = parseFloat(form.quantity)
-  const canSlide  = !isNaN(tv) && tv > 0
+  const canSlide = !isNaN(tv) && tv > 0
   const sliderPct = canSlide && !isNaN(qty)
     ? Math.min(100, Math.max(0, (qty / tv) * 100))
     : 0
@@ -103,7 +105,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
   const handleSliderChange = ([pct]: number[]) => {
     if (!canSlide) return
     // Round to 1 decimal; for small units (ml/g) round to integer
-    const raw   = (pct / 100) * tv
+    const raw = (pct / 100) * tv
     const isInt = ['pcs', 'pack', 'can', 'bottle', 'ml', 'g'].includes(batch?.unit ?? '')
     const value = isInt ? Math.round(raw) : Math.round(raw * 10) / 10
     setForm((prev) => ({ ...prev, quantity: String(value), is_open: pct < 100 }))
@@ -112,23 +114,23 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
 
   // Color based on remaining %
   const pctColorClass =
-    sliderPct <= 20  ? 'text-red-600'
-    : sliderPct <= 50 ? 'text-amber-600'
-    : 'text-emerald-600'
+    sliderPct <= 20 ? 'text-red-600'
+      : sliderPct <= 50 ? 'text-amber-600'
+        : 'text-emerald-600'
 
   // ── Validation ─────────────────────────────────────────────────
   const validate = (): boolean => {
     const e: Errors = {}
     const q = parseFloat(form.quantity)
     if (form.quantity === '' || isNaN(q) || q < 0) {
-      e.quantity = 'Enter a valid quantity (0 or more)'
+      e.quantity = t('inventory.editSheet.quantityRequired')
     }
-    const t = parseFloat(form.total_volume)
-    if (!form.total_volume || isNaN(t) || t <= 0) {
-      e.total_volume = 'Enter a valid total greater than 0'
+    const t2 = parseFloat(form.total_volume)
+    if (!form.total_volume || isNaN(t2) || t2 <= 0) {
+      e.total_volume = t('inventory.editSheet.totalRequired')
     }
     if (!form.location) {
-      e.location = 'Location is required'
+      e.location = t('inventory.editSheet.locationRequired')
     }
     setErrors(e)
     return Object.keys(e).length === 0
@@ -140,13 +142,13 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
     await updateMutation.mutateAsync({
       id: batch.id,
       data: {
-        quantity:    parseFloat(form.quantity),
+        quantity: parseFloat(form.quantity),
         total_volume: parseFloat(form.total_volume),
-        brand:       form.brand.trim() || undefined,
-        category:    form.category     || undefined,
-        expiry_date: form.expiry_date  || undefined,
-        is_open:     form.is_open,
-        location:    form.location,
+        brand: form.brand.trim() || undefined,
+        category: form.category || undefined,
+        expiry_date: form.expiry_date || undefined,
+        is_open: form.is_open,
+        location: form.location,
       },
     })
     onClose()
@@ -159,7 +161,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
       <SheetContent side="right" className="w-full sm:max-w-[420px] flex flex-col p-0">
         {/* Header */}
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-          <SheetTitle className="text-base">Edit batch</SheetTitle>
+          <SheetTitle className="text-base">{t('inventory.editSheet.title')}</SheetTitle>
           <SheetDescription className="text-xs">
             {batch.item_name}{batch.brand ? ` · ${batch.brand}` : ''}
           </SheetDescription>
@@ -174,24 +176,24 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
             {/* ── Item Details ── */}
             <div className="flex flex-col gap-4">
               <p className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                Item Details
+                {t('inventory.editSheet.itemDetails')}
               </p>
 
               <div className="flex flex-col gap-1.5">
-                <FieldLabel>Brand</FieldLabel>
+                <FieldLabel>{t('inventory.editSheet.brand')}</FieldLabel>
                 <Input
                   value={form.brand}
                   onChange={(e) => set('brand', e.target.value)}
-                  placeholder="e.g. A2"
+                  placeholder={t('inventory.editSheet.brandPlaceholder')}
                   className="h-10"
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <FieldLabel>Category</FieldLabel>
+                <FieldLabel>{t('inventory.editSheet.category')}</FieldLabel>
                 <Select value={form.category} onValueChange={(v) => set('category', v)}>
                   <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Select..." />
+                    <SelectValue placeholder={t('inventory.editSheet.selectCategory')} />
                   </SelectTrigger>
                   <SelectContent>
                     {CATEGORIES.map((c) => (
@@ -207,7 +209,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
             {/* ── Quantity ── */}
             <div className="flex flex-col gap-4">
               <p className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                Quantity
+                {t('inventory.editSheet.quantity')}
               </p>
 
               {/* Slider — primary control */}
@@ -234,7 +236,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
 
                 {!canSlide && (
                   <p className="text-xs text-muted-foreground">
-                    Set a valid original total below to enable the slider.
+                    {t('inventory.editSheet.sliderHelp')}
                   </p>
                 )}
               </div>
@@ -242,15 +244,15 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
               {/* Precise number inputs — secondary */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <FieldLabel>Remaining</FieldLabel>
+                  <FieldLabel>{t('inventory.editSheet.remaining')}</FieldLabel>
                   <div className="relative">
                     <Input
                       inputMode="decimal"
                       value={form.quantity}
                       onChange={(e) => {
-                        const val    = e.target.value
+                        const val = e.target.value
                         const newQty = parseFloat(val)
-                        const curTv  = parseFloat(form.total_volume)
+                        const curTv = parseFloat(form.total_volume)
                         setForm((prev) => ({
                           ...prev,
                           quantity: val,
@@ -271,7 +273,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <FieldLabel>Original total</FieldLabel>
+                  <FieldLabel>{t('inventory.editSheet.originalTotal')}</FieldLabel>
                   <div className="relative">
                     <Input
                       inputMode="decimal"
@@ -294,12 +296,12 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
             {/* ── Storage ── */}
             <div className="flex flex-col gap-4">
               <p className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                Storage
+                {t('inventory.editSheet.storage')}
               </p>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <FieldLabel>Location</FieldLabel>
+                  <FieldLabel>{t('inventory.editSheet.location')}</FieldLabel>
                   <Select value={form.location} onValueChange={(v) => set('location', v)}>
                     <SelectTrigger className={cn('h-10', errors.location && 'border-destructive')}>
                       <SelectValue />
@@ -313,7 +315,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
                   <FieldError msg={errors.location} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <FieldLabel>Expiry date</FieldLabel>
+                  <FieldLabel>{t('inventory.editSheet.expiryDate')}</FieldLabel>
                   <Input
                     type="date"
                     value={form.expiry_date}
@@ -325,9 +327,9 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
 
               <div className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-lg">
                 <div>
-                  <p className="text-sm font-medium">Currently open?</p>
+                  <p className="text-sm font-medium">{t('inventory.editSheet.currentlyOpen')}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Open items are consumed first (FEFO)
+                    {t('inventory.editSheet.openDescription')}
                   </p>
                 </div>
                 <Switch
@@ -341,10 +343,10 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
           {/* Sticky footer */}
           <div className="px-6 py-4 border-t border-border bg-card shrink-0 flex gap-3">
             <Button type="button" variant="outline" className="flex-1 h-10" onClick={onClose}>
-              Cancel
+              {t('inventory.editSheet.cancel')}
             </Button>
             <Button type="submit" className="flex-1 h-10" disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? 'Saving...' : 'Save changes'}
+              {updateMutation.isPending ? t('inventory.editSheet.saving') : t('inventory.editSheet.save')}
             </Button>
           </div>
         </form>

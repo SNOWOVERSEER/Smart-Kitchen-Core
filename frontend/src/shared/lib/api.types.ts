@@ -114,7 +114,7 @@ export interface AgentActionResponse {
 }
 
 // Logs
-export type TransactionIntent = 'INBOUND' | 'CONSUME' | 'DISCARD'
+export type TransactionIntent = 'INBOUND' | 'CONSUME' | 'DISCARD' | 'UPDATE'
 
 export interface TransactionLogResponse {
   id: number

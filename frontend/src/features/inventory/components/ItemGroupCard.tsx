@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { BatchRow } from './BatchRow'
 import { ExpiryBadge } from './ExpiryBadge'
 import type { InventoryGroupResponse } from '@/shared/lib/api.types'
 import { formatQuantity } from '@/shared/lib/utils'
+import { cn } from '@/lib/utils'
 
 export const CATEGORY_COLORS: Record<string, string> = {
   dairy:     '#0EA5E9',
@@ -13,6 +15,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   fruit:     '#22C55E',
   pantry:    '#92400E',
   beverage:  '#8B5CF6',
+  snack:     '#F97316',
 }
 
 export function getCategoryColor(category: string | null | undefined): string {
@@ -26,6 +29,7 @@ interface ItemGroupCardProps {
 }
 
 export function ItemGroupCard({ group, delay = 0 }: ItemGroupCardProps) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
 
   // Determine worst expiry status across batches
@@ -47,15 +51,18 @@ export function ItemGroupCard({ group, delay = 0 }: ItemGroupCardProps) {
         className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors text-left"
       >
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-foreground capitalize">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={cn(
+              'text-sm font-semibold text-foreground capitalize min-w-0',
+              expanded ? 'break-words line-clamp-3' : 'truncate'
+            )}>
               {group.item_name}
             </span>
-            <ExpiryBadge date={worstDate} />
+            <ExpiryBadge date={worstDate} className="shrink-0" />
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {group.batches.length} batch{group.batches.length !== 1 ? 'es' : ''} ·{' '}
-            {formatQuantity(group.total_quantity, group.unit)} total
+            {t('inventory.batch', { count: group.batches.length })} ·{' '}
+            {formatQuantity(group.total_quantity, group.unit)} {t('inventory.total')}
           </p>
         </div>
 

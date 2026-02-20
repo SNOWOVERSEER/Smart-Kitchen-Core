@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import type { AddInventoryRequest } from '@/shared/lib/api.types'
 import { addInventoryItem } from '../api'
@@ -82,6 +83,7 @@ function FieldError({ msg }: { msg?: string }) {
 }
 
 export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
+  const { t } = useTranslation()
   const [isPending, setIsPending] = useState(false)
   const [form, setForm]           = useState<FormState>(() => buildInitial(prefill))
   const [errors, setErrors]       = useState<Errors>({})
@@ -111,34 +113,34 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
   const validate = (): boolean => {
     const e: Errors = {}
     if (!form.item_name.trim()) {
-      e.item_name = 'Item name is required'
+      e.item_name = t('inventory.addSheet.itemNameRequired')
     }
     if (!form.unit) {
-      e.unit = 'Unit is required'
+      e.unit = t('inventory.addSheet.unitRequired')
     }
     if (!form.location) {
-      e.location = 'Location is required'
+      e.location = t('inventory.addSheet.locationRequired')
     }
 
     if (!form.is_open) {
       // Unopened mode
       const size = parseFloat(form.pkg_size)
       if (!form.pkg_size || isNaN(size) || size <= 0) {
-        e.pkg_size = 'Enter a size greater than 0'
+        e.pkg_size = t('inventory.addSheet.sizeRequired')
       }
       const cnt = parseFloat(form.count)
       if (!form.count || isNaN(cnt) || cnt <= 0) {
-        e.count = 'Enter a count greater than 0'
+        e.count = t('inventory.addSheet.countRequired')
       }
     } else {
       // Opened mode
       const rem = parseFloat(form.remaining)
       if (!form.remaining || isNaN(rem) || rem < 0) {
-        e.remaining = 'Enter the remaining amount (0 or more)'
+        e.remaining = t('inventory.addSheet.remainingRequired')
       }
       if (form.pkg_size) {
         const size = parseFloat(form.pkg_size)
-        if (isNaN(size) || size <= 0) e.pkg_size = 'Must be greater than 0'
+        if (isNaN(size) || size <= 0) e.pkg_size = t('inventory.addSheet.sizeRequired')
       }
     }
 
@@ -171,21 +173,21 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
         const payload = { ...base, quantity: pkgSize, total_volume: pkgSize }
         await Promise.all(Array.from({ length: count }, () => addInventoryItem(payload)))
         const label = count > 1
-          ? `Added ${count} × ${pkgSize} ${form.unit} ${base.item_name}`
-          : `${base.item_name} added`
+          ? t('inventory.addSheet.successMultiple', { count, size: pkgSize, unit: form.unit, name: base.item_name })
+          : t('inventory.addSheet.success', { name: base.item_name })
         toast.success(label)
       } else {
         // Opened / partial — single batch
         const remaining   = parseFloat(form.remaining)
         const total_volume = form.pkg_size ? parseFloat(form.pkg_size) : remaining
         await addInventoryItem({ ...base, quantity: remaining, total_volume })
-        toast.success(`${base.item_name} added`)
+        toast.success(t('inventory.addSheet.success', { name: base.item_name }))
       }
 
       void queryClient.invalidateQueries({ queryKey: ['inventory'] })
       onClose()
     } catch {
-      toast.error('Failed to add item')
+      toast.error(t('inventory.addSheet.failed'))
     } finally {
       setIsPending(false)
     }
@@ -198,9 +200,9 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
       <SheetContent side="right" className="w-full sm:max-w-[420px] flex flex-col p-0">
         {/* Header */}
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-          <SheetTitle className="text-base">Add inventory item</SheetTitle>
+          <SheetTitle className="text-base">{t('inventory.addSheet.title')}</SheetTitle>
           <SheetDescription className="text-xs">
-            Add a new batch to your kitchen inventory.
+            {t('inventory.addSheet.description')}
           </SheetDescription>
         </SheetHeader>
 
@@ -213,15 +215,15 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
             {/* ── Item Details ── */}
             <div className="flex flex-col gap-4">
               <p className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                Item Details
+                {t('inventory.addSheet.itemDetails')}
               </p>
 
               <div className="flex flex-col gap-1.5">
-                <FieldLabel required>Item name</FieldLabel>
+                <FieldLabel required>{t('inventory.addSheet.itemName')}</FieldLabel>
                 <Input
                   value={form.item_name}
                   onChange={(e) => set('item_name', e.target.value)}
-                  placeholder="e.g. Milk"
+                  placeholder={t('inventory.addSheet.itemNamePlaceholder')}
                   className={cn('h-10', errors.item_name && 'border-destructive')}
                 />
                 <FieldError msg={errors.item_name} />
@@ -229,19 +231,19 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <FieldLabel>Brand</FieldLabel>
+                  <FieldLabel>{t('inventory.addSheet.brand')}</FieldLabel>
                   <Input
                     value={form.brand}
                     onChange={(e) => set('brand', e.target.value)}
-                    placeholder="e.g. A2"
+                    placeholder={t('inventory.addSheet.brandPlaceholder')}
                     className="h-10"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <FieldLabel>Category</FieldLabel>
+                  <FieldLabel>{t('inventory.addSheet.category')}</FieldLabel>
                   <Select value={form.category} onValueChange={(v) => set('category', v)}>
                     <SelectTrigger className="h-10">
-                      <SelectValue placeholder="Select..." />
+                      <SelectValue placeholder={t('inventory.addSheet.selectCategory')} />
                     </SelectTrigger>
                     <SelectContent>
                       {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -257,11 +259,11 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                  Quantity
+                  {t('inventory.addSheet.quantity')}
                 </p>
                 {/* Opened toggle lives here so it directly controls the fields below */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Already opened?</span>
+                  <span className="text-xs text-muted-foreground">{t('inventory.addSheet.alreadyOpened')}</span>
                   <Switch
                     checked={form.is_open}
                     onCheckedChange={(v) => set('is_open', v)}
@@ -274,18 +276,18 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
                 <>
                   <div className="flex gap-3">
                     <div className="flex flex-col gap-1.5 flex-1">
-                      <FieldLabel required>Size per package</FieldLabel>
+                      <FieldLabel required>{t('inventory.addSheet.sizePerPackage')}</FieldLabel>
                       <Input
                         inputMode="decimal"
                         value={form.pkg_size}
                         onChange={(e) => set('pkg_size', e.target.value)}
-                        placeholder="e.g. 2"
+                        placeholder={t('inventory.addSheet.sizePerPackagePlaceholder')}
                         className={cn('h-10', errors.pkg_size && 'border-destructive')}
                       />
                       <FieldError msg={errors.pkg_size} />
                     </div>
                     <div className="flex flex-col gap-1.5 w-28">
-                      <FieldLabel required>Unit</FieldLabel>
+                      <FieldLabel required>{t('inventory.addSheet.unit')}</FieldLabel>
                       <Select value={form.unit} onValueChange={(v) => set('unit', v)}>
                         <SelectTrigger className={cn('h-10', errors.unit && 'border-destructive')}>
                           <SelectValue />
@@ -299,12 +301,12 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <FieldLabel>Count</FieldLabel>
+                    <FieldLabel>{t('inventory.addSheet.count')}</FieldLabel>
                     <Input
                       inputMode="numeric"
                       value={form.count}
                       onChange={(e) => set('count', e.target.value)}
-                      placeholder="1"
+                      placeholder={t('inventory.addSheet.countPlaceholder')}
                       className={cn('h-10', errors.count && 'border-destructive')}
                     />
                     <FieldError msg={errors.count} />
@@ -313,7 +315,7 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
                   {/* Auto-total chip */}
                   {total && (
                     <div className="flex items-center gap-2 py-2 px-3 bg-muted/50 rounded-lg">
-                      <span className="text-xs text-muted-foreground">Total:</span>
+                      <span className="text-xs text-muted-foreground">{t('inventory.addSheet.totalLabel')}</span>
                       <span className="text-sm font-semibold text-foreground">{total}</span>
                     </div>
                   )}
@@ -323,18 +325,18 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
                 <>
                   <div className="flex gap-3">
                     <div className="flex flex-col gap-1.5 flex-1">
-                      <FieldLabel required>Remaining amount</FieldLabel>
+                      <FieldLabel required>{t('inventory.addSheet.remainingAmount')}</FieldLabel>
                       <Input
                         inputMode="decimal"
                         value={form.remaining}
                         onChange={(e) => set('remaining', e.target.value)}
-                        placeholder="e.g. 1.5"
+                        placeholder={t('inventory.addSheet.remainingPlaceholder')}
                         className={cn('h-10', errors.remaining && 'border-destructive')}
                       />
                       <FieldError msg={errors.remaining} />
                     </div>
                     <div className="flex flex-col gap-1.5 w-28">
-                      <FieldLabel required>Unit</FieldLabel>
+                      <FieldLabel required>{t('inventory.addSheet.unit')}</FieldLabel>
                       <Select value={form.unit} onValueChange={(v) => set('unit', v)}>
                         <SelectTrigger className={cn('h-10', errors.unit && 'border-destructive')}>
                           <SelectValue />
@@ -348,17 +350,17 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <FieldLabel>Original package size (optional)</FieldLabel>
+                    <FieldLabel>{t('inventory.addSheet.originalSize')}</FieldLabel>
                     <Input
                       inputMode="decimal"
                       value={form.pkg_size}
                       onChange={(e) => set('pkg_size', e.target.value)}
-                      placeholder={form.remaining || 'same as remaining'}
+                      placeholder={form.remaining || t('inventory.addSheet.originalSizeSamePlaceholder')}
                       className={cn('h-10', errors.pkg_size && 'border-destructive')}
                     />
                     <FieldError msg={errors.pkg_size} />
                     <p className="text-[11px] text-muted-foreground">
-                      Sets the 100% mark on the usage bar.
+                      {t('inventory.addSheet.originalSizeHelp')}
                     </p>
                   </div>
                 </>
@@ -370,12 +372,12 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
             {/* ── Storage ── */}
             <div className="flex flex-col gap-4">
               <p className="text-xs font-semibold text-foreground uppercase tracking-widest">
-                Storage
+                {t('inventory.addSheet.storage')}
               </p>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <FieldLabel required>Location</FieldLabel>
+                  <FieldLabel required>{t('inventory.location')}</FieldLabel>
                   <Select value={form.location} onValueChange={(v) => set('location', v)}>
                     <SelectTrigger className={cn('h-10', errors.location && 'border-destructive')}>
                       <SelectValue />
@@ -387,7 +389,7 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
                   <FieldError msg={errors.location} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <FieldLabel>Expiry date</FieldLabel>
+                  <FieldLabel>{t('inventory.addSheet.expiryDate')}</FieldLabel>
                   <Input
                     type="date"
                     value={form.expiry_date}
@@ -402,10 +404,10 @@ export function AddItemSheet({ open, onClose, prefill }: AddItemSheetProps) {
           {/* Sticky footer */}
           <div className="px-6 py-4 border-t border-border bg-card shrink-0 flex gap-3">
             <Button type="button" variant="outline" className="flex-1 h-10" onClick={onClose}>
-              Cancel
+              {t('inventory.addSheet.cancel')}
             </Button>
             <Button type="submit" className="flex-1 h-10" disabled={isPending}>
-              {isPending ? 'Adding...' : 'Add item'}
+              {isPending ? t('inventory.addSheet.adding') : t('inventory.addSheet.addButton')}
             </Button>
           </div>
         </form>

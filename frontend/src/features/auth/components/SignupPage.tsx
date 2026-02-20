@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from '@tanstack/react-router'
 import { motion } from 'framer-motion'
 import { ChefHat, Eye, EyeOff } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,6 +12,7 @@ import { signup } from '../api'
 import toast from 'react-hot-toast'
 
 export function SignupPage() {
+  const { t } = useTranslation()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -23,7 +25,7 @@ export function SignupPage() {
     e.preventDefault()
     if (!email || !password || !displayName) return
     if (password.length < 8) {
-      toast.error('Password must be at least 8 characters')
+      toast.error(t('auth.passwordTooShort'))
       return
     }
     setLoading(true)
@@ -32,7 +34,7 @@ export function SignupPage() {
       setAuth(data)
       void navigate({ to: '/' })
     } catch {
-      toast.error('Failed to create account. Email may already be in use.')
+      toast.error(t('auth.signupFailed'))
     } finally {
       setLoading(false)
     }
@@ -60,9 +62,9 @@ export function SignupPage() {
             className="text-2xl text-foreground"
             style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
           >
-            Smart Kitchen
+            {t('auth.brandName')}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Create your account</p>
+          <p className="text-sm text-muted-foreground mt-1">{t('auth.createAccountSubtitle')}</p>
         </div>
 
         <Card className="border-border shadow-md">
@@ -70,39 +72,39 @@ export function SignupPage() {
           <CardContent>
             <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="name" className="text-sm">Display name</Label>
+                <Label htmlFor="name" className="text-sm">{t('auth.displayName')}</Label>
                 <Input
                   id="name"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Jane Smith"
+                  placeholder={t('auth.displayNamePlaceholder')}
                   required
                   autoComplete="name"
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="email" className="text-sm">Email</Label>
+                <Label htmlFor="email" className="text-sm">{t('auth.email')}</Label>
                 <Input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  placeholder={t('auth.emailPlaceholder')}
                   required
                   autoComplete="email"
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="password" className="text-sm">Password</Label>
+                <Label htmlFor="password" className="text-sm">{t('auth.password')}</Label>
                 <div className="relative">
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min. 8 characters"
+                    placeholder={t('auth.passwordMinLength')}
                     required
                     autoComplete="new-password"
                     className="pr-10"
@@ -118,14 +120,14 @@ export function SignupPage() {
               </div>
 
               <Button type="submit" disabled={loading} className="w-full mt-1">
-                {loading ? 'Creating account...' : 'Create account'}
+                {loading ? t('auth.creatingAccount') : t('auth.createAccount')}
               </Button>
             </form>
 
             <p className="text-center text-sm text-muted-foreground mt-4">
-              Already have an account?{' '}
+              {t('auth.alreadyHaveAccount')}{' '}
               <Link to={'/login' as string} className="text-foreground hover:underline font-medium">
-                Sign in
+                {t('auth.signIn')}
               </Link>
             </p>
           </CardContent>

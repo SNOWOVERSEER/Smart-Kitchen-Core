@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from '@tanstack/react-router'
 import { motion } from 'framer-motion'
 import { ChefHat, Eye, EyeOff } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,6 +12,7 @@ import { login } from '../api'
 import toast from 'react-hot-toast'
 
 export function LoginPage() {
+  const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -27,7 +29,7 @@ export function LoginPage() {
       setAuth(data)
       void navigate({ to: '/' })
     } catch {
-      toast.error('Invalid email or password')
+      toast.error(t('auth.invalidCredentials'))
     } finally {
       setLoading(false)
     }
@@ -55,9 +57,9 @@ export function LoginPage() {
             className="text-2xl text-foreground"
             style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
           >
-            Smart Kitchen
+            {t('auth.brandName')}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to your account</p>
+          <p className="text-sm text-muted-foreground mt-1">{t('auth.signInSubtitle')}</p>
         </div>
 
         <Card className="border-border shadow-md">
@@ -65,27 +67,27 @@ export function LoginPage() {
           <CardContent>
             <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="email" className="text-sm">Email</Label>
+                <Label htmlFor="email" className="text-sm">{t('auth.email')}</Label>
                 <Input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  placeholder={t('auth.emailPlaceholder')}
                   required
                   autoComplete="email"
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="password" className="text-sm">Password</Label>
+                <Label htmlFor="password" className="text-sm">{t('auth.password')}</Label>
                 <div className="relative">
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder={t('auth.passwordPlaceholder')}
                     required
                     autoComplete="current-password"
                     className="pr-10"
@@ -101,14 +103,14 @@ export function LoginPage() {
               </div>
 
               <Button type="submit" disabled={loading} className="w-full mt-1">
-                {loading ? 'Signing in...' : 'Sign in'}
+                {loading ? t('auth.signingIn') : t('auth.signIn')}
               </Button>
             </form>
 
             <p className="text-center text-sm text-muted-foreground mt-4">
-              No account?{' '}
+              {t('auth.noAccount')}{' '}
               <Link to={'/signup' as string} className="text-foreground hover:underline font-medium">
-                Sign up
+                {t('auth.signUp')}
               </Link>
             </p>
           </CardContent>

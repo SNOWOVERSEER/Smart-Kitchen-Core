@@ -1,16 +1,18 @@
 import { Link, useRouterState } from '@tanstack/react-router'
 import { LayoutDashboard, ScanBarcode, Bot, History, Settings } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
-const navItems = [
-  { to: '/',        icon: LayoutDashboard, label: 'Home'    },
-  { to: '/barcode', icon: ScanBarcode,     label: 'Scan'    },
-  { to: '/chat',    icon: Bot,             label: 'Agent'   },
-  { to: '/history', icon: History,         label: 'History' },
-  { to: '/settings',icon: Settings,        label: 'Settings'},
-]
+const NAV_ITEMS = [
+  { to: '/',        icon: LayoutDashboard, key: 'home'    },
+  { to: '/barcode', icon: ScanBarcode,     key: 'scan'    },
+  { to: '/chat',    icon: Bot,             key: 'agent'   },
+  { to: '/history', icon: History,         key: 'history' },
+  { to: '/settings',icon: Settings,        key: 'settings'},
+] as const
 
 export function BottomNav() {
+  const { t } = useTranslation()
   const { location } = useRouterState()
   const currentPath = location.pathname
 
@@ -19,7 +21,7 @@ export function BottomNav() {
 
   return (
     <nav className="flex lg:hidden items-center justify-around h-16 bg-card shadow-[0_-2px_12px_rgba(28,22,18,0.06)] px-2 shrink-0">
-      {navItems.map(({ to, icon: Icon, label }) => {
+      {NAV_ITEMS.map(({ to, icon: Icon, key }) => {
         const isActive = to === '/' ? currentPath === '/' : currentPath.startsWith(to)
         return (
           <Link
@@ -31,7 +33,7 @@ export function BottomNav() {
             )}
           >
             <Icon className="w-5 h-5" />
-            <span className="text-[10px]">{label}</span>
+            <span className="text-[10px]">{t(`nav.${key}`)}</span>
           </Link>
         )
       })}

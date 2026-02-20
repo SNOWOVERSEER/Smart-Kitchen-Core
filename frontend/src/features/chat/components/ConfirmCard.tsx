@@ -1,14 +1,18 @@
 import { motion } from 'framer-motion'
 import { CheckCircle, XCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { PendingActionResponse } from '@/shared/lib/api.types'
 
 interface ConfirmCardProps {
   pendingAction: PendingActionResponse
   onConfirm: (confirm: boolean) => void
+  confirmed?: 'yes' | 'no'
 }
 
-export function ConfirmCard({ pendingAction, onConfirm }: ConfirmCardProps) {
+export function ConfirmCard({ pendingAction, onConfirm, confirmed }: ConfirmCardProps) {
+  const { t } = useTranslation()
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -35,25 +39,45 @@ export function ConfirmCard({ pendingAction, onConfirm }: ConfirmCardProps) {
         </div>
       )}
 
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          className="flex-1 gap-1.5 h-8"
-          onClick={() => onConfirm(true)}
-        >
-          <CheckCircle className="w-3.5 h-3.5" />
-          Yes, confirm
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1 gap-1.5 h-8"
-          onClick={() => onConfirm(false)}
-        >
-          <XCircle className="w-3.5 h-3.5" />
-          Cancel
-        </Button>
-      </div>
+      {confirmed ? (
+        <div className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1.5 rounded-lg w-fit ${
+          confirmed === 'yes'
+            ? 'bg-green-50 text-green-700'
+            : 'bg-muted text-muted-foreground'
+        }`}>
+          {confirmed === 'yes' ? (
+            <>
+              <CheckCircle className="w-3.5 h-3.5" />
+              {t('chat.confirmed')}
+            </>
+          ) : (
+            <>
+              <XCircle className="w-3.5 h-3.5" />
+              {t('chat.cancelled')}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            className="flex-1 gap-1.5 h-8"
+            onClick={() => onConfirm(true)}
+          >
+            <CheckCircle className="w-3.5 h-3.5" />
+            {t('chat.confirmButton')}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 gap-1.5 h-8"
+            onClick={() => onConfirm(false)}
+          >
+            <XCircle className="w-3.5 h-3.5" />
+            {t('chat.cancelButton')}
+          </Button>
+        </div>
+      )}
     </motion.div>
   )
 }

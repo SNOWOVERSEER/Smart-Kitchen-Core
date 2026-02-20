@@ -1,15 +1,17 @@
 import { Link, useRouterState } from '@tanstack/react-router'
 import { LayoutDashboard, History, ScanBarcode, Settings, ChefHat } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
-const navItems = [
-  { to: '/',        icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/history', icon: History,         label: 'History'   },
-  { to: '/barcode', icon: ScanBarcode,     label: 'Scan'      },
-  { to: '/settings',icon: Settings,        label: 'Settings'  },
-]
+const NAV_ITEMS = [
+  { to: '/',        icon: LayoutDashboard, key: 'dashboard' },
+  { to: '/history', icon: History,         key: 'history'   },
+  { to: '/barcode', icon: ScanBarcode,     key: 'scan'      },
+  { to: '/settings',icon: Settings,        key: 'settings'  },
+] as const
 
 export function Sidebar() {
+  const { t } = useTranslation()
   const { location } = useRouterState()
   const currentPath = location.pathname
 
@@ -29,13 +31,13 @@ export function Sidebar() {
       </div>
 
       {/* Nav items */}
-      {navItems.map(({ to, icon: Icon, label }) => {
+      {NAV_ITEMS.map(({ to, icon: Icon, key }) => {
         const isActive = to === '/' ? currentPath === '/' : currentPath.startsWith(to)
         return (
           <Link
             key={to}
             to={to}
-            title={label}
+            title={t(`nav.${key}`)}
             className={cn(
               'relative flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-colors',
               isActive

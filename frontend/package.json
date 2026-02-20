@@ -32,11 +32,13 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.34.1",
+    "i18next": "^25.8.11",
     "lucide-react": "^0.574.0",
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hot-toast": "^2.6.0",
+    "react-i18next": "^16.5.4",
     "react-masonry-css": "^1.0.16",
     "tailwind-merge": "^3.4.1",
     "zustand": "^5.0.11"

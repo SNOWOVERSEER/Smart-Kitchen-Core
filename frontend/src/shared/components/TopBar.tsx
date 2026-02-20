@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { Bell, Search, ChefHat } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
@@ -8,8 +10,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useAuthStore } from '../stores/authStore'
-import { logout } from '@/features/auth/api'
+import { logout, getProfile } from '@/features/auth/api'
 import { useNavigate } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
+import i18n from '@/shared/lib/i18n'
 
 interface TopBarProps {
   searchValue?: string
@@ -18,10 +22,23 @@ interface TopBarProps {
 }
 
 export function TopBar({ searchValue, onSearchChange, title }: TopBarProps) {
+  const { t } = useTranslation()
   const { email, clearAuth } = useAuthStore()
   const navigate = useNavigate()
+  const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile })
 
-  const initials = email ? email.slice(0, 2).toUpperCase() : 'SK'
+  // Sync UI language whenever the user's preferred_language changes
+  useEffect(() => {
+    const lang = profile?.preferred_language
+    if (lang && lang !== i18n.language) {
+      void i18n.changeLanguage(lang)
+    }
+  }, [profile?.preferred_language])
+
+  const displayName = profile?.display_name ?? ''
+  const initials = displayName.trim()
+    ? displayName.trim().split(/\s+/).map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    : (email ? email.slice(0, 2).toUpperCase() : 'SK')
 
   const handleLogout = async () => {
     try {
@@ -46,7 +63,7 @@ export function TopBar({ searchValue, onSearchChange, title }: TopBarProps) {
           className="text-base text-foreground"
           style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
         >
-          SmartKitchen
+          {t('nav.smartKitchen')}
         </span>
       </div>
 
@@ -66,7 +83,7 @@ export function TopBar({ searchValue, onSearchChange, title }: TopBarProps) {
           <Input
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search..."
+            placeholder={t('topbar.search')}
             className="pl-9 h-8 text-sm bg-muted border-0 rounded-full"
           />
         </div>
@@ -96,14 +113,14 @@ export function TopBar({ searchValue, onSearchChange, title }: TopBarProps) {
             className="cursor-pointer"
             onClick={() => void navigate({ to: '/settings' })}
           >
-            Settings
+            {t('topbar.settings')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => void handleLogout()}
             className="text-destructive focus:text-destructive cursor-pointer"
           >
-            Sign out
+            {t('topbar.signOut')}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

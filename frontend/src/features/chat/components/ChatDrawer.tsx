@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Bot, RotateCcw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useChatStore } from '../store'
 import { useIsDesktop } from '@/shared/hooks/useMediaQuery'
 import { MessageList } from './MessageList'
@@ -7,8 +8,9 @@ import { ChatInput } from './ChatInput'
 import { useAgentAction, usePhotoRecognize } from '../hooks/useAgentAction'
 
 export function ChatDrawer() {
+  const { t } = useTranslation()
   const isDesktop = useIsDesktop()
-  const { isOpen, close, messages, addMessage, reset, thread_id } = useChatStore()
+  const { isOpen, close, messages, addMessage, updateMessage, reset, thread_id } = useChatStore()
   const agentMutation = useAgentAction()
   const photoMutation = usePhotoRecognize()
 
@@ -21,11 +23,14 @@ export function ChatDrawer() {
 
   const handleConfirm = (confirm: boolean) => {
     if (!thread_id) return
-    if (confirm) {
-      addMessage({ role: 'user', content: 'Yes, confirm' })
-    } else {
-      addMessage({ role: 'user', content: 'Cancel' })
+    // Immediately mark the awaiting message as resolved so buttons become inert
+    const awaitingMsg = [...messages].reverse().find(
+      (m) => m.status === 'awaiting_confirm' && !m.confirmed
+    )
+    if (awaitingMsg) {
+      updateMessage(awaitingMsg.id, { confirmed: confirm ? 'yes' : 'no' })
     }
+    addMessage({ role: 'user', content: confirm ? t('chat.confirmButton') : t('chat.cancelButton') })
     agentMutation.mutate({ text: confirm ? 'yes' : 'cancel', confirm, thread_id })
   }
 
@@ -56,16 +61,18 @@ export function ChatDrawer() {
               <Bot className="w-4 h-4 text-muted-foreground" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">Agent Command</p>
+              <p className="text-sm font-semibold text-foreground">{t('chat.drawerTitle')}</p>
               <p className="text-[10px] text-muted-foreground">
-                {messages.length > 0 ? `${messages.length} messages` : 'Ready to help'}
+                {messages.length > 0
+                  ? t('chat.drawerMessages', { count: messages.length })
+                  : t('chat.drawerReady')}
               </p>
             </div>
             {messages.length > 0 && (
               <button
                 onClick={reset}
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                title="New chat"
+                title={t('chat.newChat')}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>

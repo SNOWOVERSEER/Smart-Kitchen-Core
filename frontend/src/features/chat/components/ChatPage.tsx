@@ -1,5 +1,6 @@
 import { ArrowLeft, ChefHat, RotateCcw } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
 import { useChatStore } from '../store'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
@@ -8,9 +9,10 @@ import { useIsDesktop } from '@/shared/hooks/useMediaQuery'
 import { useEffect } from 'react'
 
 export function ChatPage() {
+  const { t } = useTranslation()
   const isDesktop = useIsDesktop()
   const navigate = useNavigate()
-  const { messages, addMessage, reset, thread_id, open } = useChatStore()
+  const { messages, addMessage, updateMessage, reset, thread_id, open } = useChatStore()
   const agentMutation = useAgentAction()
   const photoMutation = usePhotoRecognize()
 
@@ -29,7 +31,14 @@ export function ChatPage() {
 
   const handleConfirm = (confirm: boolean) => {
     if (!thread_id) return
-    addMessage({ role: 'user', content: confirm ? 'Yes, confirm' : 'Cancel' })
+    // Immediately mark the awaiting message as resolved so buttons become inert
+    const awaitingMsg = [...messages].reverse().find(
+      (m) => m.status === 'awaiting_confirm' && !m.confirmed
+    )
+    if (awaitingMsg) {
+      updateMessage(awaitingMsg.id, { confirmed: confirm ? 'yes' : 'no' })
+    }
+    addMessage({ role: 'user', content: confirm ? t('chat.confirmButton') : t('chat.cancelButton') })
     agentMutation.mutate({ text: confirm ? 'yes' : 'cancel', confirm, thread_id })
   }
 
@@ -56,7 +65,7 @@ export function ChatPage() {
           <ChefHat className="w-4 h-4 text-white" />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-semibold">Kitchen Agent</p>
+          <p className="text-sm font-semibold">{t('chat.agentTitle')}</p>
         </div>
         {messages.length > 0 && (
           <button

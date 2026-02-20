@@ -9,6 +9,7 @@ export interface Message {
   status?: AgentStatus
   pendingAction?: PendingActionResponse
   isTyping?: boolean
+  confirmed?: 'yes' | 'no'
 }
 
 interface ChatState {

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { ChefHat } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useChatStore } from '../store'
 import { MessageBubble } from './MessageBubble'
 import { TypingIndicator } from './TypingIndicator'
@@ -10,6 +11,7 @@ interface MessageListProps {
 }
 
 export function MessageList({ onConfirm, onQuickAction }: MessageListProps) {
+  const { t } = useTranslation()
   const { messages } = useChatStore()
   const bottomRef = useRef<HTMLDivElement>(null)
   const isTyping = messages.some((m) => m.isTyping)
@@ -17,6 +19,12 @@ export function MessageList({ onConfirm, onQuickAction }: MessageListProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  const suggestions = [
+    t('chat.suggestion1'),
+    t('chat.suggestion2'),
+    t('chat.suggestion3'),
+  ]
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
@@ -33,18 +41,14 @@ export function MessageList({ onConfirm, onQuickAction }: MessageListProps) {
               className="text-base font-semibold text-foreground"
               style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
             >
-              Kitchen Agent
+              {t('chat.agentTitle')}
             </p>
             <p className="text-sm text-muted-foreground mt-1">
-              Tell me what you used, bought, or want to know.
+              {t('chat.agentSubtitle')}
             </p>
           </div>
           <div className="flex flex-col gap-2 w-full max-w-xs">
-            {[
-              'I drank 500ml of milk',
-              'Add 6 eggs to the fridge',
-              'What expires soon?',
-            ].map((suggestion) => (
+            {suggestions.map((suggestion) => (
               <button
                 key={suggestion}
                 onClick={() => onQuickAction?.(suggestion)}

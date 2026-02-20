@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ScanBarcode, Search, Package, ExternalLink, Plus, Bot, Clock, Camera, CameraOff } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -32,6 +33,7 @@ function saveRecent(code: string) {
 }
 
 export function BarcodePage() {
+  const { t } = useTranslation()
   const [manualCode, setManualCode] = useState('')
   const [product, setProduct] = useState<BarcodeProduct | null | false>(null) // null=idle, false=not found
   const [addOpen, setAddOpen] = useState(false)
@@ -59,7 +61,7 @@ export function BarcodePage() {
       }
     },
     onError: () => {
-      toast.error('Lookup failed. Check your connection.')
+      toast.error(t('barcode.lookupFailed'))
       setProduct(false)
     },
   })
@@ -181,7 +183,7 @@ export function BarcodePage() {
 
   return (
     <div className="flex flex-col h-full">
-      <TopBar title="Barcode Scanner" />
+      <TopBar title={t('barcode.title')} />
 
       <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4 lg:py-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
@@ -205,18 +207,18 @@ export function BarcodePage() {
                   <CameraOff className="w-8 h-8 text-muted-foreground" />
                   {cameraError ? (
                     <>
-                      <p className="text-xs text-destructive font-medium">Camera error</p>
+                      <p className="text-xs text-destructive font-medium">{t('barcode.cameraError')}</p>
                       <p className="text-[11px] text-muted-foreground max-w-[200px]">{cameraError}</p>
                     </>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Camera is off</p>
+                    <p className="text-xs text-muted-foreground">{t('barcode.cameraOff')}</p>
                   )}
                   <button
                     onClick={toggleCamera}
                     className="flex items-center gap-1.5 text-xs font-medium text-foreground bg-card border border-border rounded-lg px-3 py-1.5 hover:bg-muted transition-colors cursor-pointer"
                   >
                     <Camera className="w-3.5 h-3.5" />
-                    {cameraError ? 'Retry' : 'Start Camera'}
+                    {cameraError ? t('barcode.retry') : t('barcode.startCamera')}
                   </button>
                 </div>
               )}
@@ -225,7 +227,7 @@ export function BarcodePage() {
               {cameraOn && !scanFlash && (
                 <div className="relative z-10 flex flex-col items-center gap-2 text-muted-foreground pointer-events-none">
                   <ScanBarcode className="w-8 h-8" />
-                  <p className="text-xs">Point camera at barcode</p>
+                  <p className="text-xs">{t('barcode.pointCamera')}</p>
                 </div>
               )}
 
@@ -263,7 +265,7 @@ export function BarcodePage() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     </div>
-                    <p className="text-xs font-semibold text-white drop-shadow">Scanned</p>
+                    <p className="text-xs font-semibold text-white drop-shadow">{t('barcode.scanned')}</p>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -271,7 +273,7 @@ export function BarcodePage() {
               {/* Camera toggle button — always visible in top-right */}
               <button
                 onClick={toggleCamera}
-                title={cameraOn ? 'Turn off camera' : 'Turn on camera'}
+                title={cameraOn ? t('barcode.turnOffCamera') : t('barcode.turnOnCamera')}
                 className="absolute top-2 right-2 z-30 w-8 h-8 flex items-center justify-center rounded-lg bg-black/40 text-white hover:bg-black/60 transition-colors cursor-pointer"
               >
                 {cameraOn ? <CameraOff className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
@@ -280,12 +282,12 @@ export function BarcodePage() {
 
             {/* Manual input */}
             <div className="flex flex-col gap-2">
-              <Label className="text-xs text-muted-foreground">Or enter barcode manually</Label>
+              <Label className="text-xs text-muted-foreground">{t('barcode.manualLabel')}</Label>
               <div className="flex gap-2">
                 <Input
                   value={manualCode}
                   onChange={(e) => setManualCode(e.target.value)}
-                  placeholder="e.g. 5000159484695"
+                  placeholder={t('barcode.manualPlaceholder')}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleLookup(manualCode)
                   }}
@@ -302,7 +304,7 @@ export function BarcodePage() {
               <div>
                 <div className="flex items-center gap-1.5 mb-2">
                   <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground font-medium">Recent scans</span>
+                  <span className="text-xs text-muted-foreground font-medium">{t('barcode.recentScans')}</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {recent.map((code) => (
@@ -346,13 +348,13 @@ export function BarcodePage() {
                   className="flex flex-col items-center justify-center py-12 text-center"
                 >
                   <Package className="w-10 h-10 text-muted-foreground mb-3" />
-                  <p className="text-sm font-medium">Product not found</p>
+                  <p className="text-sm font-medium">{t('barcode.productNotFound')}</p>
                   <p className="text-xs text-muted-foreground mt-1 mb-4">
-                    Barcode: <span className="font-mono">{currentCode}</span>
+                    {t('barcode.barcodeColon')} <span className="font-mono">{currentCode}</span>
                   </p>
                   <Button size="sm" onClick={() => setAddOpen(true)} className="gap-1.5">
                     <Plus className="w-3.5 h-3.5" />
-                    Add manually
+                    {t('barcode.addManually')}
                   </Button>
                 </motion.div>
               )}
@@ -369,7 +371,7 @@ export function BarcodePage() {
                       {/* Header */}
                       <div className="flex items-start justify-between gap-2 mb-4">
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Product Found</p>
+                          <p className="text-xs text-muted-foreground mb-1">{t('barcode.productFound')}</p>
                           <h2 className="text-base font-semibold text-foreground">
                             {product.item_name}
                           </h2>
@@ -397,10 +399,10 @@ export function BarcodePage() {
                       {/* Details grid */}
                       <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-4">
                         {[
-                          { label: 'Category', value: product.category ?? '—' },
-                          { label: 'Unit', value: product.unit },
-                          { label: 'Default qty', value: `${product.default_quantity} ${product.unit}` },
-                          { label: 'Barcode', value: currentCode },
+                          { label: t('barcode.categoryLabel'), value: product.category ?? '—' },
+                          { label: t('barcode.unitLabel'),     value: product.unit },
+                          { label: t('barcode.defaultQtyLabel'), value: `${product.default_quantity} ${product.unit}` },
+                          { label: t('barcode.barcodeLabel'),  value: currentCode },
                         ].map(({ label, value }) => (
                           <div key={label}>
                             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
@@ -413,11 +415,11 @@ export function BarcodePage() {
                       <div className="flex gap-2">
                         <Button size="sm" className="flex-1 gap-1.5" onClick={() => setAddOpen(true)}>
                           <Plus className="w-3.5 h-3.5" />
-                          Add to Inventory
+                          {t('barcode.addToInventory')}
                         </Button>
                         <Button variant="outline" size="sm" className="flex-1 gap-1.5">
                           <Bot className="w-3.5 h-3.5" />
-                          Add via Agent
+                          {t('barcode.addViaAgent')}
                         </Button>
                       </div>
                     </CardContent>
@@ -433,7 +435,7 @@ export function BarcodePage() {
                   className="flex flex-col items-center justify-center py-16 text-center"
                 >
                   <ScanBarcode className="w-10 h-10 text-muted-foreground mb-3" />
-                  <p className="text-sm text-muted-foreground">Scan or enter a barcode to look up product info</p>
+                  <p className="text-sm text-muted-foreground">{t('barcode.idle')}</p>
                 </motion.div>
               )}
             </AnimatePresence>

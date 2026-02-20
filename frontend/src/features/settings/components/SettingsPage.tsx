@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   User, Bot, Bell, CheckCircle, Trash2, Plus, Eye, EyeOff, Lock,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,10 +22,10 @@ import { cn } from '@/lib/utils'
 
 type Tab = 'profile' | 'ai' | 'notifications'
 
-const TABS: { id: Tab; label: string; icon: typeof User }[] = [
-  { id: 'profile',       label: 'Profile',           icon: User },
-  { id: 'ai',            label: 'AI Configuration',  icon: Bot  },
-  { id: 'notifications', label: 'Notifications',     icon: Bell },
+const TABS: { id: Tab; icon: typeof User }[] = [
+  { id: 'profile',       icon: User },
+  { id: 'ai',            icon: Bot  },
+  { id: 'notifications', icon: Bell },
 ]
 
 const PROVIDERS = ['openai', 'anthropic']
@@ -83,18 +84,26 @@ function SectionHeading({ title, description }: { title: string; description?: s
 
 // ─── Profile tab ──────────────────────────────────────────────────────────
 function ProfileTab() {
+  const { t } = useTranslation()
   const { data: profile, isLoading } = useQuery({ queryKey: ['profile'], queryFn: getProfile })
   const storeEmail = useAuthStore((s) => s.email)
   const [name, setName] = useState('')
-  const [lang, setLang] = useState('')
+  const [lang, setLang] = useState('en')
+
+  useEffect(() => {
+    if (profile) {
+      setName(profile.display_name ?? '')
+      setLang(profile.preferred_language ?? 'en')
+    }
+  }, [profile])
 
   const mutation = useMutation({
     mutationFn: () => updateProfile({ display_name: name, preferred_language: lang }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
-      toast.success('Profile updated')
+      toast.success(t('settings.profile.success'))
     },
-    onError: () => toast.error('Failed to update profile'),
+    onError: () => toast.error(t('settings.profile.error')),
   })
 
   const displayEmail = profile?.email ?? storeEmail ?? ''
@@ -119,7 +128,10 @@ function ProfileTab() {
 
   return (
     <div>
-      <SectionHeading title="Profile" description="Manage your personal information and preferences." />
+      <SectionHeading
+        title={t('settings.profile.heading')}
+        description={t('settings.profile.description')}
+      />
 
       {/* Avatar header */}
       <div className="flex items-center gap-3 pb-5 mb-1 border-b border-border">
@@ -133,7 +145,7 @@ function ProfileTab() {
         </div>
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground truncate">
-            {displayName || 'No name set'}
+            {displayName || t('settings.profile.noName')}
           </p>
           <p className="text-xs text-muted-foreground truncate">{displayEmail}</p>
         </div>
@@ -141,16 +153,16 @@ function ProfileTab() {
 
       {/* Setting rows */}
       <div className="divide-y divide-border">
-        <SettingRow label="Display Name">
+        <SettingRow label={t('settings.profile.displayName')}>
           <Input
-            value={name || displayName}
+            value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
+            placeholder={t('settings.profile.displayNamePlaceholder')}
             className="h-9 w-full"
           />
         </SettingRow>
 
-        <SettingRow label="Email" description="Cannot be changed here.">
+        <SettingRow label={t('settings.profile.email')} description={t('settings.profile.emailDescription')}>
           <Input
             value={displayEmail}
             disabled
@@ -158,18 +170,14 @@ function ProfileTab() {
           />
         </SettingRow>
 
-        <SettingRow label="Language">
-          <Select
-            value={lang || profile?.preferred_language || 'en'}
-            onValueChange={setLang}
-            key={profile?.preferred_language}
-          >
+        <SettingRow label={t('settings.profile.language')}>
+          <Select value={lang} onValueChange={setLang}>
             <SelectTrigger className="h-9 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="en">English</SelectItem>
-              <SelectItem value="zh">Chinese (中文)</SelectItem>
+              <SelectItem value="en">{t('settings.profile.langEn')}</SelectItem>
+              <SelectItem value="zh">{t('settings.profile.langZh')}</SelectItem>
             </SelectContent>
           </Select>
         </SettingRow>
@@ -181,7 +189,7 @@ function ProfileTab() {
           disabled={mutation.isPending}
           className="h-9 px-5"
         >
-          {mutation.isPending ? 'Saving...' : 'Save changes'}
+          {mutation.isPending ? t('settings.profile.saving') : t('settings.profile.saveChanges')}
         </Button>
       </div>
     </div>
@@ -190,6 +198,7 @@ function ProfileTab() {
 
 // ─── AI config tab ────────────────────────────────────────────────────────
 function AIConfigTab() {
+  const { t } = useTranslation()
   const { data: configs, isLoading } = useQuery({
     queryKey: ['ai-configs'],
     queryFn: getAIConfigs,
@@ -204,20 +213,20 @@ function AIConfigTab() {
     mutationFn: (data: AddAIConfigRequest) => addAIConfig(data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['ai-configs'] })
-      toast.success('AI provider saved')
+      toast.success(t('settings.ai.savedSuccess'))
       setShowForm(false)
       setFormKey('')
     },
-    onError: () => toast.error('Failed to save provider'),
+    onError: () => toast.error(t('settings.ai.saveFailed')),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (provider: string) => deleteAIConfig(provider),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['ai-configs'] })
-      toast.success('Provider removed')
+      toast.success(t('settings.ai.removedSuccess'))
     },
-    onError: () => toast.error('Failed to remove provider'),
+    onError: () => toast.error(t('settings.ai.removeFailed')),
   })
 
   const activateMutation = useMutation({
@@ -232,7 +241,7 @@ function AIConfigTab() {
     },
     onError: (_err, _vars, ctx) => {
       queryClient.setQueryData(['ai-configs'], ctx?.prev)
-      toast.error('Failed to activate provider')
+      toast.error(t('settings.ai.activateFailed'))
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ['ai-configs'] }),
   })
@@ -250,8 +259,8 @@ function AIConfigTab() {
   return (
     <div>
       <SectionHeading
-        title="AI Configuration"
-        description="Connect your AI provider to power the agent."
+        title={t('settings.ai.heading')}
+        description={t('settings.ai.description')}
       />
 
       {/* Provider rows */}
@@ -268,7 +277,7 @@ function AIConfigTab() {
                     {config.is_active && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 leading-none">
                         <CheckCircle className="w-2.5 h-2.5" />
-                        Active
+                        {t('settings.ai.active')}
                       </span>
                     )}
                   </div>
@@ -286,14 +295,14 @@ function AIConfigTab() {
                     onClick={() => activateMutation.mutate(config.provider)}
                     disabled={activateMutation.isPending}
                   >
-                    Set active
+                    {t('settings.ai.setActive')}
                   </Button>
                 )}
                 <button
                   onClick={() => deleteMutation.mutate(config.provider)}
                   disabled={deleteMutation.isPending}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-                  aria-label="Remove provider"
+                  aria-label={t('settings.ai.removeProvider')}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -315,10 +324,12 @@ function AIConfigTab() {
               transition={{ duration: 0.15 }}
               className="rounded-xl border border-border bg-card p-4 mt-4"
             >
-              <p className="text-sm font-medium text-foreground mb-4">Add provider</p>
+              <p className="text-sm font-medium text-foreground mb-4">{t('settings.ai.addProviderHeading')}</p>
               <div className="flex flex-col gap-4 max-w-sm">
                 <div className="flex flex-col gap-1.5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Provider</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                    {t('settings.ai.provider')}
+                  </p>
                   <Select
                     value={formProvider}
                     onValueChange={(v) => {
@@ -340,13 +351,15 @@ function AIConfigTab() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">API Key</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                    {t('settings.ai.apiKey')}
+                  </p>
                   <div className="relative">
                     <Input
                       type={showKey ? 'text' : 'password'}
                       value={formKey}
                       onChange={(e) => setFormKey(e.target.value)}
-                      placeholder="sk-..."
+                      placeholder={t('settings.ai.apiKeyPlaceholder')}
                       className="h-9 pr-10"
                     />
                     <button
@@ -359,12 +372,14 @@ function AIConfigTab() {
                   </div>
                   <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
                     <Lock className="w-3 h-3 mt-0.5 shrink-0" />
-                    Encrypted and stored securely in Supabase Vault
+                    {t('settings.ai.apiKeyNote')}
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Model</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                    {t('settings.ai.model')}
+                  </p>
                   <Select value={formModel} onValueChange={setFormModel}>
                     <SelectTrigger className="h-9">
                       <SelectValue />
@@ -379,7 +394,7 @@ function AIConfigTab() {
 
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1 h-9" onClick={() => setShowForm(false)}>
-                    Cancel
+                    {t('settings.ai.cancel')}
                   </Button>
                   <Button
                     className="flex-1 h-9"
@@ -388,7 +403,7 @@ function AIConfigTab() {
                     }
                     disabled={!formKey || addMutation.isPending}
                   >
-                    {addMutation.isPending ? 'Saving...' : 'Save'}
+                    {addMutation.isPending ? t('settings.ai.saving') : t('settings.ai.save')}
                   </Button>
                 </div>
               </div>
@@ -402,7 +417,7 @@ function AIConfigTab() {
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground border border-dashed border-border hover:border-foreground/30 rounded-xl px-4 py-3 transition-colors w-full mt-3 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              Add provider
+              {t('settings.ai.addProvider')}
             </motion.button>
           )}
         </AnimatePresence>
@@ -413,11 +428,15 @@ function AIConfigTab() {
 
 // ─── Notifications placeholder ────────────────────────────────────────────
 function NotificationsTab() {
+  const { t } = useTranslation()
   return (
     <div>
-      <SectionHeading title="Notifications" description="Control how and when you receive alerts." />
+      <SectionHeading
+        title={t('settings.notifications.heading')}
+        description={t('settings.notifications.description')}
+      />
       <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
-        Notification settings coming soon.
+        {t('settings.notifications.comingSoon')}
       </div>
     </div>
   )
@@ -425,11 +444,12 @@ function NotificationsTab() {
 
 // ─── Settings page ────────────────────────────────────────────────────────
 export function SettingsPage() {
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<Tab>('profile')
 
   return (
     <div className="flex flex-col h-full">
-      <TopBar title="Settings" />
+      <TopBar title={t('settings.title')} />
 
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="flex flex-col lg:flex-row h-full max-w-5xl mx-auto">
@@ -442,7 +462,7 @@ export function SettingsPage() {
             // desktop: vertical column, right border
             'lg:flex-col lg:gap-0.5 lg:w-52 lg:border-b-0 lg:border-r lg:py-6 lg:px-3 lg:overflow-x-visible',
           )}>
-            {TABS.map(({ id, label, icon: Icon }) => (
+            {TABS.map(({ id, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
@@ -455,7 +475,7 @@ export function SettingsPage() {
                 )}
               >
                 <Icon className="hidden lg:block w-4 h-4 shrink-0" />
-                {label}
+                {t(`settings.tabs.${id}`)}
               </button>
             ))}
           </nav>

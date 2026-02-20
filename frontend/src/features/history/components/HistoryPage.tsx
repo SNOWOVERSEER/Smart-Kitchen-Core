@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Download, History } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -17,16 +19,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const INTENT_CONFIG: Record<TransactionIntent, { label: string }> = {
-  INBOUND:  { label: 'Inbound'  },
-  CONSUME:  { label: 'Consume'  },
-  DISCARD:  { label: 'Discard'  },
-}
-
 const INTENT_COLORS: Record<TransactionIntent, string> = {
   INBOUND: '#6B7B3C',
   CONSUME: '#0EA5E9',
   DISCARD: '#DC2626',
+  UPDATE:  '#D97706',
 }
 
 type DateFilter = '7d' | '30d' | 'all'
@@ -44,14 +41,14 @@ function formatDateTime(dateStr: string | null): string {
   return `${date} ${time}`
 }
 
-function relativeTime(dateStr: string | null): string {
+function relativeTime(dateStr: string | null, t: TFunction): string {
   if (!dateStr) return '—'
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000
-  if (diff < 60)    return 'just now'
-  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  if (diff < 60)    return t('history.justNow')
+  if (diff < 3600)  return t('history.minutesAgo', { n: Math.floor(diff / 60) })
+  if (diff < 86400) return t('history.hoursAgo', { n: Math.floor(diff / 3600) })
   const days = Math.floor(diff / 86400)
-  if (days < 30) return `${days}d ago`
+  if (days < 30) return t('history.daysAgo', { n: days })
   return formatDateTime(dateStr)
 }
 
@@ -70,7 +67,8 @@ function getItem(details: Record<string, unknown> | null): { name: string; brand
 // Build a concise human-readable action string
 function getAction(
   intent: TransactionIntent,
-  details: Record<string, unknown> | null
+  details: Record<string, unknown> | null,
+  t: TFunction
 ): { text: string; className: string } {
   if (!details) return { text: '—', className: 'text-muted-foreground' }
 
@@ -79,7 +77,7 @@ function getAction(
       const qty  = details.quantity as number | undefined
       const unit = details.unit    as string | undefined
       return {
-        text: qty != null ? `+${qty}${unit ? ' ' + unit : ''}` : 'Added',
+        text: qty != null ? `+${qty}${unit ? ' ' + unit : ''}` : t('history.added'),
         className: 'text-emerald-600 font-medium',
       }
     }
@@ -88,7 +86,7 @@ function getAction(
       const batches = details.affected_batches as Array<{ deducted: number }> | undefined
       const total = amount ?? batches?.reduce((s, b) => s + b.deducted, 0)
       return {
-        text: total != null ? `−${total}` : 'Consumed',
+        text: total != null ? `−${total}` : t('history.consumed'),
         className: 'text-blue-600 font-medium',
       }
     }
@@ -99,14 +97,21 @@ function getAction(
         ? `${leftover}${unit ? ' ' + unit : ''}`
         : null
       return {
-        text: qty ? `Wasted ${qty}` : 'Removed',
+        text: qty ? t('history.wasted', { qty }) : t('history.removed'),
         className: 'text-red-600 font-medium',
+      }
+    }
+    case 'UPDATE': {
+      return {
+        text: t('history.updated'),
+        className: 'text-amber-600 font-medium',
       }
     }
   }
 }
 
 export function HistoryPage() {
+  const { t } = useTranslation()
   const [intentFilter, setIntentFilter] = useState<'all' | TransactionIntent>('all')
   const [dateFilter,   setDateFilter  ] = useState<DateFilter>('all')
 
@@ -137,9 +142,16 @@ export function HistoryPage() {
     URL.revokeObjectURL(url)
   }
 
+  const INTENT_LABELS: Record<TransactionIntent, string> = {
+    INBOUND: t('history.inbound'),
+    CONSUME: t('history.consume'),
+    DISCARD: t('history.discard'),
+    UPDATE:  t('history.update'),
+  }
+
   return (
     <div className="flex flex-col h-full">
-      <TopBar title="History" />
+      <TopBar title={t('history.title')} />
 
       <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4 lg:py-6">
 
@@ -147,10 +159,11 @@ export function HistoryPage() {
         <div className="flex items-center gap-3 mb-4 flex-wrap">
           <Tabs value={intentFilter} onValueChange={(v) => setIntentFilter(v as typeof intentFilter)}>
             <TabsList className="h-8">
-              <TabsTrigger value="all"     className="text-xs px-2.5 h-6">All</TabsTrigger>
-              <TabsTrigger value="INBOUND" className="text-xs px-2.5 h-6">Inbound</TabsTrigger>
-              <TabsTrigger value="CONSUME" className="text-xs px-2.5 h-6">Consume</TabsTrigger>
-              <TabsTrigger value="DISCARD" className="text-xs px-2.5 h-6">Discard</TabsTrigger>
+              <TabsTrigger value="all"     className="text-xs px-2.5 h-6">{t('history.all')}</TabsTrigger>
+              <TabsTrigger value="INBOUND" className="text-xs px-2.5 h-6">{t('history.inbound')}</TabsTrigger>
+              <TabsTrigger value="CONSUME" className="text-xs px-2.5 h-6">{t('history.consume')}</TabsTrigger>
+              <TabsTrigger value="DISCARD" className="text-xs px-2.5 h-6">{t('history.discard')}</TabsTrigger>
+              <TabsTrigger value="UPDATE"  className="text-xs px-2.5 h-6">{t('history.update')}</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -159,9 +172,9 @@ export function HistoryPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="all">All time</SelectItem>
+              <SelectItem value="7d">{t('history.last7days')}</SelectItem>
+              <SelectItem value="30d">{t('history.last30days')}</SelectItem>
+              <SelectItem value="all">{t('history.allTime')}</SelectItem>
             </SelectContent>
           </Select>
 
@@ -169,7 +182,7 @@ export function HistoryPage() {
 
           <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={handleExport}>
             <Download className="w-3.5 h-3.5" />
-            Export
+            {t('history.export')}
           </Button>
         </div>
 
@@ -186,8 +199,8 @@ export function HistoryPage() {
         {!isLoading && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <History className="w-10 h-10 text-muted-foreground mb-3" />
-            <p className="text-sm font-medium">No transactions found</p>
-            <p className="text-xs text-muted-foreground mt-1">Try changing the filters</p>
+            <p className="text-sm font-medium">{t('history.noTransactions')}</p>
+            <p className="text-xs text-muted-foreground mt-1">{t('history.tryChangingFilters')}</p>
           </div>
         )}
 
@@ -197,7 +210,13 @@ export function HistoryPage() {
 
             {/* Desktop header — hidden on mobile */}
             <div className="hidden sm:grid grid-cols-[72px_140px_100px_1fr_110px] gap-4 px-4 py-2.5 border-b border-border bg-muted/30">
-              {['TYPE', 'ITEM', 'ACTION', 'USER INPUT', 'DATE'].map((h) => (
+              {[
+                t('history.colType'),
+                t('history.colItem'),
+                t('history.colAction'),
+                t('history.colInput'),
+                t('history.colDate'),
+              ].map((h) => (
                 <span key={h} className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                   {h}
                 </span>
@@ -207,8 +226,8 @@ export function HistoryPage() {
             <div className="divide-y divide-border">
               {filtered.map((log, i) => {
                 const item   = getItem(log.operation_details)
-                const action = getAction(log.intent, log.operation_details)
-                const cfg    = INTENT_CONFIG[log.intent]
+                const action = getAction(log.intent, log.operation_details, t)
+                const label  = INTENT_LABELS[log.intent]
 
                 return (
                   <motion.div
@@ -225,7 +244,7 @@ export function HistoryPage() {
                           className="w-1 h-8 rounded-full shrink-0"
                           style={{ backgroundColor: INTENT_COLORS[log.intent] }}
                         />
-                        <span className="text-xs font-medium text-foreground">{cfg.label}</span>
+                        <span className="text-xs font-medium text-foreground">{label}</span>
                       </div>
 
                       <div className="min-w-0">
@@ -246,7 +265,7 @@ export function HistoryPage() {
                           </p>
                         ) : (
                           <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                            Manual
+                            {t('history.manual')}
                           </span>
                         )}
                       </div>
@@ -255,7 +274,7 @@ export function HistoryPage() {
                         title={formatDateTime(log.created_at)}
                         className="text-xs text-muted-foreground whitespace-nowrap cursor-default"
                       >
-                        {relativeTime(log.created_at)}
+                        {relativeTime(log.created_at, t)}
                       </span>
                     </div>
 
@@ -268,7 +287,7 @@ export function HistoryPage() {
                               className="w-1 h-5 rounded-full shrink-0"
                               style={{ backgroundColor: INTENT_COLORS[log.intent] }}
                             />
-                            <span className="text-xs font-medium text-foreground">{cfg.label}</span>
+                            <span className="text-xs font-medium text-foreground">{label}</span>
                           </div>
                           <span className="text-sm font-medium text-foreground">
                             {item.name}{item.brand ? ` · ${item.brand}` : ''}
@@ -282,11 +301,11 @@ export function HistoryPage() {
                         <p className="text-xs text-muted-foreground italic">"{log.raw_input}"</p>
                       ) : (
                         <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                          Manual
+                          {t('history.manual')}
                         </span>
                       )}
                       <p className="text-[11px] text-muted-foreground">
-                        {relativeTime(log.created_at)}
+                        {relativeTime(log.created_at, t)}
                       </p>
                     </div>
                   </motion.div>

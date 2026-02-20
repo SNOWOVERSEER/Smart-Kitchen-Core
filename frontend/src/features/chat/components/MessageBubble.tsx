@@ -44,6 +44,7 @@ export function MessageBubble({ message, onConfirm }: MessageBubbleProps) {
           <ConfirmCard
             pendingAction={message.pendingAction}
             onConfirm={onConfirm}
+            confirmed={message.confirmed}
           />
         )}
 

@@ -1,6 +1,7 @@
 import { useState, useRef, type KeyboardEvent } from 'react'
 import { Send, Camera, Mic } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 interface ChatInputProps {
@@ -12,6 +13,7 @@ interface ChatInputProps {
 }
 
 export function ChatInput({ onSend, onPhoto, disabled, value, onChange }: ChatInputProps) {
+  const { t } = useTranslation()
   const [internal, setInternal] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const text = value ?? internal
@@ -69,7 +71,7 @@ export function ChatInput({ onSend, onPhoto, disabled, value, onChange }: ChatIn
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="Message the agent..."
+            placeholder={t('chat.placeholder')}
             rows={1}
             disabled={disabled}
             className={cn(
@@ -103,7 +105,7 @@ export function ChatInput({ onSend, onPhoto, disabled, value, onChange }: ChatIn
         </motion.button>
       </div>
       <p className="text-[10px] text-muted-foreground text-center mt-1.5">
-        AI can make mistakes. Verify important information.
+        {t('chat.disclaimer')}
       </p>
     </div>
   )
