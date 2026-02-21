@@ -6,10 +6,10 @@
     "history": "History",
     "settings": "Settings",
     "dashboard": "Dashboard",
-    "smartKitchen": "SmartKitchen"
+    "brand": "Kitchen Loop"
   },
   "auth": {
-    "brandName": "Smart Kitchen",
+    "brandName": "Kitchen Loop",
     "signIn": "Sign in",
     "signingIn": "Signing in...",
     "signInSubtitle": "Sign in to your account",

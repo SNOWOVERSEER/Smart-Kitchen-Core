@@ -1,4 +1,4 @@
-"""Tool definitions for the SmartKitchen agent.
+"""Tool definitions for the Kitchen Loop agent.
 
 These are defined as plain functions with type hints and docstrings.
 LangChain converts them to tool schemas for LLM function calling.

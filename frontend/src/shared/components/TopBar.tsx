@@ -38,7 +38,7 @@ export function TopBar({ searchValue, onSearchChange, title }: TopBarProps) {
   const displayName = profile?.display_name ?? ''
   const initials = displayName.trim()
     ? displayName.trim().split(/\s+/).map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-    : (email ? email.slice(0, 2).toUpperCase() : 'SK')
+    : (email ? email.slice(0, 2).toUpperCase() : 'KL')
 
   const handleLogout = async () => {
     try {
@@ -63,7 +63,7 @@ export function TopBar({ searchValue, onSearchChange, title }: TopBarProps) {
           className="text-base text-foreground"
           style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
         >
-          {t('nav.smartKitchen')}
+          {t('nav.brand')}
         </span>
       </div>
 

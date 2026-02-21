@@ -1,4 +1,4 @@
-# SmartKitchen Core
+# Kitchen Loop Core
 
 An intelligent kitchen inventory management system with batch-level tracking, natural language processing, and multi-user support.
 
@@ -82,7 +82,7 @@ The app will be available at `http://localhost:5173`
 
 ```bash
 curl http://localhost:8001/
-# {"status": "online", "service": "SmartKitchen Core"}
+# {"status": "online", "service": "Kitchen Loop Core"}
 ```
 
 ## API Reference

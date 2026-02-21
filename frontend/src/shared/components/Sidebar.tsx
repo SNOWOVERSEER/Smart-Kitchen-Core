@@ -4,10 +4,10 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
-  { to: '/',        icon: LayoutDashboard, key: 'dashboard' },
-  { to: '/history', icon: History,         key: 'history'   },
-  { to: '/barcode', icon: ScanBarcode,     key: 'scan'      },
-  { to: '/settings',icon: Settings,        key: 'settings'  },
+  { to: '/', icon: LayoutDashboard, key: 'dashboard' },
+  { to: '/history', icon: History, key: 'history' },
+  { to: '/barcode', icon: ScanBarcode, key: 'scan' },
+  { to: '/settings', icon: Settings, key: 'settings' },
 ] as const
 
 export function Sidebar() {
@@ -26,7 +26,7 @@ export function Sidebar() {
           <ChefHat className="w-5 h-5 text-white" />
         </div>
         <span className="text-[8px] uppercase tracking-widest text-muted-foreground leading-tight text-center">
-          Smart<br />Kitchen
+          Kitchen<br />Loop
         </span>
       </div>
 

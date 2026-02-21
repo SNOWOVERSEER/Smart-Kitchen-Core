@@ -6,10 +6,10 @@
     "history": "记录",
     "settings": "设置",
     "dashboard": "仪表盘",
-    "smartKitchen": "智能厨房"
+    "brand": "Kitchen Loop"
   },
   "auth": {
-    "brandName": "智能厨房",
+    "brandName": "Kitchen Loop",
     "signIn": "登录",
     "signingIn": "登录中...",
     "signInSubtitle": "登录您的账户",

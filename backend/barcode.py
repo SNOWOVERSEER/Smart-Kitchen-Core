@@ -8,7 +8,7 @@ from openfoodfacts import API, APIVersion, Country, Environment, Flavor
 
 # Singleton API client
 _api = API(
-    user_agent="SmartKitchen/1.0",
+    user_agent="KitchenLoop/1.0",
     country=Country.world,
     flavor=Flavor.off,
     version=APIVersion.v2,

@@ -37,7 +37,7 @@ from services import (
 )
 
 
-app = FastAPI(title="SmartKitchen Core")
+app = FastAPI(title="Kitchen Loop Core")
 
 # CORS for cross-platform frontends
 app.add_middleware(
@@ -53,7 +53,7 @@ app.add_middleware(
 
 @app.get("/")
 def health_check():
-    return {"status": "online", "service": "SmartKitchen Core"}
+    return {"status": "online", "service": "Kitchen Loop Core"}
 
 
 # ── Auth Endpoints ──

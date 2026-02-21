@@ -1,4 +1,4 @@
-"""LangGraph construction for the SmartKitchen tool-calling agent."""
+"""LangGraph construction for the Kitchen Loop tool-calling agent."""
 
 import uuid
 from typing import Any
