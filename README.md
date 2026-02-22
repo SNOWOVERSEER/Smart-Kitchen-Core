@@ -40,7 +40,7 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 ### 1. Clone and Setup
 
 ```bash
-git clone https://github.com/yourusername/smart-kitchen-core.git
+git clone https://github.com/SNOWOVERSEER/smart-kitchen-core.git
 cd smart-kitchen-core
 ```
 
