@@ -585,7 +585,12 @@ def update_shopping_item(
     supabase = get_supabase_client()
     patch = {k: v for k, v in update.model_dump().items() if v is not None}
     if not patch:
-        return None
+        fetch = (supabase.table("shopping_items")
+            .select("*")
+            .eq("id", item_id)
+            .eq("user_id", user_id)
+            .execute())
+        return fetch.data[0] if fetch.data else None
     result = (supabase.table("shopping_items")
         .update(patch)
         .eq("id", item_id)
@@ -657,7 +662,7 @@ def complete_shopping(
             new_batch = add_inventory_item(user_id=user_id, item=inv_item)
             inventory_ids.append(new_batch["id"])
             added_count += 1
-            supabase.table("shopping_items").delete().eq("id", item_id).execute()
+            supabase.table("shopping_items").delete().eq("id", item_id).eq("user_id", user_id).execute()
         except Exception:
             failed_items.append(row["item_name"])
 
