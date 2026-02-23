@@ -37,7 +37,7 @@ export function RecipeDetailSheet({ recipe, open, onClose }: Props) {
       source_recipe_id: recipe.id,
       source_recipe_title: recipe.title,
     }))
-    addBulk.mutate(items)
+    addBulk.mutate(items, { onSuccess: () => onClose() })
   }
 
   function handleDelete() {
@@ -86,8 +86,8 @@ export function RecipeDetailSheet({ recipe, open, onClose }: Props) {
               {t('recipes.ingredients')}
             </p>
             <ul className="flex flex-col gap-2">
-              {recipe.ingredients.map((ingredient, idx) => (
-                <li key={idx} className="flex items-center gap-2 text-sm">
+              {recipe.ingredients.map((ingredient) => (
+                <li key={ingredient.name} className="flex items-center gap-2 text-sm">
                   {ingredient.have_in_stock ? (
                     <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                   ) : (

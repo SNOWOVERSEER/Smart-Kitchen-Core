@@ -24,9 +24,9 @@ export function SavedRecipeCard({ recipe, onClick }: Props) {
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onClick()
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() }
       }}
-      className="bg-white rounded-xl border border-border p-4 cursor-pointer hover:shadow-md transition-shadow flex flex-col gap-2"
+      className="bg-card rounded-xl border border-border p-4 cursor-pointer hover:shadow-md transition-shadow flex flex-col gap-2"
     >
       {/* Title */}
       <p className="font-semibold text-base text-foreground leading-tight">{recipe.title}</p>

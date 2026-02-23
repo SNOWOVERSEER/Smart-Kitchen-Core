@@ -41,6 +41,7 @@ export function useAddShoppingItemsBulk() {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
       toast.success(i18next.t('shopping.addedBulk', { count: data.length }))
     },
+    onError: () => toast.error(i18next.t('shopping.completeFailed')),
   })
 }
 
