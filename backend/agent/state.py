@@ -19,5 +19,5 @@ class AgentState(TypedDict, total=False):
 
 
 # Tool classification for routing
-READ_TOOLS = {"search_inventory", "get_batch_details"}
-WRITE_TOOLS = {"add_item", "consume_item", "discard_batch", "update_item"}
+READ_TOOLS = {"search_inventory", "get_batch_details", "get_shopping_list"}
+WRITE_TOOLS = {"add_item", "consume_item", "discard_batch", "update_item", "add_to_shopping_list"}

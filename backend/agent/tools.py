@@ -127,5 +127,30 @@ def update_item(
     raise NotImplementedError
 
 
+@tool
+def get_shopping_list() -> list[dict]:
+    """Get the user's current shopping list, unchecked items first.
+    Use this before adding items to check if something is already on the list."""
+    raise NotImplementedError
+
+
+@tool
+def add_to_shopping_list(
+    item_name: str,
+    quantity: float | None = None,
+    unit: str | None = None,
+    note: str | None = None,
+) -> dict:
+    """Add an item to the user's shopping list. Use when the user wants to buy something.
+
+    Args:
+        item_name: English name of the item. E.g. "Milk", "Eggs", "Bread"
+        quantity: How much to buy (optional). E.g. 2.0, 500
+        unit: Unit of measurement (optional). E.g. "L", "kg", "pcs"
+        note: Optional note about the item. E.g. "organic", "low fat"
+    """
+    raise NotImplementedError
+
+
 # All tools for LLM binding
-ALL_TOOLS = [search_inventory, get_batch_details, add_item, consume_item, discard_batch, update_item]
+ALL_TOOLS = [search_inventory, get_batch_details, add_item, consume_item, discard_batch, update_item, get_shopping_list, add_to_shopping_list]
