@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -198,4 +198,16 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* ── Landing page palette ─────────────────────────────── */
+:root {
+  --lp-brand:        #C8745D;
+  --lp-brand-hover:  #B0604A;
+  --lp-brand-light:  #F4EBE9;
+  --lp-bg:           #FDFCF8;
+  --lp-surface:      #F5F2ED;
+  --lp-surface-dark: #EAE5DB;
+  --lp-ink:          #1A1A1A;
+  --lp-ink-muted:    #767676;
 }

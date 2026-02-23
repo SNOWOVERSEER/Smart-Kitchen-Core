@@ -1,15 +1,16 @@
+import type { ElementType } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { LayoutDashboard, ScanBarcode, Bot, History, Settings } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
-const NAV_ITEMS = [
-  { to: '/',        icon: LayoutDashboard, key: 'home'    },
-  { to: '/barcode', icon: ScanBarcode,     key: 'scan'    },
-  { to: '/chat',    icon: Bot,             key: 'agent'   },
-  { to: '/history', icon: History,         key: 'history' },
-  { to: '/settings',icon: Settings,        key: 'settings'},
-] as const
+const NAV_ITEMS: { to: string; icon: ElementType; key: string }[] = [
+  { to: '/dashboard', icon: LayoutDashboard, key: 'home'    },
+  { to: '/barcode',   icon: ScanBarcode,     key: 'scan'    },
+  { to: '/chat',      icon: Bot,             key: 'agent'   },
+  { to: '/history',   icon: History,         key: 'history' },
+  { to: '/settings',  icon: Settings,        key: 'settings'},
+]
 
 export function BottomNav() {
   const { t } = useTranslation()
@@ -22,7 +23,7 @@ export function BottomNav() {
   return (
     <nav className="flex lg:hidden items-center justify-around h-16 bg-card shadow-[0_-2px_12px_rgba(28,22,18,0.06)] px-2 shrink-0">
       {NAV_ITEMS.map(({ to, icon: Icon, key }) => {
-        const isActive = to === '/' ? currentPath === '/' : currentPath.startsWith(to)
+        const isActive = currentPath.startsWith(to)
         return (
           <Link
             key={to}

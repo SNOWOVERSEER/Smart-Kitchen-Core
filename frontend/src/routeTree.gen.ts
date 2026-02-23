@@ -12,9 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedRouteImport } from './routes/_protected'
-import { Route as ProtectedIndexRouteImport } from './routes/_protected.index'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected.settings'
 import { Route as ProtectedHistoryRouteImport } from './routes/_protected.history'
+import { Route as ProtectedDashboardRouteImport } from './routes/_protected.dashboard'
 import { Route as ProtectedChatRouteImport } from './routes/_protected.chat'
 import { Route as ProtectedBarcodeRouteImport } from './routes/_protected.barcode'
 
@@ -32,10 +34,15 @@ const ProtectedRoute = ProtectedRouteImport.update({
   id: '/_protected',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProtectedIndexRoute = ProtectedIndexRouteImport.update({
+const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => ProtectedRoute,
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProtectedSettingsRoute = ProtectedSettingsRouteImport.update({
   id: '/settings',
@@ -45,6 +52,11 @@ const ProtectedSettingsRoute = ProtectedSettingsRouteImport.update({
 const ProtectedHistoryRoute = ProtectedHistoryRouteImport.update({
   id: '/history',
   path: '/history',
+  getParentRoute: () => ProtectedRoute,
+} as any)
+const ProtectedDashboardRoute = ProtectedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => ProtectedRoute,
 } as any)
 const ProtectedChatRoute = ProtectedChatRouteImport.update({
@@ -59,33 +71,39 @@ const ProtectedBarcodeRoute = ProtectedBarcodeRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof ProtectedIndexRoute
+  '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/barcode': typeof ProtectedBarcodeRoute
   '/chat': typeof ProtectedChatRoute
+  '/dashboard': typeof ProtectedDashboardRoute
   '/history': typeof ProtectedHistoryRoute
   '/settings': typeof ProtectedSettingsRoute
+  '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/barcode': typeof ProtectedBarcodeRoute
   '/chat': typeof ProtectedChatRoute
+  '/dashboard': typeof ProtectedDashboardRoute
   '/history': typeof ProtectedHistoryRoute
   '/settings': typeof ProtectedSettingsRoute
-  '/': typeof ProtectedIndexRoute
+  '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
   '/_protected': typeof ProtectedRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_protected/barcode': typeof ProtectedBarcodeRoute
   '/_protected/chat': typeof ProtectedChatRoute
+  '/_protected/dashboard': typeof ProtectedDashboardRoute
   '/_protected/history': typeof ProtectedHistoryRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
-  '/_protected/': typeof ProtectedIndexRoute
+  '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -95,33 +113,41 @@ export interface FileRouteTypes {
     | '/signup'
     | '/barcode'
     | '/chat'
+    | '/dashboard'
     | '/history'
     | '/settings'
+    | '/auth/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/login'
     | '/signup'
     | '/barcode'
     | '/chat'
+    | '/dashboard'
     | '/history'
     | '/settings'
-    | '/'
+    | '/auth/callback'
   id:
     | '__root__'
+    | '/'
     | '/_protected'
     | '/login'
     | '/signup'
     | '/_protected/barcode'
     | '/_protected/chat'
+    | '/_protected/dashboard'
     | '/_protected/history'
     | '/_protected/settings'
-    | '/_protected/'
+    | '/auth/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
   ProtectedRoute: typeof ProtectedRouteWithChildren
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -147,12 +173,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_protected/': {
-      id: '/_protected/'
+    '/': {
+      id: '/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof ProtectedIndexRouteImport
-      parentRoute: typeof ProtectedRoute
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_protected/settings': {
       id: '/_protected/settings'
@@ -166,6 +199,13 @@ declare module '@tanstack/react-router' {
       path: '/history'
       fullPath: '/history'
       preLoaderRoute: typeof ProtectedHistoryRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
+    '/_protected/dashboard': {
+      id: '/_protected/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof ProtectedDashboardRouteImport
       parentRoute: typeof ProtectedRoute
     }
     '/_protected/chat': {
@@ -188,17 +228,17 @@ declare module '@tanstack/react-router' {
 interface ProtectedRouteChildren {
   ProtectedBarcodeRoute: typeof ProtectedBarcodeRoute
   ProtectedChatRoute: typeof ProtectedChatRoute
+  ProtectedDashboardRoute: typeof ProtectedDashboardRoute
   ProtectedHistoryRoute: typeof ProtectedHistoryRoute
   ProtectedSettingsRoute: typeof ProtectedSettingsRoute
-  ProtectedIndexRoute: typeof ProtectedIndexRoute
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedBarcodeRoute: ProtectedBarcodeRoute,
   ProtectedChatRoute: ProtectedChatRoute,
+  ProtectedDashboardRoute: ProtectedDashboardRoute,
   ProtectedHistoryRoute: ProtectedHistoryRoute,
   ProtectedSettingsRoute: ProtectedSettingsRoute,
-  ProtectedIndexRoute: ProtectedIndexRoute,
 }
 
 const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
@@ -206,9 +246,11 @@ const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
 )
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
   ProtectedRoute: ProtectedRouteWithChildren,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

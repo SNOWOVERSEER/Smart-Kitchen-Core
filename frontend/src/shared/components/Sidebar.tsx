@@ -1,14 +1,15 @@
+import type { ElementType } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { LayoutDashboard, History, ScanBarcode, Settings, ChefHat } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
-const NAV_ITEMS = [
-  { to: '/', icon: LayoutDashboard, key: 'dashboard' },
+const NAV_ITEMS: { to: string; icon: ElementType; key: string }[] = [
+  { to: '/dashboard', icon: LayoutDashboard, key: 'dashboard' },
   { to: '/history', icon: History, key: 'history' },
   { to: '/barcode', icon: ScanBarcode, key: 'scan' },
   { to: '/settings', icon: Settings, key: 'settings' },
-] as const
+]
 
 export function Sidebar() {
   const { t } = useTranslation()
@@ -32,7 +33,7 @@ export function Sidebar() {
 
       {/* Nav items */}
       {NAV_ITEMS.map(({ to, icon: Icon, key }) => {
-        const isActive = to === '/' ? currentPath === '/' : currentPath.startsWith(to)
+        const isActive = currentPath.startsWith(to)
         return (
           <Link
             key={to}

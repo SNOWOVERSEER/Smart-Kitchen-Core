@@ -10,9 +10,9 @@ export const Route = createFileRoute('/_protected')({
     // Already have a valid access token in memory
     if (isAuthenticated) return
 
-    // No refresh token at all — send to login
+    // No refresh token at all — send to landing page
     if (!refresh_token) {
-      throw redirect({ to: '/login' })
+      throw redirect({ to: '/' })
     }
 
     // Have a refresh token but no access token (e.g. page reload).
@@ -28,7 +28,7 @@ export const Route = createFileRoute('/_protected')({
       })
     } catch {
       clearAuth()
-      throw redirect({ to: '/login' })
+      throw redirect({ to: '/' })
     }
   },
   component: () => (
