@@ -6,7 +6,9 @@
     "history": "记录",
     "settings": "设置",
     "dashboard": "仪表盘",
-    "brand": "Kitchen Loop"
+    "brand": "Kitchen Loop",
+    "recipes": "食谱",
+    "shopping": "购物"
   },
   "auth": {
     "brandName": "Kitchen Loop",

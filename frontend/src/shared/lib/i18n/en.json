@@ -6,7 +6,9 @@
     "history": "History",
     "settings": "Settings",
     "dashboard": "Dashboard",
-    "brand": "Kitchen Loop"
+    "brand": "Kitchen Loop",
+    "recipes": "Recipes",
+    "shopping": "Shopping"
   },
   "auth": {
     "brandName": "Kitchen Loop",
