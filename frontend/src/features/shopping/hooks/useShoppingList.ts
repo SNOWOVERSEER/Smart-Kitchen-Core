@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import i18next from 'i18next'
 import {
   getShoppingList,
   addShoppingItem,
@@ -38,7 +39,7 @@ export function useAddShoppingItemsBulk() {
     mutationFn: (items: ShoppingItemCreate[]) => addShoppingItemsBulk(items),
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
-      toast.success(`${data.length} items added to shopping list`)
+      toast.success(i18next.t('shopping.addedBulk', { count: data.length }))
     },
   })
 }
@@ -96,11 +97,11 @@ export function useCompleteShopping() {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
       void qc.invalidateQueries({ queryKey: ['inventory'] })
       if (data.failed_items.length > 0) {
-        toast.error(`${data.added_count} added, ${data.failed_items.length} failed: ${data.failed_items.join(', ')}`)
+        toast.error(i18next.t('shopping.completeFailed'))
       } else {
-        toast.success(`${data.added_count} items added to inventory`)
+        toast.success(i18next.t('shopping.completeSuccess', { count: data.added_count }))
       }
     },
-    onError: () => toast.error('Some items could not be added'),
+    onError: () => toast.error(i18next.t('shopping.completeFailed')),
   })
 }
