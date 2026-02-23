@@ -28,6 +28,7 @@ export function useAddShoppingItem() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
+    onError: () => toast.error('Failed to add item'),
   })
 }
 
@@ -50,6 +51,7 @@ export function useToggleShoppingItem() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
+    onError: () => toast.error('Failed to update item'),
   })
 }
 
@@ -71,6 +73,7 @@ export function useDeleteShoppingItem() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
+    onError: () => toast.error('Failed to delete item'),
   })
 }
 
@@ -81,6 +84,7 @@ export function useDeleteCheckedItems() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
+    onError: () => toast.error('Failed to clear items'),
   })
 }
 
@@ -91,7 +95,11 @@ export function useCompleteShopping() {
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
       void qc.invalidateQueries({ queryKey: ['inventory'] })
-      toast.success(`${data.added_count} items added to inventory`)
+      if (data.failed_items.length > 0) {
+        toast.error(`${data.added_count} added, ${data.failed_items.length} failed: ${data.failed_items.join(', ')}`)
+      } else {
+        toast.success(`${data.added_count} items added to inventory`)
+      }
     },
     onError: () => toast.error('Some items could not be added'),
   })

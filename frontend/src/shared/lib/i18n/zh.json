@@ -239,5 +239,28 @@
     "search": "搜索...",
     "settings": "设置",
     "signOut": "退出登录"
+  },
+  "shopping": {
+    "title": "购物清单",
+    "addItemPlaceholder": "商品名称...",
+    "add": "添加",
+    "emptyList": "购物清单为空",
+    "emptyListSub": "手动添加或从食谱导入",
+    "clearChecked": "清除已勾选",
+    "completeShoppingButton": "加入库存",
+    "completeShoppingTitle": "将已勾选商品加入库存",
+    "completeShoppingDescription": "选择存放位置，过期日期可稍后设置。",
+    "defaultLocation": "默认位置",
+    "completing": "加入库存中...",
+    "completeSuccess": "已将 {{count}} 件商品加入库存",
+    "completeFailed": "部分商品添加失败",
+    "sourceRecipe": "来自：{{name}}",
+    "sourceManual": "手动",
+    "deleteItem": "删除",
+    "checkedCount": "已勾选 {{count}} 项",
+    "items": "商品",
+    "cancel": "取消",
+    "addedBulk": "已将 {{count}} 件商品加入购物清单",
+    "loading": "加载中..."
   }
 }

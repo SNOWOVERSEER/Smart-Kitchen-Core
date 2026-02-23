@@ -67,7 +67,7 @@ export function ShoppingPage() {
             disabled={!inputValue.trim() || addItem.isPending}
             className="h-10 px-4 shrink-0"
           >
-            Add
+            {t('shopping.add')}
           </Button>
         </div>
       </div>
@@ -76,7 +76,7 @@ export function ShoppingPage() {
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
-            <span className="text-sm text-muted-foreground">Loading...</span>
+            <span className="text-sm text-muted-foreground">{t('shopping.loading')}</span>
           </div>
         ) : items.length === 0 ? (
           /* Empty state */

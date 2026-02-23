@@ -57,7 +57,7 @@ export function CompleteShoppingSheet({ open, onClose, checkedItems }: Props) {
           {/* Checked items list */}
           <div className="flex flex-col gap-2">
             <p className="text-xs font-semibold text-foreground uppercase tracking-widest">
-              Items
+              {t('shopping.items')}
             </p>
             <ul className="flex flex-col gap-1">
               {checkedItems.map((item) => (
@@ -104,7 +104,7 @@ export function CompleteShoppingSheet({ open, onClose, checkedItems }: Props) {
             onClick={onClose}
             disabled={complete.isPending}
           >
-            {t('inventory.addSheet.cancel')}
+            {t('shopping.cancel')}
           </Button>
           <Button
             type="button"

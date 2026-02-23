@@ -239,5 +239,28 @@
     "search": "Search...",
     "settings": "Settings",
     "signOut": "Sign out"
+  },
+  "shopping": {
+    "title": "Shopping List",
+    "addItemPlaceholder": "Add item...",
+    "add": "Add",
+    "emptyList": "Your shopping list is empty",
+    "emptyListSub": "Add items manually or from a recipe",
+    "clearChecked": "Clear checked",
+    "completeShoppingButton": "Add to inventory",
+    "completeShoppingTitle": "Add items to inventory",
+    "completeShoppingDescription": "Choose a storage location. You can set expiry dates later.",
+    "defaultLocation": "Default location",
+    "completing": "Adding to inventory...",
+    "completeSuccess": "{{count}} items added to inventory",
+    "completeFailed": "Some items could not be added",
+    "sourceRecipe": "From: {{name}}",
+    "sourceManual": "Manual",
+    "deleteItem": "Remove",
+    "checkedCount": "{{count}} checked",
+    "items": "Items",
+    "cancel": "Cancel",
+    "addedBulk": "{{count}} items added to shopping list",
+    "loading": "Loading..."
   }
 }
