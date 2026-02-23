@@ -188,3 +188,94 @@ class PhotoRecognizeResponse(BaseModel):
     recognized_items: list[RecognizedItem]
     description: str
     agent_response: AgentActionResponse
+
+
+# ── Recipe schemas ──
+
+class RecipeIngredient(BaseModel):
+    name: str
+    quantity: float | None = None
+    unit: str | None = None
+    have_in_stock: bool = False
+    batch_ids: list[int] = Field(default_factory=list)
+
+class RecipeCard(BaseModel):
+    title: str
+    description: str
+    cook_time_min: int | None = None
+    servings: int | None = None
+    ingredients: list[RecipeIngredient]
+    instructions: list[str]
+    tags: list[str] = Field(default_factory=list)
+
+class GenerateRecipesRequest(BaseModel):
+    mode: str  # 'expiring' | 'feeling'
+    prompt: str | None = None
+
+class GenerateRecipesResponse(BaseModel):
+    recipes: list[RecipeCard]
+
+class SaveRecipeRequest(BaseModel):
+    recipe: RecipeCard
+    source_mode: str
+    source_prompt: str | None = None
+
+class SavedRecipeResponse(BaseModel):
+    id: int
+    title: str
+    description: str
+    cook_time_min: int | None
+    servings: int | None
+    ingredients: list[RecipeIngredient]
+    instructions: list[str]
+    tags: list[str]
+    source_mode: str
+    source_prompt: str | None
+    created_at: datetime
+
+
+# ── Shopping schemas ──
+
+class ShoppingItemCreate(BaseModel):
+    item_name: str = Field(..., min_length=1)
+    brand: str | None = None
+    quantity: float | None = None
+    unit: str | None = None
+    category: str | None = None
+    source: str = "manual"
+    source_recipe_id: int | None = None
+    source_recipe_title: str | None = None
+    note: str | None = None
+
+class ShoppingItemUpdate(BaseModel):
+    item_name: str | None = None
+    brand: str | None = None
+    quantity: float | None = None
+    unit: str | None = None
+    category: str | None = None
+    is_checked: bool | None = None
+    note: str | None = None
+
+class ShoppingItemResponse(BaseModel):
+    id: int
+    item_name: str
+    brand: str | None
+    quantity: float | None
+    unit: str | None
+    category: str | None
+    is_checked: bool
+    source: str
+    source_recipe_id: int | None
+    source_recipe_title: str | None
+    note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+class CompleteShoppingRequest(BaseModel):
+    item_ids: list[int]
+    default_location: str = "Fridge"
+
+class CompleteShoppingResult(BaseModel):
+    added_count: int
+    failed_items: list[str]
+    inventory_ids: list[int]
