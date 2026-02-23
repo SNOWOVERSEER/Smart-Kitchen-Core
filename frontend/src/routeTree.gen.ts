@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as ProtectedShoppingRouteImport } from './routes/_protected.shopping'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected.settings'
+import { Route as ProtectedRecipesRouteImport } from './routes/_protected.recipes'
 import { Route as ProtectedHistoryRouteImport } from './routes/_protected.history'
 import { Route as ProtectedDashboardRouteImport } from './routes/_protected.dashboard'
 import { Route as ProtectedChatRouteImport } from './routes/_protected.chat'
@@ -55,6 +56,11 @@ const ProtectedSettingsRoute = ProtectedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => ProtectedRoute,
 } as any)
+const ProtectedRecipesRoute = ProtectedRecipesRouteImport.update({
+  id: '/recipes',
+  path: '/recipes',
+  getParentRoute: () => ProtectedRoute,
+} as any)
 const ProtectedHistoryRoute = ProtectedHistoryRouteImport.update({
   id: '/history',
   path: '/history',
@@ -84,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/chat': typeof ProtectedChatRoute
   '/dashboard': typeof ProtectedDashboardRoute
   '/history': typeof ProtectedHistoryRoute
+  '/recipes': typeof ProtectedRecipesRoute
   '/settings': typeof ProtectedSettingsRoute
   '/shopping': typeof ProtectedShoppingRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/chat': typeof ProtectedChatRoute
   '/dashboard': typeof ProtectedDashboardRoute
   '/history': typeof ProtectedHistoryRoute
+  '/recipes': typeof ProtectedRecipesRoute
   '/settings': typeof ProtectedSettingsRoute
   '/shopping': typeof ProtectedShoppingRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/_protected/chat': typeof ProtectedChatRoute
   '/_protected/dashboard': typeof ProtectedDashboardRoute
   '/_protected/history': typeof ProtectedHistoryRoute
+  '/_protected/recipes': typeof ProtectedRecipesRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
   '/_protected/shopping': typeof ProtectedShoppingRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -124,6 +133,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/dashboard'
     | '/history'
+    | '/recipes'
     | '/settings'
     | '/shopping'
     | '/auth/callback'
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/dashboard'
     | '/history'
+    | '/recipes'
     | '/settings'
     | '/shopping'
     | '/auth/callback'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/_protected/chat'
     | '/_protected/dashboard'
     | '/_protected/history'
+    | '/_protected/recipes'
     | '/_protected/settings'
     | '/_protected/shopping'
     | '/auth/callback'
@@ -213,6 +225,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedSettingsRouteImport
       parentRoute: typeof ProtectedRoute
     }
+    '/_protected/recipes': {
+      id: '/_protected/recipes'
+      path: '/recipes'
+      fullPath: '/recipes'
+      preLoaderRoute: typeof ProtectedRecipesRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
     '/_protected/history': {
       id: '/_protected/history'
       path: '/history'
@@ -249,6 +268,7 @@ interface ProtectedRouteChildren {
   ProtectedChatRoute: typeof ProtectedChatRoute
   ProtectedDashboardRoute: typeof ProtectedDashboardRoute
   ProtectedHistoryRoute: typeof ProtectedHistoryRoute
+  ProtectedRecipesRoute: typeof ProtectedRecipesRoute
   ProtectedSettingsRoute: typeof ProtectedSettingsRoute
   ProtectedShoppingRoute: typeof ProtectedShoppingRoute
 }
@@ -258,6 +278,7 @@ const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedChatRoute: ProtectedChatRoute,
   ProtectedDashboardRoute: ProtectedDashboardRoute,
   ProtectedHistoryRoute: ProtectedHistoryRoute,
+  ProtectedRecipesRoute: ProtectedRecipesRoute,
   ProtectedSettingsRoute: ProtectedSettingsRoute,
   ProtectedShoppingRoute: ProtectedShoppingRoute,
 }
