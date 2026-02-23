@@ -416,11 +416,11 @@ def agent_action(request: AgentActionRequest, user_id: str = Depends(get_current
 @app.post("/api/v1/recipes/generate", response_model=GenerateRecipesResponse)
 async def generate_recipes_endpoint(
     request: GenerateRecipesRequest,
-    current_user: dict = Depends(get_current_user),
+    user_id: str = Depends(get_current_user),
 ) -> GenerateRecipesResponse:
     try:
         result = generate_recipes(
-            user_id=current_user["id"],
+            user_id=user_id,
             mode=request.mode,
             prompt=request.prompt,
         )
@@ -432,10 +432,10 @@ async def generate_recipes_endpoint(
 @app.post("/api/v1/recipes", response_model=SavedRecipeResponse, status_code=201)
 async def save_recipe_endpoint(
     request: SaveRecipeRequest,
-    current_user: dict = Depends(get_current_user),
+    user_id: str = Depends(get_current_user),
 ) -> SavedRecipeResponse:
     row = save_recipe(
-        user_id=current_user["id"],
+        user_id=user_id,
         recipe=request.recipe.model_dump(),
         source_mode=request.source_mode,
         source_prompt=request.source_prompt,
@@ -447,17 +447,17 @@ async def save_recipe_endpoint(
 async def list_recipes_endpoint(
     limit: int = 20,
     offset: int = 0,
-    current_user: dict = Depends(get_current_user),
+    user_id: str = Depends(get_current_user),
 ) -> list[SavedRecipeResponse]:
-    return get_saved_recipes(current_user["id"], limit=limit, offset=offset)
+    return get_saved_recipes(user_id, limit=limit, offset=offset)
 
 
 @app.get("/api/v1/recipes/{recipe_id}", response_model=SavedRecipeResponse)
 async def get_recipe_endpoint(
     recipe_id: int,
-    current_user: dict = Depends(get_current_user),
+    user_id: str = Depends(get_current_user),
 ) -> SavedRecipeResponse:
-    recipe = get_saved_recipe(current_user["id"], recipe_id)
+    recipe = get_saved_recipe(user_id, recipe_id)
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
     return recipe
@@ -466,8 +466,8 @@ async def get_recipe_endpoint(
 @app.delete("/api/v1/recipes/{recipe_id}")
 async def delete_recipe_endpoint(
     recipe_id: int,
-    current_user: dict = Depends(get_current_user),
+    user_id: str = Depends(get_current_user),
 ) -> dict:
-    if not delete_saved_recipe(current_user["id"], recipe_id):
+    if not delete_saved_recipe(user_id, recipe_id):
         raise HTTPException(status_code=404, detail="Recipe not found")
     return {"message": "Recipe deleted"}
