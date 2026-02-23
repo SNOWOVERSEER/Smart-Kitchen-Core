@@ -1,7 +1,7 @@
 """Pydantic schemas for API request/response validation."""
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -209,7 +209,7 @@ class RecipeCard(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 class GenerateRecipesRequest(BaseModel):
-    mode: str  # 'expiring' | 'feeling'
+    mode: Literal['expiring', 'feeling']
     prompt: str | None = None
 
 class GenerateRecipesResponse(BaseModel):
@@ -223,7 +223,7 @@ class SaveRecipeRequest(BaseModel):
 class SavedRecipeResponse(BaseModel):
     id: int
     title: str
-    description: str
+    description: str | None
     cook_time_min: int | None
     servings: int | None
     ingredients: list[RecipeIngredient]
@@ -242,7 +242,7 @@ class ShoppingItemCreate(BaseModel):
     quantity: float | None = None
     unit: str | None = None
     category: str | None = None
-    source: str = "manual"
+    source: Literal['manual', 'recipe', 'agent'] = 'manual'
     source_recipe_id: int | None = None
     source_recipe_title: str | None = None
     note: str | None = None
