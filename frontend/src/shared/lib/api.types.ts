@@ -185,3 +185,101 @@ export interface AddAIConfigRequest {
   api_key: string
   model_id: string
 }
+
+// Recipes
+export interface RecipeIngredient {
+  name: string
+  quantity: number | null
+  unit: string | null
+  have_in_stock: boolean
+  batch_ids: number[]
+}
+
+export interface RecipeCard {
+  title: string
+  description: string
+  cook_time_min: number | null
+  servings: number | null
+  ingredients: RecipeIngredient[]
+  instructions: string[]
+  tags: string[]
+}
+
+export interface GenerateRecipesRequest {
+  mode: 'expiring' | 'feeling'
+  prompt?: string
+}
+
+export interface GenerateRecipesResponse {
+  recipes: RecipeCard[]
+}
+
+export interface SaveRecipeRequest {
+  recipe: RecipeCard
+  source_mode: string
+  source_prompt?: string
+}
+
+export interface SavedRecipe {
+  id: number
+  title: string
+  description: string | null
+  cook_time_min: number | null
+  servings: number | null
+  ingredients: RecipeIngredient[]
+  instructions: string[]
+  tags: string[]
+  source_mode: string
+  source_prompt: string | null
+  created_at: string
+}
+
+// Shopping
+export interface ShoppingItem {
+  id: number
+  item_name: string
+  brand: string | null
+  quantity: number | null
+  unit: string | null
+  category: string | null
+  is_checked: boolean
+  source: 'manual' | 'recipe' | 'agent'
+  source_recipe_id: number | null
+  source_recipe_title: string | null
+  note: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ShoppingItemCreate {
+  item_name: string
+  brand?: string
+  quantity?: number
+  unit?: string
+  category?: string
+  source?: 'manual' | 'recipe' | 'agent'
+  source_recipe_id?: number
+  source_recipe_title?: string
+  note?: string
+}
+
+export interface ShoppingItemUpdate {
+  item_name?: string
+  brand?: string
+  quantity?: number
+  unit?: string
+  category?: string
+  is_checked?: boolean
+  note?: string
+}
+
+export interface CompleteShoppingRequest {
+  item_ids: number[]
+  default_location?: string
+}
+
+export interface CompleteShoppingResult {
+  added_count: number
+  failed_items: string[]
+  inventory_ids: number[]
+}
