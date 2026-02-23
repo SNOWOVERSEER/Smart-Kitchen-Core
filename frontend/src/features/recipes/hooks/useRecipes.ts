@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import i18next from 'i18next'
-import { generateRecipes, saveRecipe, getSavedRecipes, deleteRecipe } from '@/features/recipes/api'
+import { generateRecipes, saveRecipe, getSavedRecipes, deleteRecipe, generateRecipeImage } from '@/features/recipes/api'
 import type { GenerateRecipesRequest, SaveRecipeRequest } from '@/shared/lib/api.types'
 
 const RECIPES_KEY = ['recipes'] as const
@@ -35,5 +35,14 @@ export function useDeleteRecipe() {
     mutationFn: (id: number) => deleteRecipe(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: RECIPES_KEY }),
     onError: () => toast.error(i18next.t('recipes.deleteFailed')),
+  })
+}
+
+export function useGenerateRecipeImage() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => generateRecipeImage(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: RECIPES_KEY }),
+    onError: () => console.warn('Image generation failed'), // silent — non-critical
   })
 }

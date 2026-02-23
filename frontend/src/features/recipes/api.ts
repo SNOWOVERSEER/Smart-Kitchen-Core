@@ -29,3 +29,8 @@ export async function getSavedRecipe(id: number): Promise<SavedRecipe> {
 export async function deleteRecipe(id: number): Promise<void> {
   await apiClient.delete(`/api/v1/recipes/${id}`)
 }
+
+export async function generateRecipeImage(recipeId: number): Promise<{ image_url: string }> {
+  const response = await apiClient.post<{ image_url: string }>(`/api/v1/recipes/${recipeId}/generate-image`)
+  return response.data
+}

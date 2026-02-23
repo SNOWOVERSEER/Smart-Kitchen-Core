@@ -50,6 +50,7 @@ export function useAgentAction() {
       if (data.status === 'completed') {
         void queryClient.invalidateQueries({ queryKey: ['inventory'] })
         void queryClient.invalidateQueries({ queryKey: ['logs'] })
+        void queryClient.invalidateQueries({ queryKey: ['shopping'] })
       }
     },
     onError: (_error, _vars, context) => {
