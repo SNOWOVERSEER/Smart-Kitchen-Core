@@ -203,10 +203,12 @@ export interface RecipeCard {
   ingredients: RecipeIngredient[]
   instructions: string[]
   tags: string[]
+  image_prompt: string | null
 }
 
 export interface GenerateRecipesRequest {
-  mode: 'expiring' | 'feeling'
+  categories: string[]
+  use_expiring: boolean
   prompt?: string
 }
 
@@ -218,6 +220,7 @@ export interface SaveRecipeRequest {
   recipe: RecipeCard
   source_mode: string
   source_prompt?: string
+  image_prompt?: string
 }
 
 export interface SavedRecipe {
@@ -231,6 +234,8 @@ export interface SavedRecipe {
   tags: string[]
   source_mode: string
   source_prompt: string | null
+  image_url: string | null
+  image_prompt: string | null
   created_at: string
 }
 
