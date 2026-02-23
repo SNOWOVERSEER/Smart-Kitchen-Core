@@ -270,7 +270,9 @@
     "deleteRecipe": "Remove from saved",
     "saved": "Recipe saved",
     "saveFailed": "Failed to save recipe",
-    "deleteFailed": "Failed to remove recipe"
+    "deleteFailed": "Failed to remove recipe",
+    "addMissingReview": "Review items to add",
+    "addNItems": "Add {{count}} items"
   },
   "shopping": {
     "title": "Shopping List",
@@ -293,6 +295,22 @@
     "items": "Items",
     "cancel": "Cancel",
     "addedBulk": "{{count}} items added to shopping list",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "expandRow": "Show note",
+    "collapseRow": "Hide note",
+    "notePlaceholder": "Add a note...",
+    "quickStockTitle": "Quick Stock",
+    "quickStockDescription": "Add directly to inventory and remove from list",
+    "quickStockConfirm": "Add to inventory",
+    "quickStockSuccess": "{{name}} added to inventory",
+    "quickStockError": "Failed to add item to inventory",
+    "uncheckedSection": "To buy",
+    "checkedSection": "In cart ({{count}})"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "add": "Add",
+    "loading": "Loading...",
+    "optional": "optional"
   }
 }

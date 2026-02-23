@@ -270,7 +270,9 @@
     "deleteRecipe": "取消收藏",
     "saved": "食谱已收藏",
     "saveFailed": "保存食谱失败",
-    "deleteFailed": "删除食谱失败"
+    "deleteFailed": "删除食谱失败",
+    "addMissingReview": "确认要添加的食材",
+    "addNItems": "添加 {{count}} 件"
   },
   "shopping": {
     "title": "购物清单",
@@ -293,6 +295,22 @@
     "items": "商品",
     "cancel": "取消",
     "addedBulk": "已将 {{count}} 件商品加入购物清单",
-    "loading": "加载中..."
+    "loading": "加载中...",
+    "expandRow": "显示备注",
+    "collapseRow": "隐藏备注",
+    "notePlaceholder": "添加备注...",
+    "quickStockTitle": "快速入库",
+    "quickStockDescription": "直接加入库存并从清单删除",
+    "quickStockConfirm": "加入库存",
+    "quickStockSuccess": "{{name}} 已加入库存",
+    "quickStockError": "加入库存失败",
+    "uncheckedSection": "待购买",
+    "checkedSection": "已勾选 ({{count}})"
+  },
+  "common": {
+    "cancel": "取消",
+    "add": "添加",
+    "loading": "加载中...",
+    "optional": "可选"
   }
 }
