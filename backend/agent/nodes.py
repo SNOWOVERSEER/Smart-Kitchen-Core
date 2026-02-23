@@ -226,6 +226,9 @@ def execute_read_tools(state: AgentState) -> dict:
                     .execute()
                 )
                 result = fetch.data[0] if fetch.data else None
+            elif tool_name == "get_shopping_list":
+                from services import get_shopping_items
+                result = get_shopping_items(user_id=state["user_id"])
             else:
                 result = f"Unknown read tool: {tool_name}"
 
@@ -279,6 +282,17 @@ def build_write_preview(state: AgentState) -> dict:
             preview = _preview_discard(args, user_id, user_lang)
         elif tool_name == "update_item":
             preview = _preview_update(args, user_id, user_lang)
+        elif tool_name == "add_to_shopping_list":
+            name = args.get("item_name", "?")
+            qty = args.get("quantity")
+            unit = args.get("unit", "")
+            note = args.get("note")
+            qty_str = f" {qty}{unit}" if qty else ""
+            note_str = f" — {note}" if note else ""
+            if user_lang == "zh":
+                preview = f"添加到购物清单: {name}{qty_str}{note_str}"
+            else:
+                preview = f"Add to shopping list: {name}{qty_str}{note_str}"
         else:
             preview = f"Unknown write tool: {tool_name}"
 
@@ -509,6 +523,8 @@ def execute_write_tools(state: AgentState) -> dict:
                 result_text = _execute_discard(user_id, args, user_lang, raw_input)
             elif tool_name == "update_item":
                 result_text = _execute_update(user_id, args, user_lang, raw_input)
+            elif tool_name == "add_to_shopping_list":
+                result_text = _execute_add_to_shopping(user_id, args, user_lang)
             else:
                 result_text = f"Unknown tool: {tool_name}"
 
@@ -625,6 +641,23 @@ def _execute_discard(user_id: str, args: dict, lang: str, raw_input: str = "") -
     if lang == "zh":
         return f"已丢弃批次 #{batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
     return f"Discarded batch #{batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
+
+
+def _execute_add_to_shopping(user_id: str, args: dict[str, Any], lang: str) -> str:
+    """Execute add_to_shopping_list operation."""
+    from services import add_shopping_item as svc_add_shopping
+    from schemas import ShoppingItemCreate
+    item = ShoppingItemCreate(
+        item_name=args.get("item_name", ""),
+        quantity=args.get("quantity"),
+        unit=args.get("unit"),
+        note=args.get("note"),
+        source="agent",
+    )
+    row = svc_add_shopping(user_id, item)
+    if lang == "zh":
+        return f"已添加到购物清单: {row['item_name']}"
+    return f"Added to shopping list: {row['item_name']}"
 
 
 def _execute_update(user_id: str, args: dict, lang: str, raw_input: str = "") -> str:
