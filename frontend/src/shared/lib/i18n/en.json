@@ -272,7 +272,18 @@
     "saveFailed": "Failed to save recipe",
     "deleteFailed": "Failed to remove recipe",
     "addMissingReview": "Review items to add",
-    "addNItems": "Add {{count}} items"
+    "addNItems": "Add {{count}} items",
+    "useExpiring": "Use expiring items",
+    "customPromptPlaceholder": "e.g. quick spicy noodles",
+    "spreadView": "Spread cards",
+    "stackedView": "Stack cards",
+    "savedRecipesPanel": "Saved Recipes",
+    "noSavedRecipes": "No saved recipes yet",
+    "noSavedRecipesSub": "Generate recipes and save the ones you like",
+    "initialHint": "Choose categories or describe what you want to cook",
+    "initialHintSub": "Your inventory is checked to show what you already have",
+    "skip": "Skip",
+    "save": "Save"
   },
   "shopping": {
     "title": "Shopping List",
