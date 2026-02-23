@@ -1,7 +1,7 @@
 """Business logic services using Supabase client."""
 
 from datetime import date, timedelta
-from typing import Any, Literal
+from typing import Any
 
 from database import get_supabase_client
 from schemas import (
@@ -412,11 +412,12 @@ def _format_inventory_for_prompt(items: list[dict]) -> str:
     return "\n".join(lines) if lines else "No inventory items found."
 
 
-def generate_recipes(user_id: str, mode: Literal['expiring', 'feeling'], prompt: str | None) -> dict:
+def generate_recipes(user_id: str, categories: list[str], use_expiring: bool, prompt: str | None) -> dict:
     """
     Call the user's LLM with structured output to generate 4 recipe cards.
-    For 'expiring' mode: fetches items expiring within 7 days.
-    For 'feeling' mode: passes user's prompt + general inventory.
+    If use_expiring=True: fetches items expiring within 7 days (falls back to general inventory if none found).
+    If categories is non-empty: appends a style/category focus instruction.
+    If prompt is provided: appends user's special request.
     Returns dict matching GenerateRecipesResponse schema.
     Raises ValueError on LLM failure.
     """
@@ -432,7 +433,7 @@ def generate_recipes(user_id: str, mode: Literal['expiring', 'feeling'], prompt:
     supabase = get_supabase_client()
     all_inv = [item for item in get_all_inventory(user_id) if (item.get("quantity") or 0) > 0]
 
-    if mode == "expiring":
+    if use_expiring:
         cutoff = (date.today() + timedelta(days=7)).isoformat()
         result = (supabase.table("inventory")
             .select("item_name, brand, quantity, unit, expiry_date")
@@ -442,14 +443,22 @@ def generate_recipes(user_id: str, mode: Literal['expiring', 'feeling'], prompt:
         expiring = result.data or []
         if expiring:
             inventory_text = _format_inventory_for_prompt(expiring)
-            mode_instruction = "Generate 4 recipes that use these items expiring soon. Prioritise recipes that use multiple expiring items together."
+            mode_instruction = "Prioritize using these expiring items:"
         else:
             inventory_text = _format_inventory_for_prompt(all_inv[:15])
             mode_instruction = "Generate 4 recipes using ingredients from this inventory:"
     else:
         inventory_text = _format_inventory_for_prompt(all_inv[:20])
-        user_request = prompt or "something delicious"
-        mode_instruction = f'Generate 4 recipes matching this request: "{user_request}"'
+        mode_instruction = "Generate 4 recipes using ingredients from this inventory:"
+
+    if categories:
+        mode_instruction += f" Focus on these styles/categories: {', '.join(categories)}."
+
+    if prompt:
+        mode_instruction += f' User special request: "{prompt}"'
+
+    if not use_expiring and not categories and not prompt:
+        mode_instruction = "Generate 4 recipes using ingredients from this inventory:"
 
     system_prompt = f"""You are a creative recipe assistant.
 {mode_instruction}
@@ -467,6 +476,7 @@ Rules:
 5. cook_time_min: total time including prep.
 6. tags: lowercase English only. E.g. ["quick", "vegetarian", "asian"].
 7. All field values in English.
+8. image_prompt: Write a vivid 1-sentence DALL-E prompt for a professional food photo of this dish. E.g. "A steaming bowl of beef pho with fresh herbs and lime, Vietnamese street food aesthetic, warm natural light."
 """
 
     try:
@@ -486,11 +496,49 @@ Rules:
         raise ValueError(f"Recipe generation failed: {exc}") from exc
 
 
+def generate_recipe_image(recipe_id: int, image_prompt: str, user_id: str) -> str | None:
+    """Generate a DALL-E image for a saved recipe. Returns URL or None (non-blocking)."""
+    supabase = get_supabase_client()
+    # Get user's active AI config
+    config_result = (supabase.table("user_ai_configs")
+        .select("provider, api_key_secret_id")
+        .eq("user_id", user_id)
+        .eq("is_active", True)
+        .execute())
+    if not config_result.data or config_result.data[0]["provider"] != "openai":
+        return None
+    # Decrypt API key using Vault — same pattern as llm_factory.py
+    secret_id = config_result.data[0]["api_key_secret_id"]
+    try:
+        from openai import OpenAI
+        # Decrypt API key from Vault using the same RPC call as llm_factory.py
+        secret_result = supabase.rpc(
+            "get_decrypted_secret",
+            {"secret_id": secret_id},
+        ).execute()
+        api_key = secret_result.data
+        client = OpenAI(api_key=api_key)
+        resp = client.images.generate(
+            model="dall-e-3",
+            prompt=image_prompt,
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        url = resp.data[0].url
+        # Store in DB
+        supabase.table("saved_recipes").update({"image_url": url}).eq("id", recipe_id).eq("user_id", user_id).execute()
+        return url
+    except Exception:
+        return None  # Never fail a save because of image generation
+
+
 def save_recipe(
     user_id: str,
     recipe: dict,
     source_mode: str,
     source_prompt: str | None,
+    image_prompt: str | None = None,
 ) -> dict:
     """Persist a liked recipe into saved_recipes. Returns saved row."""
     supabase = get_supabase_client()
@@ -505,6 +553,7 @@ def save_recipe(
         "tags": recipe.get("tags", []),
         "source_mode": source_mode,
         "source_prompt": source_prompt,
+        "image_prompt": image_prompt,
     }).execute()
     return result.data[0]
 
