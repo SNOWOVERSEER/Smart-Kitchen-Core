@@ -1,6 +1,6 @@
 """FastAPI application with Supabase Auth and multi-user support."""
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 
 from auth import get_current_user
@@ -41,6 +41,7 @@ from services import (
     update_inventory_item,
     get_transaction_logs,
     generate_recipes,
+    generate_recipe_image,
     save_recipe,
     get_saved_recipes,
     get_saved_recipe,
@@ -431,7 +432,8 @@ def generate_recipes_endpoint(
     try:
         result = generate_recipes(
             user_id=user_id,
-            mode=request.mode,
+            categories=request.categories,
+            use_expiring=request.use_expiring or (request.mode == 'expiring'),
             prompt=request.prompt,
         )
         return result
@@ -442,6 +444,7 @@ def generate_recipes_endpoint(
 @app.post("/api/v1/recipes", response_model=SavedRecipeResponse, status_code=201)
 def save_recipe_endpoint(
     request: SaveRecipeRequest,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user),
 ) -> SavedRecipeResponse:
     row = save_recipe(
@@ -449,7 +452,10 @@ def save_recipe_endpoint(
         recipe=request.recipe.model_dump(),
         source_mode=request.source_mode,
         source_prompt=request.source_prompt,
+        image_prompt=request.image_prompt,
     )
+    if request.image_prompt:
+        background_tasks.add_task(generate_recipe_image, row["id"], request.image_prompt, user_id)
     return row
 
 
@@ -471,6 +477,22 @@ def get_recipe_endpoint(
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
     return recipe
+
+
+@app.post("/api/v1/recipes/{recipe_id}/generate-image")
+def generate_image_endpoint(
+    recipe_id: int,
+    user_id: str = Depends(get_current_user),
+) -> dict:
+    recipe = get_saved_recipe(user_id, recipe_id)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    if not recipe.get("image_prompt"):
+        raise HTTPException(status_code=400, detail="No image prompt for this recipe")
+    url = generate_recipe_image(recipe_id, recipe["image_prompt"], user_id)
+    if not url:
+        raise HTTPException(status_code=422, detail="Image generation failed or OpenAI not configured")
+    return {"image_url": url}
 
 
 @app.delete("/api/v1/recipes/{recipe_id}")
