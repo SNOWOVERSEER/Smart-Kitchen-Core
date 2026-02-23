@@ -1,6 +1,7 @@
 """Business logic services using Supabase client."""
 
-from typing import Any
+from datetime import date, timedelta
+from typing import Any, Literal
 
 from database import get_supabase_client
 from schemas import (
@@ -411,7 +412,7 @@ def _format_inventory_for_prompt(items: list[dict]) -> str:
     return "\n".join(lines) if lines else "No inventory items found."
 
 
-def generate_recipes(user_id: str, mode: str, prompt: str | None) -> dict:
+def generate_recipes(user_id: str, mode: Literal['expiring', 'feeling'], prompt: str | None) -> dict:
     """
     Call the user's LLM with structured output to generate 4 recipe cards.
     For 'expiring' mode: fetches items expiring within 7 days.
@@ -419,7 +420,6 @@ def generate_recipes(user_id: str, mode: str, prompt: str | None) -> dict:
     Returns dict matching GenerateRecipesResponse schema.
     Raises ValueError on LLM failure.
     """
-    from datetime import date, timedelta
     from schemas import RecipeCard
     from agent.llm_factory import get_user_llm
     from pydantic import BaseModel as _BaseModel
@@ -430,7 +430,7 @@ def generate_recipes(user_id: str, mode: str, prompt: str | None) -> dict:
     llm = get_user_llm(user_id)
     structured_llm = llm.with_structured_output(_Output)
     supabase = get_supabase_client()
-    all_inv = get_all_inventory(user_id)
+    all_inv = [item for item in get_all_inventory(user_id) if (item.get("quantity") or 0) > 0]
 
     if mode == "expiring":
         cutoff = (date.today() + timedelta(days=7)).isoformat()
@@ -529,9 +529,9 @@ def get_saved_recipe(user_id: str, recipe_id: int) -> dict | None:
         .select("*")
         .eq("id", recipe_id)
         .eq("user_id", user_id)
-        .single()
+        .limit(1)
         .execute())
-    return result.data
+    return result.data[0] if result.data else None
 
 
 def delete_saved_recipe(user_id: str, recipe_id: int) -> bool:

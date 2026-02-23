@@ -414,7 +414,7 @@ def agent_action(request: AgentActionRequest, user_id: str = Depends(get_current
 # ── Recipe endpoints ──
 
 @app.post("/api/v1/recipes/generate", response_model=GenerateRecipesResponse)
-async def generate_recipes_endpoint(
+def generate_recipes_endpoint(
     request: GenerateRecipesRequest,
     user_id: str = Depends(get_current_user),
 ) -> GenerateRecipesResponse:
@@ -430,7 +430,7 @@ async def generate_recipes_endpoint(
 
 
 @app.post("/api/v1/recipes", response_model=SavedRecipeResponse, status_code=201)
-async def save_recipe_endpoint(
+def save_recipe_endpoint(
     request: SaveRecipeRequest,
     user_id: str = Depends(get_current_user),
 ) -> SavedRecipeResponse:
@@ -444,7 +444,7 @@ async def save_recipe_endpoint(
 
 
 @app.get("/api/v1/recipes", response_model=list[SavedRecipeResponse])
-async def list_recipes_endpoint(
+def list_recipes_endpoint(
     limit: int = 20,
     offset: int = 0,
     user_id: str = Depends(get_current_user),
@@ -453,7 +453,7 @@ async def list_recipes_endpoint(
 
 
 @app.get("/api/v1/recipes/{recipe_id}", response_model=SavedRecipeResponse)
-async def get_recipe_endpoint(
+def get_recipe_endpoint(
     recipe_id: int,
     user_id: str = Depends(get_current_user),
 ) -> SavedRecipeResponse:
@@ -464,7 +464,7 @@ async def get_recipe_endpoint(
 
 
 @app.delete("/api/v1/recipes/{recipe_id}")
-async def delete_recipe_endpoint(
+def delete_recipe_endpoint(
     recipe_id: int,
     user_id: str = Depends(get_current_user),
 ) -> dict:
