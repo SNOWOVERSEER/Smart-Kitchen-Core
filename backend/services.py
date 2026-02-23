@@ -543,3 +543,126 @@ def delete_saved_recipe(user_id: str, recipe_id: int) -> bool:
         .eq("user_id", user_id)
         .execute())
     return bool(result.data)
+
+
+# ── Shopping list services ──
+
+def get_shopping_items(user_id: str) -> list[dict]:
+    """Return all shopping items for user, unchecked items first."""
+    supabase = get_supabase_client()
+    result = (supabase.table("shopping_items")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("is_checked")        # False (unchecked) first
+        .order("created_at", desc=True)
+        .execute())
+    return result.data or []
+
+
+def add_shopping_item(user_id: str, item: "ShoppingItemCreate") -> dict:
+    """Insert a single shopping item for the user."""
+    supabase = get_supabase_client()
+    data = item.model_dump()
+    data["user_id"] = user_id
+    result = supabase.table("shopping_items").insert(data).execute()
+    return result.data[0]
+
+
+def add_shopping_items_bulk(user_id: str, items: list["ShoppingItemCreate"]) -> list[dict]:
+    """Bulk insert shopping items — single Supabase round-trip."""
+    supabase = get_supabase_client()
+    rows = [{"user_id": user_id, **item.model_dump()} for item in items]
+    result = supabase.table("shopping_items").insert(rows).execute()
+    return result.data or []
+
+
+def update_shopping_item(
+    user_id: str,
+    item_id: int,
+    update: "ShoppingItemUpdate",
+) -> dict | None:
+    """Partial update on a shopping item. Skips None fields."""
+    supabase = get_supabase_client()
+    patch = {k: v for k, v in update.model_dump().items() if v is not None}
+    if not patch:
+        return None
+    result = (supabase.table("shopping_items")
+        .update(patch)
+        .eq("id", item_id)
+        .eq("user_id", user_id)
+        .execute())
+    return result.data[0] if result.data else None
+
+
+def delete_shopping_item(user_id: str, item_id: int) -> bool:
+    """Delete a single shopping item. Returns True if found and deleted."""
+    supabase = get_supabase_client()
+    result = (supabase.table("shopping_items")
+        .delete()
+        .eq("id", item_id)
+        .eq("user_id", user_id)
+        .execute())
+    return bool(result.data)
+
+
+def delete_checked_shopping_items(user_id: str) -> int:
+    """Delete all checked shopping items for user. Returns count deleted."""
+    supabase = get_supabase_client()
+    result = (supabase.table("shopping_items")
+        .delete()
+        .eq("user_id", user_id)
+        .eq("is_checked", True)
+        .execute())
+    return len(result.data or [])
+
+
+def complete_shopping(
+    user_id: str,
+    item_ids: list[int],
+    default_location: str = "Fridge",
+) -> "CompleteShoppingResult":
+    """
+    Convert checked shopping items into inventory batches.
+    For each item_id: fetch → build InventoryItemCreate → add_inventory_item → delete from shopping.
+    """
+    from schemas import InventoryItemCreate, CompleteShoppingResult
+
+    supabase = get_supabase_client()
+    added_count = 0
+    failed_items: list[str] = []
+    inventory_ids: list[int] = []
+
+    for item_id in item_ids:
+        result = (supabase.table("shopping_items")
+            .select("*")
+            .eq("id", item_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute())
+        if not result.data:
+            continue
+
+        row = result.data[0]
+        try:
+            inv_item = InventoryItemCreate(
+                item_name=row["item_name"],
+                brand=row.get("brand"),
+                quantity=row.get("quantity") or 1.0,
+                unit=row.get("unit") or "pcs",
+                category=row.get("category"),
+                location=default_location,
+                total_volume=row.get("quantity") or 1.0,
+                expiry_date=None,
+            )
+            new_batch = add_inventory_item(user_id=user_id, item=inv_item)
+            inventory_ids.append(new_batch["id"])
+            added_count += 1
+            supabase.table("shopping_items").delete().eq("id", item_id).execute()
+        except Exception:
+            failed_items.append(row["item_name"])
+
+    return CompleteShoppingResult(
+        added_count=added_count,
+        failed_items=failed_items,
+        inventory_ids=inventory_ids,
+    )

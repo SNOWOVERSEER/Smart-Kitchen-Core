@@ -25,6 +25,9 @@ from schemas import (
     # Recipes
     GenerateRecipesRequest, GenerateRecipesResponse,
     SaveRecipeRequest, SavedRecipeResponse,
+    # Shopping
+    ShoppingItemCreate, ShoppingItemUpdate, ShoppingItemResponse,
+    CompleteShoppingRequest, CompleteShoppingResult,
 )
 from barcode import lookup_barcode
 from photo_recognize import recognize_image, build_agent_text_from_items
@@ -42,6 +45,13 @@ from services import (
     get_saved_recipes,
     get_saved_recipe,
     delete_saved_recipe,
+    get_shopping_items,
+    add_shopping_item,
+    add_shopping_items_bulk,
+    update_shopping_item,
+    delete_shopping_item,
+    delete_checked_shopping_items,
+    complete_shopping,
 )
 
 
@@ -471,3 +481,66 @@ def delete_recipe_endpoint(
     if not delete_saved_recipe(user_id, recipe_id):
         raise HTTPException(status_code=404, detail="Recipe not found")
     return {"message": "Recipe deleted"}
+
+
+# ── Shopping list endpoints ──
+
+@app.get("/api/v1/shopping", response_model=list[ShoppingItemResponse])
+def list_shopping_items(user_id: str = Depends(get_current_user)) -> list[ShoppingItemResponse]:
+    return get_shopping_items(user_id)
+
+
+@app.post("/api/v1/shopping", response_model=ShoppingItemResponse, status_code=201)
+def add_shopping_item_endpoint(
+    item: ShoppingItemCreate,
+    user_id: str = Depends(get_current_user),
+) -> ShoppingItemResponse:
+    return add_shopping_item(user_id, item)
+
+
+@app.post("/api/v1/shopping/bulk", response_model=list[ShoppingItemResponse], status_code=201)
+def add_shopping_items_bulk_endpoint(
+    items: list[ShoppingItemCreate],
+    user_id: str = Depends(get_current_user),
+) -> list[ShoppingItemResponse]:
+    return add_shopping_items_bulk(user_id, items)
+
+
+@app.post("/api/v1/shopping/complete", response_model=CompleteShoppingResult)
+def complete_shopping_endpoint(
+    request: CompleteShoppingRequest,
+    user_id: str = Depends(get_current_user),
+) -> CompleteShoppingResult:
+    return complete_shopping(
+        user_id=user_id,
+        item_ids=request.item_ids,
+        default_location=request.default_location,
+    )
+
+
+@app.patch("/api/v1/shopping/{item_id}", response_model=ShoppingItemResponse)
+def update_shopping_item_endpoint(
+    item_id: int,
+    update: ShoppingItemUpdate,
+    user_id: str = Depends(get_current_user),
+) -> ShoppingItemResponse:
+    result = update_shopping_item(user_id, item_id, update)
+    if not result:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return result
+
+
+@app.delete("/api/v1/shopping/checked")
+def delete_checked_items_endpoint(user_id: str = Depends(get_current_user)) -> dict:
+    count = delete_checked_shopping_items(user_id)
+    return {"deleted_count": count}
+
+
+@app.delete("/api/v1/shopping/{item_id}")
+def delete_shopping_item_endpoint(
+    item_id: int,
+    user_id: str = Depends(get_current_user),
+) -> dict:
+    if not delete_shopping_item(user_id, item_id):
+        raise HTTPException(status_code=404, detail="Item not found")
+    return {"message": "Item deleted"}
