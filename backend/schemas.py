@@ -207,10 +207,14 @@ class RecipeCard(BaseModel):
     ingredients: list[RecipeIngredient]
     instructions: list[str]
     tags: list[str] = Field(default_factory=list)
+    image_prompt: str | None = None
 
 class GenerateRecipesRequest(BaseModel):
-    mode: Literal['expiring', 'feeling']
+    categories: list[str] = Field(default_factory=list)
+    use_expiring: bool = False
     prompt: str | None = None
+    # Legacy — kept for backward compat until frontend migrates
+    mode: str | None = None
 
 class GenerateRecipesResponse(BaseModel):
     recipes: list[RecipeCard]
@@ -219,6 +223,7 @@ class SaveRecipeRequest(BaseModel):
     recipe: RecipeCard
     source_mode: str
     source_prompt: str | None = None
+    image_prompt: str | None = None
 
 class SavedRecipeResponse(BaseModel):
     id: int
@@ -231,6 +236,8 @@ class SavedRecipeResponse(BaseModel):
     tags: list[str]
     source_mode: str
     source_prompt: str | None
+    image_url: str | None = None
+    image_prompt: str | None = None
     created_at: datetime
 
 
