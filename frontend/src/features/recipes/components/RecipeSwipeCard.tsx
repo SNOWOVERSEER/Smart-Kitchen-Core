@@ -10,12 +10,13 @@ interface Props {
   stackIndex: number
   onLike: () => void
   onSkip: () => void
+  disabled?: boolean
 }
 
 const SWIPE_THRESHOLD = 100
 const MAX_VISIBLE_INGREDIENTS = 8
 
-export function RecipeSwipeCard({ recipe, isTop, stackIndex, onLike, onSkip }: Props) {
+export function RecipeSwipeCard({ recipe, isTop, stackIndex, onLike, onSkip, disabled = false }: Props) {
   const { t } = useTranslation()
 
   const x = useMotionValue(0)
@@ -52,7 +53,7 @@ export function RecipeSwipeCard({ recipe, isTop, stackIndex, onLike, onSkip }: P
         x: isTop ? x : undefined,
         rotate: isTop ? rotate : undefined,
       }}
-      drag={isTop ? 'x' : false}
+      drag={isTop && !disabled ? 'x' : false}
       dragConstraints={{ left: 0, right: 0 }}
       onDragEnd={isTop ? handleDragEnd : undefined}
     >
@@ -115,9 +116,9 @@ export function RecipeSwipeCard({ recipe, isTop, stackIndex, onLike, onSkip }: P
 
       {/* Ingredient chips */}
       <div className="flex flex-wrap gap-1.5">
-        {visibleIngredients.map((ingredient, idx) => (
+        {visibleIngredients.map((ingredient) => (
           <span
-            key={idx}
+            key={ingredient.name}
             className={`text-xs px-2 py-0.5 rounded-full border ${
               ingredient.have_in_stock
                 ? 'border-green-500 text-green-700 bg-green-50'

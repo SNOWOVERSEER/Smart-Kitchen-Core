@@ -266,7 +266,9 @@
     "addMissingToList": "将缺少食材加入购物清单",
     "addedToList": "已加入购物清单",
     "deleteRecipe": "取消收藏",
-    "saved": "食谱已收藏"
+    "saved": "食谱已收藏",
+    "saveFailed": "保存食谱失败",
+    "deleteFailed": "删除食谱失败"
   },
   "shopping": {
     "title": "购物清单",

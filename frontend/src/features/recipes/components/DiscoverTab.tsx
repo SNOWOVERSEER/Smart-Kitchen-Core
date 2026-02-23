@@ -32,20 +32,6 @@ export function DiscoverTab() {
     )
   }
 
-  function handleGenerateMore() {
-    generateMutation.mutate(
-      { mode, prompt: mode === 'feeling' ? prompt : undefined },
-      {
-        onSuccess: (data) => {
-          setRecipes(data.recipes)
-        },
-        onError: () => {
-          toast.error(t('recipes.generateFailed'))
-        },
-      }
-    )
-  }
-
   return (
     <div className="flex flex-col gap-6 py-4">
       {/* Mode selector */}
@@ -132,7 +118,7 @@ export function DiscoverTab() {
             recipes={recipes}
             sourceMode={mode}
             sourcePrompt={mode === 'feeling' ? prompt : undefined}
-            onGenerateMore={handleGenerateMore}
+            onGenerateMore={handleGenerate}
           />
         </>
       )}

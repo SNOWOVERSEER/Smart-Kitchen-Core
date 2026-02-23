@@ -266,7 +266,9 @@
     "addMissingToList": "Add missing to shopping list",
     "addedToList": "Added to shopping list",
     "deleteRecipe": "Remove from saved",
-    "saved": "Recipe saved"
+    "saved": "Recipe saved",
+    "saveFailed": "Failed to save recipe",
+    "deleteFailed": "Failed to remove recipe"
   },
   "shopping": {
     "title": "Shopping List",

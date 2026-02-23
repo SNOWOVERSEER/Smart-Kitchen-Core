@@ -25,7 +25,7 @@ export function useSaveRecipe() {
       void qc.invalidateQueries({ queryKey: RECIPES_KEY })
       toast.success(i18next.t('recipes.saved'))
     },
-    onError: () => toast.error('Failed to save recipe'),
+    onError: () => toast.error(i18next.t('recipes.saveFailed')),
   })
 }
 
@@ -34,6 +34,6 @@ export function useDeleteRecipe() {
   return useMutation({
     mutationFn: (id: number) => deleteRecipe(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: RECIPES_KEY }),
-    onError: () => toast.error('Failed to delete recipe'),
+    onError: () => toast.error(i18next.t('recipes.deleteFailed')),
   })
 }

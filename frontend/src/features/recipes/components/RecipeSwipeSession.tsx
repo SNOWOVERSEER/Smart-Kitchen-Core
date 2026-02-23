@@ -73,6 +73,7 @@ export function RecipeSwipeSession({ recipes, sourceMode, sourcePrompt, onGenera
             stackIndex={stackIndex}
             onLike={handleLike}
             onSkip={handleSkip}
+            disabled={isTop && saveRecipe.isPending}
           />
         )
       })}
