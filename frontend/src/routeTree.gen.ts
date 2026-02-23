@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as ProtectedShoppingRouteImport } from './routes/_protected.shopping'
 import { Route as ProtectedSettingsRouteImport } from './routes/_protected.settings'
 import { Route as ProtectedHistoryRouteImport } from './routes/_protected.history'
 import { Route as ProtectedDashboardRouteImport } from './routes/_protected.dashboard'
@@ -43,6 +44,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ProtectedShoppingRoute = ProtectedShoppingRouteImport.update({
+  id: '/shopping',
+  path: '/shopping',
+  getParentRoute: () => ProtectedRoute,
 } as any)
 const ProtectedSettingsRoute = ProtectedSettingsRouteImport.update({
   id: '/settings',
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof ProtectedDashboardRoute
   '/history': typeof ProtectedHistoryRoute
   '/settings': typeof ProtectedSettingsRoute
+  '/shopping': typeof ProtectedShoppingRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof ProtectedDashboardRoute
   '/history': typeof ProtectedHistoryRoute
   '/settings': typeof ProtectedSettingsRoute
+  '/shopping': typeof ProtectedShoppingRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRoutesById {
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/_protected/dashboard': typeof ProtectedDashboardRoute
   '/_protected/history': typeof ProtectedHistoryRoute
   '/_protected/settings': typeof ProtectedSettingsRoute
+  '/_protected/shopping': typeof ProtectedShoppingRoute
   '/auth/callback': typeof AuthCallbackRoute
 }
 export interface FileRouteTypes {
@@ -116,6 +125,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/history'
     | '/settings'
+    | '/shopping'
     | '/auth/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/history'
     | '/settings'
+    | '/shopping'
     | '/auth/callback'
   id:
     | '__root__'
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/_protected/dashboard'
     | '/_protected/history'
     | '/_protected/settings'
+    | '/_protected/shopping'
     | '/auth/callback'
   fileRoutesById: FileRoutesById
 }
@@ -187,6 +199,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_protected/shopping': {
+      id: '/_protected/shopping'
+      path: '/shopping'
+      fullPath: '/shopping'
+      preLoaderRoute: typeof ProtectedShoppingRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
     '/_protected/settings': {
       id: '/_protected/settings'
       path: '/settings'
@@ -231,6 +250,7 @@ interface ProtectedRouteChildren {
   ProtectedDashboardRoute: typeof ProtectedDashboardRoute
   ProtectedHistoryRoute: typeof ProtectedHistoryRoute
   ProtectedSettingsRoute: typeof ProtectedSettingsRoute
+  ProtectedShoppingRoute: typeof ProtectedShoppingRoute
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
@@ -239,6 +259,7 @@ const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedDashboardRoute: ProtectedDashboardRoute,
   ProtectedHistoryRoute: ProtectedHistoryRoute,
   ProtectedSettingsRoute: ProtectedSettingsRoute,
+  ProtectedShoppingRoute: ProtectedShoppingRoute,
 }
 
 const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
