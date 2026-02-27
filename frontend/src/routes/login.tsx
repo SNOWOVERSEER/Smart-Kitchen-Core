@@ -1,6 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { LoginPage } from '../features/auth/components/LoginPage'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { LandingPage } from '../features/landing/components/LandingPage'
+import { useAuthStore } from '../shared/stores/authStore'
 
 export const Route = createFileRoute('/login')({
-  component: LoginPage,
+  beforeLoad: () => {
+    const { isAuthenticated } = useAuthStore.getState()
+    if (isAuthenticated) {
+      throw redirect({ to: '/dashboard' })
+    }
+  },
+  component: LandingPage,
 })

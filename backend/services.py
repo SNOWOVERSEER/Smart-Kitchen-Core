@@ -412,9 +412,12 @@ def _format_inventory_for_prompt(items: list[dict]) -> str:
     return "\n".join(lines) if lines else "No inventory items found."
 
 
+RECIPES_PER_GENERATION = 6  # Change this to generate more or fewer recipes per request
+
+
 def generate_recipes(user_id: str, categories: list[str], use_expiring: bool, prompt: str | None) -> dict:
     """
-    Call the user's LLM with structured output to generate 4 recipe cards.
+    Call the user's LLM with structured output to generate RECIPES_PER_GENERATION recipe cards.
     If use_expiring=True: fetches items expiring within 7 days (falls back to general inventory if none found).
     If categories is non-empty: appends a style/category focus instruction.
     If prompt is provided: appends user's special request.
@@ -446,10 +449,10 @@ def generate_recipes(user_id: str, categories: list[str], use_expiring: bool, pr
             mode_instruction = "Prioritize using these expiring items:"
         else:
             inventory_text = _format_inventory_for_prompt(all_inv[:15])
-            mode_instruction = "Generate 4 recipes using ingredients from this inventory:"
+            mode_instruction = f"Generate {RECIPES_PER_GENERATION} recipes using ingredients from this inventory:"
     else:
         inventory_text = _format_inventory_for_prompt(all_inv[:20])
-        mode_instruction = "Generate 4 recipes using ingredients from this inventory:"
+        mode_instruction = f"Generate {RECIPES_PER_GENERATION} recipes using ingredients from this inventory:"
 
     if categories:
         mode_instruction += f" Focus on these styles/categories: {', '.join(categories)}."
@@ -458,7 +461,7 @@ def generate_recipes(user_id: str, categories: list[str], use_expiring: bool, pr
         mode_instruction += f' User special request: "{prompt}"'
 
     if not use_expiring and not categories and not prompt:
-        mode_instruction = "Generate 4 recipes using ingredients from this inventory:"
+        mode_instruction = f"Generate {RECIPES_PER_GENERATION} recipes using ingredients from this inventory:"
 
     system_prompt = f"""You are a creative recipe assistant.
 {mode_instruction}
@@ -526,10 +529,26 @@ def generate_recipe_image(recipe_id: int, image_prompt: str, user_id: str) -> st
             n=1,
         )
         url = resp.data[0].url
-        # Store in DB
+        # Persist URL and verify write actually succeeded (avoid false-positive success).
         supabase.table("saved_recipes").update({"image_url": url}).eq("id", recipe_id).eq("user_id", user_id).execute()
-        return url
-    except Exception:
+        verify = (
+            supabase.table("saved_recipes")
+            .select("image_url")
+            .eq("id", recipe_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not verify.data:
+            print(f"[IMAGE] Failed to persist image_url: recipe #{recipe_id} not found for user {user_id}")
+            return None
+        persisted_url = verify.data[0].get("image_url")
+        if not persisted_url:
+            print(f"[IMAGE] Failed to persist image_url: recipe #{recipe_id} still has NULL image_url")
+            return None
+        return persisted_url
+    except Exception as e:
+        print(f"[IMAGE] generate_recipe_image failed for recipe #{recipe_id}: {e}")
         return None  # Never fail a save because of image generation
 
 

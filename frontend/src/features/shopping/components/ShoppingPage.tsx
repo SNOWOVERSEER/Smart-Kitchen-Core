@@ -3,6 +3,7 @@ import { ShoppingCart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useTranslation } from 'react-i18next'
+import { TopBar } from '@/shared/components/TopBar'
 import { ShoppingItemRow } from './ShoppingItemRow'
 import { CompleteShoppingSheet } from './CompleteShoppingSheet'
 import { QuickStockSheet } from './QuickStockSheet'
@@ -50,9 +51,13 @@ export function ShoppingPage() {
 
   return (
     <div className="flex flex-col h-full">
+      <div className="hidden lg:block shrink-0">
+        <TopBar title={t('shopping.title')} />
+      </div>
+
       {/* Page header */}
       <div className="px-4 pt-4 pb-3 border-b border-border shrink-0">
-        <h1 className="text-lg font-semibold text-foreground mb-3">
+        <h1 className="text-lg font-semibold text-foreground mb-3 lg:hidden">
           {t('shopping.title')}
         </h1>
 

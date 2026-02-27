@@ -30,19 +30,14 @@ export function Layout({ children }: LayoutProps) {
           compete for flex space and can't cause layout shifts.
         */}
         <div className="flex-1 min-h-0 relative overflow-hidden">
-          <AnimatePresence mode="wait">
-            {!isChat && (
-              <motion.main
-                key={location.pathname}
-                initial={false}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0 }}
-                className="absolute inset-0 overflow-y-auto"
-              >
-                {children}
-              </motion.main>
-            )}
-          </AnimatePresence>
+          {!isChat && (
+            <main
+              key={location.pathname}
+              className="absolute inset-0 overflow-y-auto"
+            >
+              {children}
+            </main>
+          )}
         </div>
 
         {/* BottomNav — always in flex flow, always at bottom */}

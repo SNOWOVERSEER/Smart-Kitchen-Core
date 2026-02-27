@@ -6,10 +6,10 @@ export const Route = createRootRoute({
     <>
       <Outlet />
       <Toaster
-        position="top-right"
+        position="bottom-center"
         toastOptions={{
           duration: 3000,
-          style: { fontSize: '14px', borderRadius: '8px' },
+          style: { fontSize: '14px', borderRadius: '12px', marginBottom: '72px' },
         }}
       />
     </>
