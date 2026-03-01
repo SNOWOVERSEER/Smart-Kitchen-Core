@@ -273,7 +273,7 @@ export function RecipesPage() {
           <div
             className={cn(
               'mx-auto w-full flex flex-col flex-1 min-h-0 [@media(pointer:fine)]:min-h-[520px]',
-              deckViewMode === 'grid' ? 'max-w-[1260px]' : 'max-w-[920px]'
+              deckViewMode === 'grid' ? 'max-w-[1260px]' : 'max-w-none'
             )}
           >
             {/* RecipeCardDeck — vertically centered, no items-center (avoids w-full collapse) */}

@@ -373,7 +373,7 @@ export function RecipeCardDeck({
       ) : (
         <div className="relative flex-1 min-h-0 overflow-visible">
           {viewMode === 'fan' ? (
-            <div className="relative mx-auto flex h-full w-full max-w-[700px] min-h-0 flex-col items-center justify-center overflow-visible px-3 pt-2 pb-3 sm:px-8 lg:px-10 touch-none">
+            <div className="relative mx-auto flex h-full w-full max-w-[700px] lg:max-w-none min-h-0 flex-col items-center justify-center overflow-visible px-3 pt-2 pb-3 sm:px-8 lg:px-4 touch-none">
               <div className="relative flex w-full flex-1 min-h-0 items-center justify-center">
                 <button
                   type="button"
