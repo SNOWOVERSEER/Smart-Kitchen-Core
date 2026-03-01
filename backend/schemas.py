@@ -124,6 +124,7 @@ class InventoryGroupResponse(BaseModel):
 class InventoryItemUpdate(BaseModel):
     quantity: float | None = None
     total_volume: float | None = None
+    unit: str | None = None
     brand: str | None = None
     category: str | None = None
     expiry_date: date | None = None
@@ -198,6 +199,8 @@ class RecipeIngredient(BaseModel):
     unit: str | None = None
     have_in_stock: bool = False
     batch_ids: list[int] = Field(default_factory=list)
+    # Coverage ratio: available / required (only set when have_in_stock=False and quantity is comparable)
+    coverage_ratio: float | None = None
 
 class RecipeCard(BaseModel):
     title: str

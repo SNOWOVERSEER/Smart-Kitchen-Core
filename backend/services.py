@@ -1,6 +1,7 @@
 """Business logic services using Supabase client."""
 
 from datetime import date, timedelta
+import re
 from typing import Any
 
 from database import get_supabase_client
@@ -414,6 +415,239 @@ def _format_inventory_for_prompt(items: list[dict]) -> str:
 
 RECIPES_PER_GENERATION = 6  # Change this to generate more or fewer recipes per request
 
+_UNIT_ALIASES: dict[str, str] = {
+    "l": "L",
+    "liter": "L",
+    "litre": "L",
+    "liters": "L",
+    "litres": "L",
+    "ml": "ml",
+    "milliliter": "ml",
+    "millilitre": "ml",
+    "milliliters": "ml",
+    "millilitres": "ml",
+    "tbsp": "tbsp",
+    "tablespoon": "tbsp",
+    "tablespoons": "tbsp",
+    "tsp": "tsp",
+    "teaspoon": "tsp",
+    "teaspoons": "tsp",
+    "cup": "cup",
+    "cups": "cup",
+    "kg": "kg",
+    "kilogram": "kg",
+    "kilograms": "kg",
+    "g": "g",
+    "gram": "g",
+    "grams": "g",
+    "pcs": "pcs",
+    "piece": "pcs",
+    "pieces": "pcs",
+    "unit": "pcs",
+    "units": "pcs",
+}
+
+_VOLUME_TO_ML = {"L": 1000.0, "ml": 1.0, "cup": 240.0, "tbsp": 15.0, "tsp": 5.0}
+_WEIGHT_TO_G = {"kg": 1000.0, "g": 1.0}
+_COUNT_UNITS = {"pcs"}
+# Approximate densities for common pantry items so volume-vs-weight recipe units
+# can still map to inventory quantities in a practical way.
+_INGREDIENT_DENSITY_G_PER_ML: dict[str, float] = {
+    "flour": 0.50,          # ~120 g / cup
+    "sugar": 0.83,          # ~200 g / cup (granulated)
+    "butter": 0.95,         # ~227 g / cup
+    "baking powder": 0.80,  # ~4 g / tsp
+    "cream": 0.98,          # heavy/whipping cream, close to water
+    "vegetable oil": 0.92,  # typical cooking oil density
+}
+_INGREDIENT_DENSITY_ALIASES: dict[str, tuple[str, ...]] = {
+    "flour": (
+        "flour", "plain flour", "all purpose flour", "all-purpose flour",
+        "self raising flour", "self-raising flour", "cake flour",
+    ),
+    "sugar": (
+        "sugar", "granulated sugar", "white sugar", "caster sugar",
+        "brown sugar", "powdered sugar", "icing sugar",
+    ),
+    "butter": ("butter", "unsalted butter", "salted butter"),
+    "baking powder": ("baking powder",),
+    "cream": ("cream", "whipping cream", "whipped cream", "heavy cream", "thickened cream"),
+    "vegetable oil": ("vegetable oil", "canola oil", "sunflower oil", "olive oil"),
+}
+_GENERIC_LIQUID_DENSITY_G_PER_ML = 1.0
+_GENERIC_LIQUID_KEYWORDS: tuple[str, ...] = (
+    "milk",
+    "cream",
+    "broth",
+    "stock",
+    "soup",
+    "sauce",
+    "juice",
+    "vinegar",
+    "water",
+    "wine",
+    "coffee",
+    "tea",
+)
+_GENERIC_LIQUID_CATEGORIES = {"beverage", "dairy", "condiment", "sauce"}
+
+
+def _normalize_unit(unit: str | None) -> str | None:
+    if not unit:
+        return None
+    key = unit.strip().lower()
+    return _UNIT_ALIASES.get(key, key)
+
+
+def _convert_amount(value: float | int | None, unit: str | None) -> tuple[str, float] | None:
+    if value is None:
+        return None
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return None
+    if amount < 0:
+        return None
+
+    normalized = _normalize_unit(unit)
+    if not normalized:
+        return None
+
+    if normalized in _VOLUME_TO_ML:
+        return ("volume", amount * _VOLUME_TO_ML[normalized])
+    if normalized in _WEIGHT_TO_G:
+        return ("weight", amount * _WEIGHT_TO_G[normalized])
+    if normalized in _COUNT_UNITS:
+        return ("count", amount)
+    return None
+
+
+def _normalize_name(name: str | None) -> str:
+    if not name:
+        return ""
+    return re.sub(r"\s+", " ", name.strip().lower())
+
+
+def _name_tokens(name: str) -> list[str]:
+    return [tok for tok in re.findall(r"[\w]+", _normalize_name(name)) if tok]
+
+
+def _ingredient_matches_inventory_name(ingredient_name: str, inventory_name: str) -> bool:
+    ing_norm = _normalize_name(ingredient_name)
+    inv_norm = _normalize_name(inventory_name)
+    if not ing_norm or not inv_norm:
+        return False
+
+    if ing_norm in inv_norm or inv_norm in ing_norm:
+        return True
+
+    ing_tokens = set(_name_tokens(ing_norm))
+    inv_tokens = set(_name_tokens(inv_norm))
+    if not ing_tokens or not inv_tokens:
+        return False
+
+    overlap = ing_tokens & inv_tokens
+    threshold = 1 if min(len(ing_tokens), len(inv_tokens)) <= 2 else 2
+    return len(overlap) >= threshold
+
+
+def _estimate_density_g_per_ml(ingredient_name: str | None, matched_items: list[dict]) -> float | None:
+    candidates = [ingredient_name or ""]
+    candidates.extend(str(item.get("item_name") or "") for item in matched_items)
+    for candidate in candidates:
+        normalized = _normalize_name(candidate)
+        if not normalized:
+            continue
+        for canonical, aliases in _INGREDIENT_DENSITY_ALIASES.items():
+            if any(alias in normalized for alias in aliases):
+                return _INGREDIENT_DENSITY_G_PER_ML[canonical]
+
+    # Fallback for liquid-like ingredients where strict weight-volume mismatch
+    # would otherwise produce false negatives (e.g. 300g cream vs 100ml required).
+    for candidate in candidates:
+        normalized = _normalize_name(candidate)
+        if normalized and any(keyword in normalized for keyword in _GENERIC_LIQUID_KEYWORDS):
+            return _GENERIC_LIQUID_DENSITY_G_PER_ML
+
+    for item in matched_items:
+        category = _normalize_name(item.get("category") or "")
+        if category in _GENERIC_LIQUID_CATEGORIES:
+            return _GENERIC_LIQUID_DENSITY_G_PER_ML
+    return None
+
+
+def _is_ingredient_covered_by_inventory(
+    ingredient: Any, matched_items: list[dict]
+) -> tuple[bool, float | None]:
+    """Returns (is_covered, coverage_ratio).
+
+    coverage_ratio is available/required (may be >1.0 if over-stocked).
+    Returns None when quantity comparison is not applicable (no qty, unknown units, no matches).
+    """
+    if not matched_items:
+        return False, None
+
+    ing_name = ingredient.get("name") if isinstance(ingredient, dict) else getattr(ingredient, "name", None)
+    req_qty = ingredient.get("quantity") if isinstance(ingredient, dict) else getattr(ingredient, "quantity", None)
+    req_unit = ingredient.get("unit") if isinstance(ingredient, dict) else getattr(ingredient, "unit", None)
+
+    # If recipe didn't specify amount, semantic match is enough.
+    if req_qty is None:
+        return True, None
+
+    req_converted = _convert_amount(req_qty, req_unit)
+    # Unknown units like "pinch" can't be compared robustly — treat semantic match as covered.
+    if req_converted is None:
+        return True, None
+
+    req_dimension, req_amount = req_converted
+    density_g_per_ml = _estimate_density_g_per_ml(ing_name, matched_items)
+    available = 0.0
+    for item in matched_items:
+        inv_converted = _convert_amount(item.get("quantity"), item.get("unit"))
+        if not inv_converted:
+            continue
+        inv_dimension, inv_amount = inv_converted
+        if inv_dimension == req_dimension:
+            available += inv_amount
+            continue
+
+        # Cross-dimension conversion for known ingredients (e.g. flour cup <-> grams).
+        if density_g_per_ml:
+            if req_dimension == "volume" and inv_dimension == "weight":
+                available += inv_amount / density_g_per_ml
+            elif req_dimension == "weight" and inv_dimension == "volume":
+                available += inv_amount * density_g_per_ml
+
+    ratio = available / req_amount if req_amount > 0 else 1.0
+    return available + 1e-9 >= req_amount, ratio
+
+
+def _refresh_recipe_ingredient_stock(recipe_row: dict, inventory_rows: list[dict]) -> dict:
+    """Recompute ingredient stock flags for saved recipes against current inventory."""
+    ingredients = recipe_row.get("ingredients") or []
+    refreshed_ingredients: list[dict] = []
+
+    for ingredient in ingredients:
+        ing_name = ingredient.get("name") if isinstance(ingredient, dict) else getattr(ingredient, "name", "")
+        matched_items = [
+            item for item in inventory_rows
+            if _ingredient_matches_inventory_name(ing_name, item.get("item_name"))
+        ]
+        covered, ratio = _is_ingredient_covered_by_inventory(ingredient, matched_items)
+
+        ing_dict = dict(ingredient) if isinstance(ingredient, dict) else {}
+        ing_dict["have_in_stock"] = covered
+        # Always expose ratio when computable — UI shows "have ~X / need Y" for every ingredient
+        # ratio is None only when units are incomparable (no conversion path available)
+        ing_dict["coverage_ratio"] = ratio
+        ing_dict["batch_ids"] = [item["id"] for item in matched_items] if covered else []
+        refreshed_ingredients.append(ing_dict)
+
+    refreshed_row = dict(recipe_row)
+    refreshed_row["ingredients"] = refreshed_ingredients
+    return refreshed_row
+
 
 def generate_recipes(user_id: str, categories: list[str], use_expiring: bool, prompt: str | None) -> dict:
     """
@@ -485,15 +719,20 @@ Rules:
     try:
         output: _Output = structured_llm.invoke(system_prompt)
         recipes = output.recipes
-        # Post-process: populate batch_ids via substring match (best-effort)
+        # Post-process: make have_in_stock deterministic and unit-aware
+        # so measurements like tbsp/tsp vs ml/L don't produce false missing tags.
         for recipe in recipes:
             for ingredient in recipe.ingredients:
-                if ingredient.have_in_stock:
-                    ingredient.batch_ids = [
-                        item["id"] for item in all_inv
-                        if (ingredient.name.lower() in item["item_name"].lower()
-                            or item["item_name"].lower() in ingredient.name.lower())
-                    ]
+                matched_items = [
+                    item for item in all_inv
+                    if _ingredient_matches_inventory_name(ingredient.name, item.get("item_name"))
+                ]
+                covered, ratio = _is_ingredient_covered_by_inventory(ingredient, matched_items)
+                ingredient.have_in_stock = bool(ingredient.have_in_stock or covered)
+                in_stock = ingredient.have_in_stock
+                # Always expose ratio when computable — UI shows "have ~X / need Y" for every ingredient
+                ingredient.coverage_ratio = ratio
+                ingredient.batch_ids = [item["id"] for item in matched_items] if in_stock else []
         return {"recipes": [r.model_dump() for r in recipes]}
     except Exception as exc:
         raise ValueError(f"Recipe generation failed: {exc}") from exc
@@ -587,7 +826,12 @@ def get_saved_recipes(user_id: str, limit: int = 20, offset: int = 0) -> list[di
         .limit(limit)
         .offset(offset)
         .execute())
-    return result.data or []
+    rows = result.data or []
+    if not rows:
+        return []
+
+    live_inventory = [item for item in get_all_inventory(user_id) if (item.get("quantity") or 0) > 0]
+    return [_refresh_recipe_ingredient_stock(row, live_inventory) for row in rows]
 
 
 def get_saved_recipe(user_id: str, recipe_id: int) -> dict | None:
@@ -599,7 +843,11 @@ def get_saved_recipe(user_id: str, recipe_id: int) -> dict | None:
         .eq("user_id", user_id)
         .limit(1)
         .execute())
-    return result.data[0] if result.data else None
+    if not result.data:
+        return None
+
+    live_inventory = [item for item in get_all_inventory(user_id) if (item.get("quantity") or 0) > 0]
+    return _refresh_recipe_ingredient_stock(result.data[0], live_inventory)
 
 
 def delete_saved_recipe(user_id: str, recipe_id: int) -> bool:

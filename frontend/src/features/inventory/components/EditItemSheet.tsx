@@ -31,11 +31,13 @@ interface EditItemSheetProps {
 
 const LOCATIONS = ['Fridge', 'Freezer', 'Pantry', 'Counter']
 const CATEGORIES = ['Dairy', 'Meat', 'Vegetable', 'Fruit', 'Pantry', 'Beverage', 'Snacks', 'Other']
+const UNITS = ['pcs', 'g', 'kg', 'ml', 'L', 'tbsp', 'tsp', 'cup', 'pack', 'bunch', 'bag', 'can', 'bottle', 'box']
 
 // Numeric fields stored as strings to avoid leading-zero bug
 interface FormState {
   quantity: string
   total_volume: string
+  unit: string
   brand: string
   category: string
   expiry_date: string
@@ -64,6 +66,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
   const [form, setForm] = useState<FormState>({
     quantity: '',
     total_volume: '',
+    unit: '',
     brand: '',
     category: '',
     expiry_date: '',
@@ -78,6 +81,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
       setForm({
         quantity: String(batch.quantity),
         total_volume: String(batch.total_volume),
+        unit: batch.unit,
         brand: batch.brand ?? '',
         category: batch.category ?? '',
         expiry_date: batch.expiry_date ?? '',
@@ -106,7 +110,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
     if (!canSlide) return
     // Round to 1 decimal; for small units (ml/g) round to integer
     const raw = (pct / 100) * tv
-    const isInt = ['pcs', 'pack', 'can', 'bottle', 'ml', 'g'].includes(batch?.unit ?? '')
+    const isInt = ['pcs', 'pack', 'can', 'bottle', 'ml', 'g'].includes((form.unit || batch?.unit) ?? '')
     const value = isInt ? Math.round(raw) : Math.round(raw * 10) / 10
     setForm((prev) => ({ ...prev, quantity: String(value), is_open: pct < 100 }))
     if (errors.quantity) setErrors((prev) => ({ ...prev, quantity: undefined }))
@@ -144,6 +148,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
       data: {
         quantity: parseFloat(form.quantity),
         total_volume: parseFloat(form.total_volume),
+        unit: form.unit.trim() || undefined,
         brand: form.brand.trim() || undefined,
         category: form.category || undefined,
         expiry_date: form.expiry_date || undefined,
@@ -230,7 +235,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
                     {Math.round(sliderPct)}%
                   </span>
                   <span className="text-sm text-muted-foreground tabular-nums">
-                    {form.quantity || '?'} / {form.total_volume || '?'} {batch.unit}
+                    {form.quantity || '?'} / {form.total_volume || '?'} {form.unit || batch.unit}
                   </span>
                 </div>
 
@@ -266,7 +271,7 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
                       className={cn('h-10 pr-10', errors.quantity && 'border-destructive')}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-                      {batch.unit}
+                      {form.unit || batch.unit}
                     </span>
                   </div>
                   <FieldError msg={errors.quantity} />
@@ -283,11 +288,26 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
                       className={cn('h-10 pr-10', errors.total_volume && 'border-destructive')}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-                      {batch.unit}
+                      {form.unit || batch.unit}
                     </span>
                   </div>
                   <FieldError msg={errors.total_volume} />
                 </div>
+              </div>
+
+              {/* Unit */}
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>{t('inventory.editSheet.unit')}</FieldLabel>
+                <Input
+                  value={form.unit}
+                  onChange={(e) => set('unit', e.target.value)}
+                  placeholder="pcs"
+                  list="edit-sheet-units"
+                  className="h-10"
+                />
+                <datalist id="edit-sheet-units">
+                  {UNITS.map((u) => <option key={u} value={u} />)}
+                </datalist>
               </div>
             </div>
 

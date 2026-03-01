@@ -64,6 +64,7 @@ export interface AddInventoryRequest {
 export interface UpdateInventoryRequest {
   quantity?: number
   total_volume?: number
+  unit?: string
   brand?: string
   category?: string
   expiry_date?: string
@@ -193,6 +194,8 @@ export interface RecipeIngredient {
   unit: string | null
   have_in_stock: boolean
   batch_ids: number[]
+  /** Available / required ratio. Only set when have_in_stock=false and qty was comparable. */
+  coverage_ratio: number | null
 }
 
 export interface RecipeCard {
@@ -276,6 +279,8 @@ export interface ShoppingItemUpdate {
   category?: string
   is_checked?: boolean
   note?: string
+  source_recipe_id?: number
+  source_recipe_title?: string
 }
 
 export interface CompleteShoppingRequest {

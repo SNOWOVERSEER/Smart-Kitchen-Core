@@ -11,6 +11,7 @@ import {
   completeShopping,
 } from '@/features/shopping/api'
 import type {
+  ShoppingItem,
   ShoppingItemCreate,
   ShoppingItemUpdate,
   CompleteShoppingRequest,
@@ -47,13 +48,38 @@ export function useAddShoppingItemsBulk() {
 
 export function useToggleShoppingItem() {
   const qc = useQueryClient()
+
+  function sortLikeBackend(items: ShoppingItem[]) {
+    return [...items].sort((a, b) => {
+      if (a.is_checked !== b.is_checked) return Number(a.is_checked) - Number(b.is_checked)
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+  }
+
   return useMutation({
     mutationFn: ({ id, is_checked }: { id: number; is_checked: boolean }) =>
       updateShoppingItem(id, { is_checked }),
-    onSuccess: () => {
+    onMutate: async ({ id, is_checked }) => {
+      await qc.cancelQueries({ queryKey: SHOPPING_KEY })
+      const previous = qc.getQueryData<ShoppingItem[]>(SHOPPING_KEY)
+
+      qc.setQueryData<ShoppingItem[]>(SHOPPING_KEY, (old) => {
+        if (!old) return old
+        const next = old.map((item) =>
+          item.id === id ? { ...item, is_checked } : item
+        )
+        return sortLikeBackend(next)
+      })
+
+      return { previous }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(SHOPPING_KEY, ctx.previous)
+      toast.error('Failed to update item')
+    },
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
-    onError: () => toast.error('Failed to update item'),
   })
 }
 
@@ -97,6 +123,7 @@ export function useCompleteShopping() {
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
       void qc.invalidateQueries({ queryKey: ['inventory'] })
+      void qc.invalidateQueries({ queryKey: ['recipes'] })
       if (data.failed_items.length > 0) {
         toast.error(i18next.t('shopping.completeFailed'))
       } else {

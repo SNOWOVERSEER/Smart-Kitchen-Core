@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { ChevronRight, RefreshCw } from 'lucide-react'
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useTranslation } from 'react-i18next'
 import { useSavedRecipes } from '@/features/recipes/hooks/useRecipes'
 import { SavedRecipeCard } from './SavedRecipeCard'
@@ -13,7 +14,7 @@ interface Props {
 
 export function HeartCollectionPanel({ open, onClose }: Props) {
   const { t } = useTranslation()
-  const { data: recipes = [], isLoading } = useSavedRecipes()
+  const { data: recipes = [], isLoading, isFetching, refetch } = useSavedRecipes()
   const [selectedRecipe, setSelectedRecipe] = useState<SavedRecipe | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
@@ -25,9 +26,30 @@ export function HeartCollectionPanel({ open, onClose }: Props) {
   return (
     <>
       <Sheet open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-        <SheetContent side="right" className="sm:max-w-[420px] flex flex-col p-0">
+        <SheetContent side="right" showCloseButton={false} className="sm:max-w-[420px] flex flex-col p-0">
           <SheetHeader className="px-5 pt-5 pb-4 border-b border-border shrink-0">
-            <SheetTitle>{t('recipes.savedRecipesPanel')}</SheetTitle>
+            <div className="flex items-center justify-between gap-2">
+              <SheetTitle>{t('recipes.savedRecipesPanel')}</SheetTitle>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void refetch()}
+                  disabled={isFetching}
+                  className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  aria-label="Refresh saved recipes"
+                  title="Refresh"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+                </button>
+                <SheetClose
+                  className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center cursor-pointer"
+                  aria-label="Close saved recipes"
+                  title="Close"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </SheetClose>
+              </div>
+            </div>
           </SheetHeader>
           <div className="flex-1 overflow-y-auto p-4">
             {isLoading ? (

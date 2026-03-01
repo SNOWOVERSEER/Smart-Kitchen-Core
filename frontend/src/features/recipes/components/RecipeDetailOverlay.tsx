@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Clock, Users, CheckCircle2, Trash2 } from 'lucide-react'
+import { X, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Check } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useDeleteRecipe } from '@/features/recipes/hooks/useRecipes'
+import { useAddShoppingItem } from '@/features/shopping/hooks/useShoppingList'
 import { AddFromRecipeSheet } from './AddFromRecipeSheet'
-import type { RecipeCard, SavedRecipe } from '@/shared/lib/api.types'
+import type { RecipeCard, SavedRecipe, RecipeIngredient } from '@/shared/lib/api.types'
 
 interface Props {
   recipe: RecipeCard | SavedRecipe | null
@@ -30,7 +31,26 @@ export function RecipeDetailOverlay({ recipe, open, onClose, onSave, onSkip, sav
   const isSaved = savedRecipeId != null
   const missingIngredients = recipe ? recipe.ingredients.filter(i => !i.have_in_stock) : []
   const [addSheetOpen, setAddSheetOpen] = useState(false)
+  const [addedItems, setAddedItems] = useState<Set<string>>(new Set())
   const deleteRecipe = useDeleteRecipe()
+  const addItem = useAddShoppingItem()
+
+  // Reset added state when recipe changes
+  useEffect(() => { setAddedItems(new Set()) }, [recipe?.title])
+
+  function handleAddIngredientToList(ing: RecipeIngredient) {
+    if (addedItems.has(ing.name) || !recipe) return
+    addItem.mutate(
+      {
+        item_name: ing.name,
+        quantity: ing.quantity ?? undefined,
+        unit: ing.unit ?? undefined,
+        source: 'recipe',
+        source_recipe_title: recipe.title,
+      },
+      { onSuccess: () => setAddedItems((prev) => new Set(prev).add(ing.name)) }
+    )
+  }
 
   const firstTag = recipe?.tags[0]?.toLowerCase() ?? ''
   const gradientKey = Object.keys(TAG_GRADIENT_MAP).find(k => firstTag.includes(k))
@@ -134,25 +154,70 @@ export function RecipeDetailOverlay({ recipe, open, onClose, onSave, onSkip, sav
 
                   {/* Ingredients */}
                   <div>
-                    <h3 className="font-display text-xl font-semibold text-[#1C1612] mb-3">
+                    <h3 className="font-display text-xl font-semibold text-[#1C1612] mb-1">
                       {t('recipes.ingredients')}
                     </h3>
-                    <ul className="flex flex-col gap-2.5">
-                      {recipe.ingredients.map((ing) => (
-                        <li key={ing.name} className="flex items-center gap-2.5 text-sm">
-                          {ing.have_in_stock ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                          ) : (
-                            <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 ml-1.5 mr-0.5" />
-                          )}
-                          <span className="text-stone-700">{ing.name}</span>
-                          {(ing.quantity != null || ing.unit != null) && (
-                            <span className="text-stone-400 ml-auto whitespace-nowrap text-xs">
-                              {ing.quantity != null ? ing.quantity : ''}{ing.unit ? ` ${ing.unit}` : ''}
-                            </span>
-                          )}
-                        </li>
-                      ))}
+                    <ul className="flex flex-col divide-y divide-stone-100">
+                      {recipe.ingredients.map((ing) => {
+                        const isGreen = ing.have_in_stock && (ing.coverage_ratio === null || ing.coverage_ratio > 1.1)
+                        const isAmber =
+                          (ing.have_in_stock && ing.coverage_ratio != null && ing.coverage_ratio <= 1.1) ||
+                          (!ing.have_in_stock && ing.coverage_ratio != null && ing.coverage_ratio >= 0.75)
+                        // Estimated available quantity (coverage ratio × required, rounded sensibly)
+                        const availQty = ing.coverage_ratio != null && ing.quantity != null
+                          ? (() => {
+                              const raw = ing.coverage_ratio * ing.quantity
+                              return raw >= 10 ? Math.round(raw) : Math.round(raw * 10) / 10
+                            })()
+                          : null
+                        const isAdded = addedItems.has(ing.name)
+                        return (
+                          <li key={ing.name} className="flex items-center gap-2.5 py-2.5">
+                            {/* Name + status sub-row */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13.5px] font-medium text-[#1C1612] leading-snug">{ing.name}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                {/* Status: icon + label */}
+                                <span className={`inline-flex items-center gap-0.5 text-[10.5px] font-semibold ${
+                                  isGreen ? 'text-emerald-600' : isAmber ? 'text-amber-500' : 'text-stone-400'
+                                }`}>
+                                  {isGreen
+                                    ? <CheckCircle2 className="w-3 h-3" />
+                                    : isAmber
+                                      ? <AlertCircle className="w-3 h-3" />
+                                      : <span className="w-3 h-3 flex items-center justify-center"><span className="w-1.5 h-1.5 rounded-full bg-stone-300 inline-block" /></span>
+                                  }
+                                  {isGreen ? t('recipes.inStockLabel') : isAmber ? t('recipes.checkAmountLabel') : t('recipes.notInStockLabel')}
+                                </span>
+                                {availQty != null && (
+                                  <span className="text-[10.5px] text-stone-400 tabular-nums">
+                                    · {t('recipes.haveQty')} ~{availQty}{ing.unit ? ` ${ing.unit}` : ''}
+                                  </span>
+                                )}
+                                {ing.quantity != null && (
+                                  <span className="text-[10.5px] text-stone-400 tabular-nums">
+                                    · {t('recipes.needQty')} {ing.quantity}{ing.unit ? ` ${ing.unit}` : ''}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {/* Add to shopping list */}
+                            <button
+                              type="button"
+                              onClick={() => handleAddIngredientToList(ing)}
+                              disabled={isAdded}
+                              className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                                isAdded
+                                  ? 'bg-emerald-500 text-white cursor-default'
+                                  : 'bg-stone-100 text-stone-400 hover:bg-primary/10 hover:text-primary'
+                              }`}
+                              aria-label={`Add ${ing.name} to shopping list`}
+                            >
+                              {isAdded ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                            </button>
+                          </li>
+                        )
+                      })}
                     </ul>
                   </div>
 

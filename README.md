@@ -7,6 +7,8 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 - **Batch-Level Tracking**: Every inventory entry is a distinct "Batch" with its own expiry date, brand, and quantity
 - **FEFO Logic**: First Expired, First Out — automatically prioritizes open and soonest-expiring items
 - **AI-Powered Agent**: Natural language interface (Chinese + English) using a tool-calling ReAct loop
+- **Recipe Studio**: Generate recipe cards from pantry + preferences, save favorites, and generate dish images
+- **Shopping List Flow**: Add items manually/from recipes/agent, then convert checked items into inventory in one step
 - **Human-in-the-Loop**: Preview + confirmation before any write operation (consume/discard/update)
 - **Multi-Turn Conversations**: Conversation state persisted via Supabase checkpointing
 - **Per-User AI Keys**: Users bring their own OpenAI or Anthropic API key (encrypted in Supabase Vault)
@@ -28,6 +30,18 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 | Auth         | Supabase Auth (email/password JWT)                 |
 | AI Framework | LangChain / LangGraph (tool-calling ReAct)         |
 | LLM          | OpenAI GPT-4o / Anthropic Claude (per-user config) |
+
+## Frontend Routes (Current)
+
+| Route | Behavior |
+| --- | --- |
+| `/` | Landing page (includes login/register entry) |
+| `/login` | Alias of landing page (legacy login URL support) |
+| `/signup` | Standalone signup page (legacy flow still available) |
+| `/dashboard` | Protected inventory dashboard |
+| `/recipes` | Protected recipe generation + card stage |
+| `/shopping` | Protected shopping list |
+| `/chat`, `/history`, `/barcode`, `/settings` | Protected utility pages |
 
 ## Quick Start
 
@@ -134,6 +148,46 @@ DELETE /api/v1/inventory/{batch_id}     # Discard batch
 POST   /api/v1/inventory/consume        # FEFO consumption
 ```
 
+### Recipes
+
+```http
+POST   /api/v1/recipes/generate                      # Generate recipe cards
+POST   /api/v1/recipes                               # Save one liked recipe
+GET    /api/v1/recipes?limit=20&offset=0            # List saved recipes
+GET    /api/v1/recipes/{recipe_id}                  # Get one saved recipe
+POST   /api/v1/recipes/{recipe_id}/generate-image   # Generate/update recipe image_url
+DELETE /api/v1/recipes/{recipe_id}                  # Delete saved recipe
+```
+
+**Generate recipes request:**
+```json
+{
+  "categories": ["Quick & Easy", "High Protein"],
+  "use_expiring": false,
+  "prompt": "spicy noodles in 20 minutes"
+}
+```
+
+### Shopping List
+
+```http
+GET    /api/v1/shopping                # List items (unchecked first)
+POST   /api/v1/shopping                # Add single item
+POST   /api/v1/shopping/bulk           # Bulk add items
+PATCH  /api/v1/shopping/{item_id}      # Edit/check item
+POST   /api/v1/shopping/complete       # Convert selected items to inventory
+DELETE /api/v1/shopping/checked        # Delete all checked items
+DELETE /api/v1/shopping/{item_id}      # Delete one item
+```
+
+**Complete shopping request:**
+```json
+{
+  "item_ids": [101, 102, 103],
+  "default_location": "Fridge"
+}
+```
+
 **Add batch request:**
 ```json
 {
@@ -238,10 +292,12 @@ User confirms → execute_write → respond
 |---|---|---|
 | `search_inventory` | Read | Case-insensitive search by name/brand/location |
 | `get_batch_details` | Read | Fetch single batch by ID |
+| `get_shopping_list` | Read | Read shopping list before add/checking duplicates |
 | `add_item` | Write | Add new batch |
 | `consume_item` | Write | FEFO deduction across batches |
 | `discard_batch` | Write | Remove a batch |
 | `update_item` | Write | Change location, is_open, quantity, or expiry |
+| `add_to_shopping_list` | Write | Add an item to shopping list |
 
 ### Key Behaviors
 
@@ -251,6 +307,7 @@ User confirms → execute_write → respond
 - **Category inference**: Infers category from item name when not specified
 - **Bilingual**: Responds in user's language; internal DB values stay English
 - **Per-user LLM**: Each user configures their own AI provider and API key
+- **Shopping-aware**: Agent can read shopping list and create shopping items with confirmation
 
 ## FEFO Algorithm
 
@@ -288,6 +345,8 @@ Result:
 | `inventory`           | Inventory batches (RLS scoped)         |
 | `transaction_logs`    | Audit trail — INBOUND/CONSUME/DISCARD/UPDATE |
 | `agent_conversations` | Multi-turn conversation checkpoints    |
+| `saved_recipes`       | User-liked recipes + prompts + image URL |
+| `shopping_items`      | User shopping items + source metadata  |
 
 All tables have Row-Level Security. API keys are stored encrypted in Supabase Vault.
 
@@ -318,8 +377,11 @@ smart-kitchen-core/
 ├── frontend/
 │   └── src/
 │       ├── features/
-│       │   ├── auth/        # Login, Signup
+│       │   ├── auth/        # Signup/auth API
+│       │   ├── landing/     # Landing page (includes login/register entry)
 │       │   ├── inventory/   # Dashboard, item cards, add/edit/consume sheets
+│       │   ├── recipes/     # Recipe prompt panel + fan/stack/grid card stage
+│       │   ├── shopping/    # Shopping list CRUD + complete-to-inventory flow
 │       │   ├── chat/        # Agent drawer (desktop) + chat page (mobile)
 │       │   ├── history/     # Transaction log with filters + export
 │       │   ├── barcode/     # Camera scanner + product lookup
@@ -360,6 +422,7 @@ VITE_API_URL=http://localhost:8001
 - `access_token` stored in Zustand memory; `refresh_token` in `localStorage` (`sk_refresh_token`)
 - 401 auto-refresh handled in `src/shared/lib/axios.ts`
 - UI language syncs automatically from `profile.preferred_language` via `TopBar`
+- `/` and `/login` both render `LandingPage`; authenticated users are redirected to `/dashboard`
 - Never edit `src/routeTree.gen.ts` — it is auto-generated by the TanStack Router Vite plugin
 - Use Tailwind responsive prefixes (`sm:`, `lg:`) for layout, not `useMediaQuery`
 

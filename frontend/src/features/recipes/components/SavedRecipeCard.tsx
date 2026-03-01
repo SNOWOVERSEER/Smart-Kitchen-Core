@@ -23,7 +23,13 @@ export function SavedRecipeCard({ recipe, onClick }: Props) {
   const gradientKey = Object.keys(TAG_GRADIENT_MAP).find(k => firstTag.includes(k))
   const gradientClass = gradientKey ? TAG_GRADIENT_MAP[gradientKey] : 'from-accent to-muted'
 
-  const inStockCount = recipe.ingredients.filter(i => i.have_in_stock).length
+  const inStockCount = recipe.ingredients.filter(
+    i => i.have_in_stock && (i.coverage_ratio === null || i.coverage_ratio > 1.1)
+  ).length
+  const partialCount = recipe.ingredients.filter(
+    i => (i.have_in_stock && i.coverage_ratio != null && i.coverage_ratio <= 1.1) ||
+         (!i.have_in_stock && i.coverage_ratio != null && i.coverage_ratio >= 0.75)
+  ).length
   const totalCount = recipe.ingredients.length
 
   return (
@@ -63,11 +69,17 @@ export function SavedRecipeCard({ recipe, onClick }: Props) {
           </div>
         )}
         {totalCount > 0 && (
-          <div className="h-1 bg-muted rounded-full overflow-hidden">
+          <div className="h-1 bg-muted rounded-full overflow-hidden flex">
             <div
-              className="h-full bg-emerald-500 rounded-full"
+              className="h-full bg-emerald-500"
               style={{ width: `${(inStockCount / totalCount) * 100}%` }}
             />
+            {partialCount > 0 && (
+              <div
+                className="h-full bg-amber-400"
+                style={{ width: `${(partialCount / totalCount) * 100}%` }}
+              />
+            )}
           </div>
         )}
         {recipe.tags.length > 0 && (

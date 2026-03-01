@@ -181,8 +181,8 @@ export function RecipeCardDeck({
   if (!isGenerating && !hasDeck && !isDone) {
     return (
       // Explicit width — avoids w-full collapsing to 0 in flex-col items-center parents
-      <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-8">
-        <div className="relative mx-auto aspect-[3/4] w-[clamp(220px,64vw,300px)] sm:w-[clamp(240px,56vw,320px)]">
+      <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-8 pb-[calc(env(safe-area-inset-bottom)+4.6rem)] [@media(max-height:760px)]:pb-[calc(env(safe-area-inset-bottom)+4rem)]">
+        <div className="relative mx-auto aspect-[3/4] h-[min(46vh,420px)] [@media(max-height:900px)]:h-[min(44vh,390px)] [@media(max-height:760px)]:h-[min(40vh,330px)] w-auto max-w-[78vw] [@media(max-width:430px)]:max-w-[72vw] [@media(max-width:380px)]:max-w-[68vw] sm:max-w-[68vw] lg:h-[min(58vh,520px)] lg:max-w-[360px]">
           {[0, 1, 2, 3, 4].map((i) => (
             <motion.div
               key={`tarot-${i}`}
@@ -203,9 +203,9 @@ export function RecipeCardDeck({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="absolute -bottom-14 left-0 right-0 flex justify-center pointer-events-none z-10"
+            className="absolute bottom-2 [@media(max-height:760px)]:bottom-1 left-0 right-0 flex justify-center pointer-events-none z-20"
           >
-            <div className="max-w-[calc(100vw-2rem)] bg-card/90 backdrop-blur-md px-4 py-2 rounded-full font-display text-foreground font-semibold shadow-xl border border-border flex items-center justify-center gap-2 text-sm text-center leading-tight">
+            <div className="max-w-[calc(100vw-1.5rem)] bg-card/92 backdrop-blur-md px-4 py-2 [@media(max-width:380px)]:px-3.5 [@media(max-width:380px)]:py-1.5 rounded-full font-display text-foreground font-semibold shadow-xl border border-border flex items-center justify-center gap-2 text-sm [@media(max-width:380px)]:text-[13px] text-center leading-tight">
               <Sparkles size={14} className="text-primary shrink-0" />
               <span className="min-w-0 break-words">{t('recipes.initialHint')}</span>
             </div>
@@ -218,8 +218,8 @@ export function RecipeCardDeck({
   // ── Shuffling / generating state ──────────────────────────────────
   if (isGenerating) {
     return (
-      <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-4">
-        <div className="relative mx-auto aspect-[3/4] w-[clamp(220px,64vw,300px)] sm:w-[clamp(240px,56vw,320px)]">
+      <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-4 pb-[calc(env(safe-area-inset-bottom)+4rem)]">
+        <div className="relative mx-auto aspect-[3/4] h-[min(46vh,420px)] [@media(max-height:900px)]:h-[min(44vh,390px)] [@media(max-height:760px)]:h-[min(40vh,330px)] w-auto max-w-[78vw] [@media(max-width:430px)]:max-w-[72vw] [@media(max-width:380px)]:max-w-[68vw] sm:max-w-[68vw] lg:h-[min(58vh,520px)] lg:max-w-[360px]">
           {[0, 1, 2, 3, 4].map((i) => (
             <motion.div
               key={`shuffle-${i}`}
@@ -248,8 +248,8 @@ export function RecipeCardDeck({
   // ── All cards done ────────────────────────────────────────────────
   if (isDone) {
     return (
-      <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-5 py-10">
-        <div className="relative mx-auto aspect-[3/4] w-[clamp(220px,64vw,300px)] sm:w-[clamp(240px,56vw,320px)] opacity-40">
+      <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-5 py-10 pb-[calc(env(safe-area-inset-bottom)+4rem)]">
+        <div className="relative mx-auto aspect-[3/4] h-[min(46vh,420px)] [@media(max-height:900px)]:h-[min(44vh,390px)] [@media(max-height:760px)]:h-[min(40vh,330px)] w-auto max-w-[78vw] [@media(max-width:430px)]:max-w-[72vw] [@media(max-width:380px)]:max-w-[68vw] sm:max-w-[68vw] lg:h-[min(58vh,520px)] lg:max-w-[360px] opacity-40">
           {[0, 1, 2].map((i) => (
             <motion.div
               key={`done-${i}`}
@@ -350,9 +350,8 @@ export function RecipeCardDeck({
 
   return (
     <div
-      className={`w-full min-h-0 overflow-x-hidden ${
-        viewMode === 'grid' ? 'flex flex-col gap-4' : 'flex h-full min-h-0 flex-col overflow-hidden'
-      }`}
+      className={`w-full min-h-0 overflow-x-hidden ${viewMode === 'grid' ? 'flex flex-col gap-4' : 'flex h-full min-h-0 flex-col overflow-hidden'
+        }`}
     >
       {/* Card area */}
       {viewMode === 'grid' ? (
@@ -387,7 +386,7 @@ export function RecipeCardDeck({
                 </button>
 
                 <div
-                  className="relative z-10 mx-auto aspect-[3/4] h-[min(100%,520px)] w-auto max-w-[84vw] [@media(max-width:380px)]:max-w-[74vw] sm:max-w-[76vw] lg:max-w-[360px] translate-y-[clamp(2px,0.8vh,10px)] lg:translate-y-0"
+                  className="relative z-10 mx-auto aspect-[3/4] h-[min(100%,500px)] [@media(max-height:840px)]:h-[min(100%,440px)] [@media(max-height:760px)]:h-[min(100%,380px)] w-auto max-w-[80vw] [@media(max-width:430px)]:max-w-[74vw] [@media(max-width:380px)]:max-w-[70vw] sm:max-w-[72vw] lg:max-w-[360px] translate-y-[clamp(2px,0.8vh,10px)] lg:translate-y-0"
                   style={{ perspective: 1000 }}
                 >
                   {allRemaining.map((recipe, idx) => {
@@ -432,7 +431,7 @@ export function RecipeCardDeck({
             <div className="relative mx-auto flex h-full w-full min-h-0 flex-col items-center justify-center overflow-visible pt-2 pb-3 lg:pb-8">
               <div className="relative flex w-full flex-1 min-h-0 items-center justify-center">
                 <div
-                  className="relative z-10 aspect-[3/4] h-[min(100%,500px)] w-auto max-w-[82vw] [@media(max-width:380px)]:max-w-[72vw] sm:max-w-[74vw] lg:max-w-[340px] translate-y-[clamp(0px,0.4vh,6px)] lg:translate-y-0"
+                  className="relative z-10 aspect-[3/4] h-[min(100%,480px)] [@media(max-height:840px)]:h-[min(100%,430px)] [@media(max-height:760px)]:h-[min(100%,370px)] w-auto max-w-[80vw] [@media(max-width:430px)]:max-w-[74vw] [@media(max-width:380px)]:max-w-[69vw] sm:max-w-[72vw] lg:max-w-[340px] translate-y-[clamp(0px,0.4vh,6px)] lg:translate-y-0"
                   style={{ perspective: 1000 }}
                 >
                   {[...visibleStack].reverse().map((recipe, revIdx) => {
