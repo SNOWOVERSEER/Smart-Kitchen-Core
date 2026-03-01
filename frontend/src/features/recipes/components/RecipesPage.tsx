@@ -163,9 +163,8 @@ export function RecipesPage() {
         {/* RIGHT column: heart button (desktop) + card deck */}
         <div
           className={cn(
-            'flex-1 min-h-0 flex flex-col overflow-x-hidden relative',
+            'flex-1 min-h-0 flex flex-col overflow-hidden [@media(pointer:fine)]:overflow-y-auto relative',
             deckViewMode === 'grid' ? 'py-4 lg:py-6' : 'pt-3 pb-0 lg:py-6',
-            deckViewMode === 'grid' ? 'overflow-y-auto' : 'overflow-y-hidden overscroll-none'
           )}
         >
           {/* Mobile hero + compact filter — hidden on lg+ */}
@@ -273,7 +272,7 @@ export function RecipesPage() {
           {/* Mode-based deck width keeps stack/fan centered while letting grid breathe */}
           <div
             className={cn(
-              'mx-auto w-full flex flex-col flex-1 min-h-0',
+              'mx-auto w-full flex flex-col flex-1 min-h-0 [@media(pointer:fine)]:min-h-[520px]',
               deckViewMode === 'grid' ? 'max-w-[1260px]' : 'max-w-[920px]'
             )}
           >

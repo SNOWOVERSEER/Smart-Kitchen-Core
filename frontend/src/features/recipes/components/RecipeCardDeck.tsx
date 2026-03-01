@@ -350,7 +350,7 @@ export function RecipeCardDeck({
 
   return (
     <div
-      className={`w-full min-h-0 overflow-x-hidden ${viewMode === 'grid' ? 'flex flex-col gap-4' : 'flex h-full min-h-0 flex-col overflow-hidden'
+      className={`w-full ${viewMode === 'grid' ? 'flex flex-col gap-4 overflow-x-hidden' : 'flex h-full min-h-0 flex-col overflow-hidden'
         }`}
     >
       {/* Card area */}
@@ -386,7 +386,7 @@ export function RecipeCardDeck({
                 </button>
 
                 <div
-                  className="relative z-10 mx-auto aspect-[3/4] h-[min(100%,500px)] [@media(max-height:840px)]:h-[min(100%,440px)] [@media(max-height:760px)]:h-[min(100%,380px)] w-auto max-w-[80vw] [@media(max-width:430px)]:max-w-[74vw] [@media(max-width:380px)]:max-w-[70vw] sm:max-w-[72vw] lg:max-w-[360px] translate-y-[clamp(2px,0.8vh,10px)] lg:translate-y-0"
+                  className="relative z-10 mx-auto aspect-[3/4] h-[min(100%,500px)] [@media(pointer:fine)]:h-[clamp(370px,55vh,500px)] w-auto max-w-[80vw] [@media(max-width:430px)]:max-w-[74vw] [@media(max-width:380px)]:max-w-[70vw] sm:max-w-[72vw] lg:max-w-[360px] translate-y-[clamp(2px,0.8vh,10px)] lg:translate-y-0"
                   style={{ perspective: 1000 }}
                 >
                   {allRemaining.map((recipe, idx) => {
@@ -422,7 +422,7 @@ export function RecipeCardDeck({
                 </button>
               </div>
 
-              <div className="lg:hidden relative z-[60] mt-[clamp(16px,2.6vh,30px)] flex items-center justify-center gap-4 pointer-events-auto">
+              <div className="relative z-[60] mt-[clamp(16px,2.6vh,30px)] flex items-center justify-center gap-4 pointer-events-auto">
                 {actionButtons}
               </div>
             </div>
@@ -431,7 +431,7 @@ export function RecipeCardDeck({
             <div className="relative mx-auto flex h-full w-full min-h-0 flex-col items-center justify-center overflow-visible pt-2 pb-3 lg:pb-8">
               <div className="relative flex w-full flex-1 min-h-0 items-center justify-center">
                 <div
-                  className="relative z-10 aspect-[3/4] h-[min(100%,480px)] [@media(max-height:840px)]:h-[min(100%,430px)] [@media(max-height:760px)]:h-[min(100%,370px)] w-auto max-w-[80vw] [@media(max-width:430px)]:max-w-[74vw] [@media(max-width:380px)]:max-w-[69vw] sm:max-w-[72vw] lg:max-w-[340px] translate-y-[clamp(0px,0.4vh,6px)] lg:translate-y-0"
+                  className="relative z-10 aspect-[3/4] h-[min(100%,480px)] [@media(pointer:fine)]:h-[clamp(370px,52vh,480px)] w-auto max-w-[80vw] [@media(max-width:430px)]:max-w-[74vw] [@media(max-width:380px)]:max-w-[69vw] sm:max-w-[72vw] lg:max-w-[340px] translate-y-[clamp(0px,0.4vh,6px)] lg:translate-y-0"
                   style={{ perspective: 1000 }}
                 >
                   {[...visibleStack].reverse().map((recipe, revIdx) => {
@@ -456,7 +456,7 @@ export function RecipeCardDeck({
                 </div>
               </div>
 
-              <div className="lg:hidden relative z-[60] mt-[clamp(16px,2.6vh,30px)] flex items-center justify-center gap-4 pointer-events-auto">
+              <div className="relative z-[60] mt-[clamp(16px,2.6vh,30px)] flex items-center justify-center gap-4 pointer-events-auto">
                 {actionButtons}
               </div>
             </div>
@@ -465,13 +465,7 @@ export function RecipeCardDeck({
       )}
 
       {/* Action buttons */}
-      {viewMode !== 'grid' ? (
-        <>
-          <div className="hidden lg:flex relative z-20 w-full items-center justify-center gap-4">
-            {actionButtons}
-          </div>
-        </>
-      ) : (
+      {viewMode === 'grid' && (
         <>
           <div className="hidden lg:flex w-full justify-center">
             {modeToggle}
