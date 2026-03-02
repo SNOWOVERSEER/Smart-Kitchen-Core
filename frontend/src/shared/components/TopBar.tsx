@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect } from 'react'
-import { Bell, Search, ChefHat } from 'lucide-react'
+import { Bell, Search, ChefHat, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import {
@@ -20,6 +20,8 @@ interface TopBarProps {
   searchValue?: string
   onSearchChange?: (value: string) => void
   title?: string
+  mobileIcon?: LucideIcon
+  mobileActionsReverse?: boolean
   hideActions?: boolean
   actionsOnly?: boolean
   extraActions?: ReactNode
@@ -30,6 +32,8 @@ export function TopBar({
   searchValue,
   onSearchChange,
   title,
+  mobileIcon: MobileIconProp,
+  mobileActionsReverse = false,
   hideActions = false,
   actionsOnly = false,
   extraActions,
@@ -125,22 +129,56 @@ export function TopBar({
     )
   }
 
-  const brand = (
-    <div className="flex items-center gap-2 shrink-0">
+  const MobileIcon = MobileIconProp ?? ChefHat
+  const mobileLeadLabel = title ?? t('nav.brand')
+  const brandLabel = t('nav.brand')
+  const showBrandLine = mobileLeadLabel !== brandLabel
+  const mobileLead = (
+    <div className="flex items-center gap-2 shrink-0 min-w-0">
       <div
-        className="w-7 h-7 rounded-lg flex items-center justify-center"
+        className={cn(
+          'rounded-lg flex items-center justify-center shrink-0',
+          showBrandLine
+            ? 'w-9 h-9 [@media(max-width:380px)]:w-8 [@media(max-width:380px)]:h-8'
+            : 'w-7 h-7'
+        )}
         style={{ backgroundColor: '#C97B5C' }}
       >
-        <ChefHat className="w-4 h-4 text-white" />
+        <MobileIcon
+          className={cn(
+            'text-white',
+            showBrandLine
+              ? 'w-[18px] h-[18px] [@media(max-width:380px)]:w-4 [@media(max-width:380px)]:h-4'
+              : 'w-4 h-4'
+          )}
+        />
       </div>
-      <span
-        className="text-base text-foreground"
-        style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
-      >
-        {t('nav.brand')}
-      </span>
+      <div className="min-w-0">
+        {showBrandLine && (
+          <p className="text-[9px] leading-none font-semibold tracking-[0.11em] uppercase text-stone-400 [@media(max-width:380px)]:text-[8px]">
+            {brandLabel}
+          </p>
+        )}
+        <p
+          className={cn(
+            'text-foreground truncate',
+            showBrandLine ? 'text-[1.03rem] [@media(max-width:380px)]:text-[0.98rem] leading-tight mt-0.5' : 'text-base'
+          )}
+          style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
+        >
+          {mobileLeadLabel}
+        </p>
+      </div>
     </div>
   )
+
+  function renderMobileActions() {
+    return (
+      <div className={cn('flex items-center gap-2 shrink-0', mobileActionsReverse && 'flex-row-reverse')}>
+        {renderActions()}
+      </div>
+    )
+  }
 
   if (actionsOnly) {
     return (
@@ -151,14 +189,14 @@ export function TopBar({
   }
 
   return (
-    <header className={cn('bg-card border-b border-border shrink-0 px-4 sm:px-5 lg:px-6', className)}>
+    <header className={cn('bg-card border-b border-border shadow-[0_1px_0_rgba(28,22,18,0.04)] shrink-0 px-4 sm:px-5 lg:px-6', className)}>
       {hasSearch ? (
         <>
           <div className="lg:hidden pt-2.5 pb-3 sm:pt-3 sm:pb-4">
-            <div className="flex items-center gap-2.5 min-h-10">
-              {brand}
+            <div className="flex items-center gap-2.5 min-h-[clamp(2.95rem,6.7vh,3.4rem)]">
+              {mobileLead}
               <div className="flex-1" />
-              {renderActions()}
+              {renderMobileActions()}
             </div>
 
             <div className="mt-2.5 sm:mt-3">
@@ -200,10 +238,10 @@ export function TopBar({
           </div>
         </>
       ) : (
-        <div className="h-14 flex items-center gap-3">
-          {/* Brand mark — mobile/tablet only (sidebar handles branding on desktop) */}
+        <div className="h-[clamp(3.5rem,7.4vh,4.25rem)] flex items-center gap-3">
+          {/* Mobile page lead */}
           <div className="lg:hidden">
-            {brand}
+            {mobileLead}
           </div>
 
           {/* Page title — desktop only */}
@@ -217,7 +255,14 @@ export function TopBar({
           )}
 
           <div className="flex-1" />
-          {renderActions()}
+
+          <div className="lg:hidden">
+            {renderMobileActions()}
+          </div>
+
+          <div className="hidden lg:flex items-center gap-2 shrink-0">
+            {renderActions()}
+          </div>
         </div>
       )}
     </header>

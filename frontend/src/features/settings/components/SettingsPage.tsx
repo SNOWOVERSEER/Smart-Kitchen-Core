@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  User, Bot, Bell, CheckCircle, Trash2, Plus, Eye, EyeOff, Lock,
+  User, Bot, Bell, CheckCircle, Trash2, Plus, Eye, EyeOff, Lock, SlidersHorizontal,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/shared/stores/authStore'
@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { TopBar } from '@/shared/components/TopBar'
+import { DesktopPageHeader } from '@/shared/components/DesktopPageHeader'
 import { getAIConfigs, addAIConfig, deleteAIConfig, activateProvider } from '../api'
 import { getProfile, updateProfile } from '@/features/auth/api'
 import { queryClient } from '@/shared/lib/queryClient'
@@ -449,54 +450,67 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <TopBar title={t('settings.title')} />
+      <TopBar
+        actionsOnly
+        className="hidden lg:flex fixed top-4 right-4 z-30 rounded-xl border border-stone-200/80 bg-white/90 backdrop-blur-sm px-2 py-1.5 shadow-sm"
+      />
 
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="flex flex-col lg:flex-row h-full max-w-5xl mx-auto">
+      <div className="lg:hidden">
+        <TopBar title={t('settings.title')} mobileIcon={SlidersHorizontal} />
+      </div>
 
-          {/* Navigation — pill style on all breakpoints */}
-          <nav className={cn(
-            'flex shrink-0',
-            // mobile/tablet: horizontal scrollable row, left-aligned, no border
-            'flex-row gap-1 overflow-x-auto px-3 py-2',
-            // desktop: vertical column, right border
-            'lg:flex-col lg:gap-0.5 lg:w-52 lg:border-b-0 lg:border-r lg:py-6 lg:px-3 lg:overflow-x-visible',
-          )}>
-            {TABS.map(({ id, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={cn(
-                  'flex items-center gap-2 text-sm rounded-lg px-3 py-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer',
-                  'lg:w-full',
-                  activeTab === id
-                    ? 'bg-muted text-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
-                )}
-              >
-                <Icon className="hidden lg:block w-4 h-4 shrink-0" />
-                {t(`settings.tabs.${id}`)}
-              </button>
-            ))}
-          </nav>
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <DesktopPageHeader
+          icon={SlidersHorizontal}
+          title={t('settings.title')}
+          className="px-6 pt-6 pb-2"
+        />
 
-          {/* Main content */}
-          <main className="flex-1 min-h-0 overflow-y-auto px-4 lg:px-8 py-5 lg:py-8">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.15 }}
-              >
-                {activeTab === 'profile'       && <ProfileTab />}
-                {activeTab === 'ai'            && <AIConfigTab />}
-                {activeTab === 'notifications' && <NotificationsTab />}
-              </motion.div>
-            </AnimatePresence>
-          </main>
+        <div className="flex-1 min-h-0">
+          <div className="flex flex-col lg:flex-row h-full max-w-5xl mx-auto">
+            {/* Navigation — pill style on all breakpoints */}
+            <nav className={cn(
+              'flex shrink-0',
+              // mobile/tablet: horizontal scrollable row, left-aligned, no border
+              'flex-row gap-1 overflow-x-auto px-3 py-2',
+              // desktop: vertical column, right border
+              'lg:flex-col lg:gap-0.5 lg:w-52 lg:border-b-0 lg:border-r lg:py-6 lg:px-3 lg:overflow-x-visible',
+            )}>
+              {TABS.map(({ id, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setActiveTab(id)}
+                  className={cn(
+                    'flex items-center gap-2 text-sm rounded-lg px-3 py-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer',
+                    'lg:w-full',
+                    activeTab === id
+                      ? 'bg-muted text-foreground font-medium'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                  )}
+                >
+                  <Icon className="hidden lg:block w-4 h-4 shrink-0" />
+                  {t(`settings.tabs.${id}`)}
+                </button>
+              ))}
+            </nav>
 
+            {/* Main content */}
+            <main className="flex-1 min-h-0 overflow-y-auto px-4 lg:px-8 py-5 lg:py-8">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  {activeTab === 'profile'       && <ProfileTab />}
+                  {activeTab === 'ai'            && <AIConfigTab />}
+                  {activeTab === 'notifications' && <NotificationsTab />}
+                </motion.div>
+              </AnimatePresence>
+            </main>
+          </div>
         </div>
       </div>
     </div>

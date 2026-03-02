@@ -69,7 +69,7 @@ export function RecipesPage() {
       <Heart className="w-[18px] h-[18px] [@media(max-width:380px)]:w-4 [@media(max-width:380px)]:h-4" />
       {savedCount > 0 && (
         <span className="absolute -top-1 -right-1 h-4 w-4 flex items-center justify-center rounded-full bg-primary text-white text-[9px] font-bold border border-background">
-          {savedCount > 9 ? '9+' : savedCount}
+          {savedCount > 99 ? '99+' : savedCount}
         </span>
       )}
     </motion.button>
@@ -88,7 +88,7 @@ export function RecipesPage() {
       <Heart className="w-[18px] h-[18px] [@media(max-width:380px)]:w-4 [@media(max-width:380px)]:h-4" />
       {savedCount > 0 && (
         <span className="absolute -top-1 -right-1 h-4 w-4 flex items-center justify-center rounded-full bg-primary text-white text-[9px] font-bold border border-background">
-          {savedCount > 9 ? '9+' : savedCount}
+          {savedCount > 99 ? '99+' : savedCount}
         </span>
       )}
     </motion.button>
@@ -103,23 +103,13 @@ export function RecipesPage() {
       />
 
       {/* Mobile header — hidden on lg+ */}
-      <header className="flex items-center gap-3 h-[clamp(3.5rem,7.4vh,4.25rem)] [@media(max-width:380px)]:h-12 px-4 [@media(max-width:380px)]:px-3 bg-card border-b border-border shrink-0 lg:hidden">
-        <div className="flex items-center gap-2 shrink-0">
-          <div
-            className="w-7 h-7 [@media(min-height:900px)]:w-8 [@media(min-height:900px)]:h-8 [@media(max-width:380px)]:w-6 [@media(max-width:380px)]:h-6 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: '#C97B5C' }}
-          >
-            <ChefHat className="w-4 h-4 [@media(min-height:900px)]:w-[18px] [@media(min-height:900px)]:h-[18px] [@media(max-width:380px)]:w-[14px] [@media(max-width:380px)]:h-[14px] text-white" />
-          </div>
-          <span className="font-display text-base [@media(min-height:900px)]:text-lg [@media(max-width:380px)]:text-[1.05rem] text-foreground">{t('nav.recipes')}</span>
-        </div>
-        <div className="flex-1" />
+      <div className="lg:hidden">
         <TopBar
-          actionsOnly
+          title={t('nav.recipes')}
+          mobileIcon={ChefHat}
           extraActions={mobileHeartButton}
-          className="gap-1.5 flex-row-reverse"
         />
-      </header>
+      </div>
 
       {/* Main content — vertical on mobile, two-column on desktop */}
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">

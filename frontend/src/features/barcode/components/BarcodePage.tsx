@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
 import { TopBar } from '@/shared/components/TopBar'
+import { DesktopPageHeader } from '@/shared/components/DesktopPageHeader'
 import { AddItemSheet } from '@/features/inventory/components/AddItemSheet'
 import { getCategoryColor } from '@/features/inventory/components/ItemGroupCard'
 import { lookupBarcode } from '../api'
@@ -183,9 +184,22 @@ export function BarcodePage() {
 
   return (
     <div className="flex flex-col h-full">
-      <TopBar title={t('barcode.title')} />
+      <TopBar
+        actionsOnly
+        className="hidden lg:flex fixed top-4 right-4 z-30 rounded-xl border border-stone-200/80 bg-white/90 backdrop-blur-sm px-2 py-1.5 shadow-sm"
+      />
+
+      <div className="lg:hidden">
+        <TopBar title={t('barcode.title')} mobileIcon={ScanBarcode} />
+      </div>
 
       <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4 lg:py-6">
+        <DesktopPageHeader
+          icon={ScanBarcode}
+          title={t('barcode.title')}
+          className="mb-6"
+        />
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
           {/* Left: Scanner + manual input */}
           <div className="flex flex-col gap-4">

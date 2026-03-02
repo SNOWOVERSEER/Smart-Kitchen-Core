@@ -3,6 +3,7 @@ import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { ShoppingCart, Plus, ChevronDown, ChevronUp, Sparkles, ArrowRight, Heart } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { TopBar } from '@/shared/components/TopBar'
+import { DesktopPageHeader } from '@/shared/components/DesktopPageHeader'
 import { ShoppingItemRow } from './ShoppingItemRow'
 import { ItemEditSheet } from './ItemEditSheet'
 import { CompleteShoppingSheet } from './CompleteShoppingSheet'
@@ -65,7 +66,7 @@ export function ShoppingPage() {
     if (e.key === 'Enter') handleAdd()
   }
 
-  const desktopHeartButton = (
+  const savedRecipesHeartButton = (
     <button
       type="button"
       onClick={() => setHeartPanelOpen(true)}
@@ -76,7 +77,7 @@ export function ShoppingPage() {
       <Heart className="w-[18px] h-[18px]" />
       {savedCount > 0 && (
         <span className="absolute -top-1 -right-1 h-4 w-4 flex items-center justify-center rounded-full bg-primary text-white text-[9px] font-bold border border-background">
-          {savedCount > 9 ? '9+' : savedCount}
+          {savedCount > 99 ? '99+' : savedCount}
         </span>
       )}
     </button>
@@ -87,35 +88,41 @@ export function ShoppingPage() {
       {/* Desktop floating action dock (recipe-style) */}
       <TopBar
         actionsOnly
-        extraActions={desktopHeartButton}
+        extraActions={savedRecipesHeartButton}
         className="hidden lg:flex fixed top-4 right-4 z-30 rounded-xl border border-stone-200/80 bg-white/90 backdrop-blur-sm px-2 py-1.5 shadow-sm"
       />
 
       {/* Mobile header */}
-      <header className="flex items-center gap-3 h-[clamp(3.5rem,7.4vh,4.25rem)] px-4 bg-white border-b border-stone-200/70 shrink-0 lg:hidden shadow-[0_1px_0_rgba(28,22,18,0.04)]">
-        <div className="flex items-center gap-2 shrink-0">
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: '#C97B5C' }}
-          >
-            <ShoppingCart className="w-4 h-4 text-white" />
-          </div>
-          <span
-            className="text-base text-foreground"
-            style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
-          >
-            {t('shopping.title')}
-          </span>
-        </div>
-        <div className="flex-1" />
-        <TopBar actionsOnly />
-      </header>
+      <div className="lg:hidden">
+        <TopBar
+          title={t('shopping.title')}
+          mobileIcon={ShoppingCart}
+          extraActions={savedRecipesHeartButton}
+        />
+      </div>
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
         {/* Hero subtitle + stats */}
-        <div className="px-4 sm:px-5 pt-5 pb-3">
-          <div className="flex items-end justify-between gap-3">
+        <div className="px-4 sm:px-5 pt-5 lg:pt-6 pb-3">
+          <div className="hidden lg:block">
+            <DesktopPageHeader
+              icon={ShoppingCart}
+              title={t('shopping.title')}
+              subtitle={
+                uncheckedItems.length > 0
+                  ? t('shopping.heroSub', { count: uncheckedItems.length, recipeCount: recipeItemCount })
+                  : t('shopping.heroSubEmpty')
+              }
+              rightSlot={uncheckedItems.length > 0 ? (
+                <span className="shrink-0 px-2.5 py-1 rounded-full bg-stone-200/70 text-stone-500 text-[11px] font-semibold">
+                  {t('shopping.draftLabel')}
+                </span>
+              ) : undefined}
+            />
+          </div>
+
+          <div className="lg:hidden flex items-end justify-between gap-3">
             <div>
               <h1
                 className="text-[clamp(1.45rem,5.5vw,1.85rem)] leading-[1.06] tracking-[-0.01em] text-[#1C1612]"
@@ -135,7 +142,6 @@ export function ShoppingPage() {
               </span>
             )}
           </div>
-          <div className="mt-3 h-px w-16 rounded-full bg-gradient-to-r from-primary/55 via-primary/25 to-transparent" />
         </div>
 
         {/* Quick-add bar */}

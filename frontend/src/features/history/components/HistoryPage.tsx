@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TopBar } from '@/shared/components/TopBar'
+import { DesktopPageHeader } from '@/shared/components/DesktopPageHeader'
 import { getLogs } from '../api'
 import type { TransactionIntent } from '@/shared/lib/api.types'
 import { cn } from '@/lib/utils'
@@ -151,9 +152,21 @@ export function HistoryPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <TopBar title={t('history.title')} />
+      <TopBar
+        actionsOnly
+        className="hidden lg:flex fixed top-4 right-4 z-30 rounded-xl border border-stone-200/80 bg-white/90 backdrop-blur-sm px-2 py-1.5 shadow-sm"
+      />
+
+      <div className="lg:hidden">
+        <TopBar title={t('history.title')} mobileIcon={History} />
+      </div>
 
       <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4 lg:py-6">
+        <DesktopPageHeader
+          icon={History}
+          title={t('history.title')}
+          className="mb-5"
+        />
 
         {/* Filters row */}
         <div className="flex items-center gap-3 mb-4 flex-wrap">

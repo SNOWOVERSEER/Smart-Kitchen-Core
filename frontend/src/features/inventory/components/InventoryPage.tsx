@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react'
-import { Plus, Package } from 'lucide-react'
+import { Plus, Package, Search } from 'lucide-react'
 import { motion } from 'framer-motion'
 import Masonry from 'react-masonry-css'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TopBar } from '@/shared/components/TopBar'
+import { DesktopPageHeader } from '@/shared/components/DesktopPageHeader'
 import { ItemGroupCard } from './ItemGroupCard'
 import { AddItemSheet } from './AddItemSheet'
 import { useInventory } from '../hooks/useInventory'
@@ -71,12 +73,38 @@ export function InventoryPage() {
   return (
     <div className="flex flex-col h-full">
       <TopBar
-        title={t('inventory.title')}
-        searchValue={search}
-        onSearchChange={setSearch}
+        actionsOnly
+        className="hidden lg:flex fixed top-4 right-4 z-30 rounded-xl border border-stone-200/80 bg-white/90 backdrop-blur-sm px-2 py-1.5 shadow-sm"
       />
 
+      <div className="lg:hidden">
+        <TopBar
+          title={t('inventory.title')}
+          mobileIcon={Package}
+          searchValue={search}
+          onSearchChange={setSearch}
+        />
+      </div>
+
       <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-4 lg:py-6">
+        <DesktopPageHeader
+          icon={Package}
+          title={t('inventory.title')}
+          className="mb-4"
+        />
+
+        <div className="hidden lg:block mb-6">
+          <div className="relative w-full max-w-[520px]">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('topbar.search')}
+              className="h-11 rounded-full border-stone-200/90 bg-white/92 pl-10 shadow-sm"
+            />
+          </div>
+        </div>
+
         {/* Stat cards */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           {[
