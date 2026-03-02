@@ -309,11 +309,9 @@ export function ShoppingPage() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed bottom-0 left-0 right-0 lg:left-20 z-20"
-            style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}
+            className="fixed left-0 right-0 z-20 px-2.5 sm:px-4 bottom-[calc(env(safe-area-inset-bottom)+clamp(4.4rem,8.2vh,6.2rem))] lg:bottom-4 lg:left-20"
           >
-            {/* BottomNav ghost — keeps bottom bar above nav on mobile */}
-            <div className="bg-white/90 backdrop-blur-md border-t border-stone-200/80 shadow-[0_-4px_24px_-8px_rgba(28,22,18,0.12)] px-4 pt-3 pb-3 flex items-center gap-3">
+            <div className="mx-auto w-full max-w-[620px] lg:max-w-[900px] rounded-2xl border border-stone-200/80 bg-white/92 backdrop-blur-md shadow-[0_18px_38px_-18px_rgba(28,22,18,0.42)] px-4 py-3 flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-stone-700">
                   {t('shopping.checkedCount', { count: checkedCount })}

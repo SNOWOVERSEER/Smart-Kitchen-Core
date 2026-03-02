@@ -48,12 +48,22 @@ export function ChatPage() {
 
   const isBusy = agentMutation.isPending || photoMutation.isPending
 
+  function handleCloseChat() {
+    // Mobile behavior: return to the previous page the user came from.
+    // Fallback to dashboard when chat is opened directly.
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back()
+      return
+    }
+    void navigate({ to: '/dashboard' })
+  }
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
       <div className="flex items-center gap-2.5 px-4 h-14 border-b border-border bg-card shrink-0">
         <button
-          onClick={() => void navigate({ to: '/' })}
+          onClick={handleCloseChat}
           className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
