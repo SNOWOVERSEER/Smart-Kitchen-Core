@@ -20,11 +20,13 @@ export interface ProfileResponse {
   email: string | null
   display_name: string | null
   preferred_language: string
+  assume_pantry_basics: boolean
 }
 
 export interface ProfileUpdateRequest {
   display_name?: string
   preferred_language?: string
+  assume_pantry_basics?: boolean
 }
 
 // Inventory
@@ -121,6 +123,7 @@ export interface AgentActionResponse {
   status: AgentStatus
   pending_action: PendingActionResponse | null
   tool_calls: Record<string, unknown>[]
+  pending_recipes: RecipeCard[] | null
 }
 
 // Logs
@@ -207,6 +210,7 @@ export interface RecipeCard {
   instructions: string[]
   tags: string[]
   image_prompt: string | null
+  image_url: string | null
 }
 
 export interface GenerateRecipesRequest {
@@ -217,6 +221,7 @@ export interface GenerateRecipesRequest {
 
 export interface GenerateRecipesResponse {
   recipes: RecipeCard[]
+  feasibility_notice: string | null
 }
 
 export interface SaveRecipeRequest {
@@ -292,4 +297,46 @@ export interface CompleteShoppingResult {
   added_count: number
   failed_items: string[]
   inventory_ids: number[]
+}
+
+// Meals
+export interface MealRecipeResponse {
+  recipe_id: number
+  title: string
+  description: string | null
+  cook_time_min: number | null
+  servings: number | null
+  tags: string[]
+  image_url: string | null
+  sort_order: number
+}
+
+export interface MealResponse {
+  id: number
+  name: string
+  scheduled_date: string | null
+  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | null
+  notes: string | null
+  recipes: MealRecipeResponse[]
+  created_at: string
+  updated_at: string
+}
+
+export interface MealCreate {
+  name: string
+  scheduled_date?: string
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  notes?: string
+  recipe_ids?: number[]
+}
+
+export interface MealUpdate {
+  name?: string
+  scheduled_date?: string | null
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  notes?: string | null
+}
+
+export interface AddRecipesToMealRequest {
+  recipe_ids: number[]
 }

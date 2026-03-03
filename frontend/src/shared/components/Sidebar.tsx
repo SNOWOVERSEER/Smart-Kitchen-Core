@@ -1,12 +1,13 @@
 import type { ElementType } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
-import { LayoutDashboard, History, ScanBarcode, Settings, ChefHat, UtensilsCrossed, ShoppingCart } from 'lucide-react'
+import { LayoutDashboard, History, ScanBarcode, Settings, ChefHat, UtensilsCrossed, ShoppingCart, CalendarDays } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS: { to: string; icon: ElementType; key: string }[] = [
   { to: '/dashboard', icon: LayoutDashboard,  key: 'dashboard' },
   { to: '/recipes',   icon: UtensilsCrossed,  key: 'recipes'   },
+  { to: '/meals',     icon: CalendarDays,    key: 'meals'     },
   { to: '/shopping',  icon: ShoppingCart,     key: 'shopping'  },
   { to: '/history',   icon: History,          key: 'history'   },
   { to: '/barcode',   icon: ScanBarcode,      key: 'scan'      },
