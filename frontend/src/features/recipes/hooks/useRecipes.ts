@@ -1,13 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import i18next from 'i18next'
-import { generateRecipes, saveRecipe, getSavedRecipes, deleteRecipe } from '@/features/recipes/api'
+import { generateRecipes, saveRecipe, getSavedRecipes, getSavedRecipe, deleteRecipe } from '@/features/recipes/api'
 import type { GenerateRecipesRequest, SaveRecipeRequest } from '@/shared/lib/api.types'
 
 const RECIPES_KEY = ['recipes'] as const
 
 export function useSavedRecipes() {
   return useQuery({ queryKey: RECIPES_KEY, queryFn: getSavedRecipes })
+}
+
+export function useRecipe(id: number) {
+  return useQuery({
+    queryKey: [...RECIPES_KEY, id],
+    queryFn: () => getSavedRecipe(id),
+    enabled: id > 0,
+  })
 }
 
 export function useGenerateRecipes() {

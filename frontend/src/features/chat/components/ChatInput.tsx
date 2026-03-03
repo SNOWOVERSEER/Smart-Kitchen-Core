@@ -1,5 +1,5 @@
 import { useState, useRef, type KeyboardEvent } from 'react'
-import { Send, Camera, Mic } from 'lucide-react'
+import { Send, Camera } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -44,8 +44,10 @@ export function ChatInput({ onSend, onPhoto, disabled, value, onChange }: ChatIn
     e.target.value = ''
   }
 
+  const canSend = text.trim() && !disabled
+
   return (
-    <div className="border-t border-border bg-card px-3 py-2">
+    <div className="border-t border-stone-200/60 bg-white px-3 py-2.5">
       <div className="flex items-end gap-2">
         {onPhoto && (
           <>
@@ -59,14 +61,15 @@ export function ChatInput({ onSend, onPhoto, disabled, value, onChange }: ChatIn
             />
             <button
               onClick={() => fileRef.current?.click()}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+              disabled={disabled}
+              className="w-9 h-9 flex items-center justify-center rounded-xl text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors shrink-0 disabled:opacity-40"
             >
-              <Camera className="w-4 h-4" />
+              <Camera className="w-[18px] h-[18px]" />
             </button>
           </>
         )}
 
-        <div className="flex-1 flex items-end bg-muted rounded-xl px-3 py-2 gap-2">
+        <div className="flex-1 flex items-end bg-stone-100/70 rounded-2xl px-3.5 py-2.5">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -75,7 +78,7 @@ export function ChatInput({ onSend, onPhoto, disabled, value, onChange }: ChatIn
             rows={1}
             disabled={disabled}
             className={cn(
-              'flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none max-h-32 leading-5',
+              'flex-1 bg-transparent text-sm text-[#1C1612] placeholder:text-stone-400 resize-none outline-none max-h-32 leading-5',
               disabled && 'opacity-50 cursor-not-allowed'
             )}
             style={{ height: 'auto' }}
@@ -85,26 +88,23 @@ export function ChatInput({ onSend, onPhoto, disabled, value, onChange }: ChatIn
               el.style.height = `${el.scrollHeight}px`
             }}
           />
-          <button className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0">
-            <Mic className="w-3.5 h-3.5" />
-          </button>
         </div>
 
         <motion.button
-          whileTap={{ scale: 0.92 }}
+          whileTap={canSend ? { scale: 0.9 } : undefined}
           onClick={handleSend}
-          disabled={!text.trim() || disabled}
+          disabled={!canSend}
           className={cn(
-            'w-9 h-9 flex items-center justify-center rounded-full transition-colors shrink-0',
-            text.trim() && !disabled
-              ? 'bg-foreground text-background hover:bg-foreground/90'
-              : 'bg-muted text-muted-foreground cursor-not-allowed'
+            'w-9 h-9 flex items-center justify-center rounded-xl transition-all shrink-0',
+            canSend
+              ? 'bg-[#1C1612] text-white shadow-sm hover:bg-[#1C1612]/90'
+              : 'bg-stone-100 text-stone-300 cursor-not-allowed'
           )}
         >
           <Send className="w-4 h-4" />
         </motion.button>
       </div>
-      <p className="text-[10px] text-muted-foreground text-center mt-1.5">
+      <p className="text-[10px] text-stone-400 text-center mt-1.5">
         {t('chat.disclaimer')}
       </p>
     </div>

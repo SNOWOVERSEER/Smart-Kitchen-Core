@@ -31,7 +31,6 @@ export function ChatPage() {
 
   const handleConfirm = (confirm: boolean) => {
     if (!thread_id) return
-    // Immediately mark the awaiting message as resolved so buttons become inert
     const awaitingMsg = [...messages].reverse().find(
       (m) => m.status === 'awaiting_confirm' && !m.confirmed
     )
@@ -49,8 +48,6 @@ export function ChatPage() {
   const isBusy = agentMutation.isPending || photoMutation.isPending
 
   function handleCloseChat() {
-    // Mobile behavior: return to the previous page the user came from.
-    // Fallback to dashboard when chat is opened directly.
     if (typeof window !== 'undefined' && window.history.length > 1) {
       window.history.back()
       return
@@ -59,12 +56,12 @@ export function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-[#FAF6F1]">
       {/* Header */}
-      <div className="flex items-center gap-2.5 px-4 h-14 border-b border-border bg-card shrink-0">
+      <div className="flex items-center gap-2.5 px-4 h-14 border-b border-stone-200/60 bg-white shrink-0">
         <button
           onClick={handleCloseChat}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          className="w-8 h-8 flex items-center justify-center rounded-xl text-stone-400 hover:text-[#1C1612] hover:bg-stone-100 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
@@ -75,12 +72,12 @@ export function ChatPage() {
           <ChefHat className="w-4 h-4 text-white" />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-semibold">{t('chat.agentTitle')}</p>
+          <p className="text-sm font-semibold text-[#1C1612]">{t('chat.agentTitle')}</p>
         </div>
         {messages.length > 0 && (
           <button
             onClick={reset}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-xl text-stone-400 hover:text-[#1C1612] hover:bg-stone-100 transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>

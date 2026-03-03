@@ -61,7 +61,7 @@ export function useAgentAction() {
       removeMessage(typingId)
       addMessage({
         role: 'assistant',
-        content: 'Something went wrong. Please try again.',
+        content: 'Something went wrong. Please try again.', // fallback; i18n handled at UI layer
       })
     },
   })

@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from 'react'
+import { useRef, useCallback, useState } from 'react'
 import { motion, type PanInfo } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { format, parseISO } from 'date-fns'
@@ -17,16 +17,12 @@ export interface MealCardProps {
   onUnschedule?: (mealId: number) => void
 }
 
-const LONG_PRESS_MS = 200
-const MOVE_THRESHOLD_PX = 6
-
 export function MealCard({ meal, onSelect, index, enableDrag, onReschedule, onUnschedule }: MealCardProps) {
   const { t } = useTranslation()
   const dragCtx = useMealDragOptional()
 
   const [isDragging, setIsDragging] = useState(false)
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pointerOrigin = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const cardRef = useRef<HTMLButtonElement>(null)
   const didDrag = useRef(false)
 
   const config = meal.meal_type
@@ -38,72 +34,30 @@ export function MealCard({ meal, onSelect, index, enableDrag, onReschedule, onUn
     ? `${config.bgLight} ${config.textColor}`
     : 'bg-stone-100 text-stone-500'
 
-  useEffect(() => {
-    return () => {
-      if (longPressTimer.current) clearTimeout(longPressTimer.current)
-    }
-  }, [])
+  // Hit-test using the card's visual center (not the pointer position).
+  // During drag, the card element moves with the pointer, so getBoundingClientRect
+  // already reflects the dragged position.
+  const hitTestCardCenter = useCallback(() => {
+    if (!dragCtx || !cardRef.current) return
+    const rect = cardRef.current.getBoundingClientRect()
+    const centerX = rect.left + rect.width / 2
+    const centerY = rect.top + rect.height / 2
+    dragCtx.hitTestPointer(centerX, centerY)
+  }, [dragCtx])
 
-  const cancelLongPress = useCallback(() => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
-  }, [])
-
-  const activateDrag = useCallback(() => {
+  const handleDragStart = useCallback(() => {
     if (!dragCtx) return
-    cancelLongPress()
     didDrag.current = true
     setIsDragging(true)
     dragCtx.startDrag(meal.id)
-    if (navigator.vibrate) navigator.vibrate(20)
-  }, [dragCtx, meal.id, cancelLongPress])
+    if (navigator.vibrate) navigator.vibrate(15)
+  }, [dragCtx, meal.id])
 
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (!enableDrag || !dragCtx) return
-      pointerOrigin.current = { x: e.clientX, y: e.clientY }
-      didDrag.current = false
-      longPressTimer.current = setTimeout(activateDrag, LONG_PRESS_MS)
-    },
-    [enableDrag, dragCtx, activateDrag],
-  )
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!longPressTimer.current) return
-      const dx = e.clientX - pointerOrigin.current.x
-      const dy = e.clientY - pointerOrigin.current.y
-      if (Math.sqrt(dx * dx + dy * dy) > MOVE_THRESHOLD_PX) {
-        cancelLongPress()
-      }
-    },
-    [cancelLongPress],
-  )
-
-  const handlePointerUp = useCallback(() => {
-    cancelLongPress()
-  }, [cancelLongPress])
-
-  // Grip handle: instant drag activation on pointer down
-  const handleGripPointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      e.stopPropagation()
-      if (!enableDrag || !dragCtx) return
-      pointerOrigin.current = { x: e.clientX, y: e.clientY }
-      activateDrag()
-    },
-    [enableDrag, dragCtx, activateDrag],
-  )
-
-  // Use info.point for absolute pointer position (not offset-based)
   const handleDrag = useCallback(
-    (_: unknown, info: PanInfo) => {
-      if (!dragCtx) return
-      dragCtx.hitTestPointer(info.point.x, info.point.y)
+    (_: unknown, _info: PanInfo) => {
+      hitTestCardCenter()
     },
-    [dragCtx],
+    [hitTestCardCenter],
   )
 
   const handleDragEnd = useCallback(() => {
@@ -123,25 +77,26 @@ export function MealCard({ meal, onSelect, index, enableDrag, onReschedule, onUn
     onSelect(meal.id)
   }, [onSelect, meal.id])
 
+  const canDrag = enableDrag && !!dragCtx
+
   return (
     <motion.button
+      ref={cardRef}
       type="button"
       onClick={handleClick}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.06, ease: EASE_OUT_EXPO }}
       whileTap={isDragging ? undefined : { scale: 0.97 }}
-      drag={isDragging}
+      // Direct drag — no long-press needed
+      drag={canDrag || undefined}
       dragSnapToOrigin
       whileDrag={{ scale: 1.04, boxShadow: '0 16px 48px -8px rgba(28,22,18,0.3)', zIndex: 50 }}
-      onDrag={isDragging ? handleDrag : undefined}
-      onDragEnd={isDragging ? handleDragEnd : undefined}
+      onDragStart={canDrag ? handleDragStart : undefined}
+      onDrag={canDrag ? handleDrag : undefined}
+      onDragEnd={canDrag ? handleDragEnd : undefined}
       style={isDragging ? { zIndex: 50, position: 'relative' } : undefined}
-      className="w-full bg-white rounded-2xl border border-stone-200/60 shadow-[0_2px_16px_-6px_rgba(28,22,18,0.09)] overflow-hidden text-left cursor-pointer flex flex-row"
+      className="w-full bg-white rounded-2xl border border-stone-200/60 shadow-[0_2px_16px_-6px_rgba(28,22,18,0.09)] overflow-hidden text-left cursor-pointer flex flex-row touch-none"
     >
       {/* Left accent bar */}
       <div className={`w-[3px] shrink-0 bg-gradient-to-b ${gradient}`} />
@@ -186,36 +141,41 @@ export function MealCard({ meal, onSelect, index, enableDrag, onReschedule, onUn
         </div>
 
         {meal.recipes.length > 0 ? (
-          <div className="flex items-center">
-            {meal.recipes.slice(0, 3).map((r, i) => (
-              <div
-                key={r.recipe_id}
-                className={`w-6 h-6 rounded-full overflow-hidden border-2 border-white shrink-0 ${i > 0 ? '-ml-1' : ''}`}
-              >
-                {r.image_url ? (
-                  <img src={r.image_url} alt={r.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className={`w-full h-full bg-gradient-to-br ${gradient}`} />
-                )}
-              </div>
-            ))}
-            <span className="ml-1.5 text-[11px] text-stone-400">
-              {t('meals.recipeCount', '{{count}} recipes', { count: meal.recipes.length })}
-            </span>
+          <div className="flex flex-col gap-1.5">
+            {/* Recipe names */}
+            <p className="text-[12px] text-stone-500 truncate leading-snug">
+              {meal.recipes.slice(0, 2).map((r) => r.title).join(', ')}
+              {meal.recipes.length > 2 && ` +${meal.recipes.length - 2}`}
+            </p>
+            {/* Thumbnails row */}
+            <div className="flex items-center">
+              {meal.recipes.slice(0, 3).map((r, i) => (
+                <div
+                  key={r.recipe_id}
+                  className={`w-6 h-6 rounded-full overflow-hidden border-2 border-white shrink-0 ${i > 0 ? '-ml-1' : ''}`}
+                >
+                  {r.image_url ? (
+                    <img src={r.image_url} alt={r.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={`w-full h-full bg-gradient-to-br ${gradient}`} />
+                  )}
+                </div>
+              ))}
+              <span className="ml-1.5 text-[11px] text-stone-400">
+                {t('meals.recipeCount', '{{count}} recipes', { count: meal.recipes.length })}
+              </span>
+            </div>
           </div>
         ) : (
-          <span className="text-[11px] text-stone-400">
-            {t('meals.recipeCount', '{{count}} recipes', { count: 0 })}
+          <span className="text-[11px] text-stone-400 italic">
+            {t('meals.noRecipesInMeal', 'No recipes yet')}
           </span>
         )}
       </div>
 
-      {/* Drag handle — instant drag on touch */}
+      {/* Drag handle indicator */}
       {enableDrag && (
-        <div
-          onPointerDown={handleGripPointerDown}
-          className="flex items-center px-2 cursor-grab active:cursor-grabbing touch-none"
-        >
+        <div className="flex items-center px-2 cursor-grab active:cursor-grabbing">
           <GripVertical className="w-4 h-4 text-stone-300" />
         </div>
       )}

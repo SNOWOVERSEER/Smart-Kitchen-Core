@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Trash2,
   CalendarDays,
+  CookingPot,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -25,6 +26,8 @@ import {
 import type { MealType } from '@/features/meals/lib/mealConstants'
 import { MealTypeSelector } from './MealTypeSelector'
 import { RecipePicker } from './RecipePicker'
+import { RecipeIngredientsList } from './RecipeIngredientsList'
+import { MealCookingGuide } from './MealCookingGuide'
 
 interface MealDetailOverlayProps {
   mealId: number | null
@@ -46,6 +49,17 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
   const [showRecipePicker, setShowRecipePicker] = useState(false)
   const [pickerSelectedIds, setPickerSelectedIds] = useState<number[]>([])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [expandedRecipeIds, setExpandedRecipeIds] = useState<Set<number>>(new Set())
+  const [showCookingGuide, setShowCookingGuide] = useState(false)
+
+  const toggleRecipeExpand = useCallback((id: number) => {
+    setExpandedRecipeIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
 
   // Sync local state when meal data changes
   const [lastMealId, setLastMealId] = useState<number | null>(null)
@@ -57,6 +71,8 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
     setShowRecipePicker(false)
     setPickerSelectedIds([])
     setShowDeleteConfirm(false)
+    setExpandedRecipeIds(new Set())
+    setShowCookingGuide(false)
   }
 
   // Reset state when overlay closes
@@ -66,6 +82,8 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
       setShowRecipePicker(false)
       setPickerSelectedIds([])
       setShowDeleteConfirm(false)
+      setExpandedRecipeIds(new Set())
+      setShowCookingGuide(false)
     }
   }, [open])
 
@@ -286,45 +304,93 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                     ) : (
                       <div className="flex flex-col gap-1.5">
                         <AnimatePresence mode="popLayout">
-                          {meal.recipes.map((r) => (
-                            <motion.div
-                              key={r.recipe_id}
-                              layout
-                              initial={{ opacity: 0, scale: 0.95 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0 }}
-                              transition={{ duration: 0.2, ease: EASE_OUT_EXPO }}
-                              className="flex items-center gap-3 rounded-xl border border-stone-200/80 bg-white p-2.5"
-                            >
-                              {/* Thumbnail */}
-                              {r.image_url ? (
-                                <img
-                                  src={r.image_url}
-                                  alt={r.title}
-                                  className="w-10 h-10 rounded-lg object-cover shrink-0"
-                                />
-                              ) : (
-                                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-stone-200 to-stone-300 shrink-0" />
-                              )}
-
-                              {/* Title */}
-                              <span className="flex-1 text-sm font-medium text-stone-700 truncate">
-                                {r.title}
-                              </span>
-
-                              {/* Remove button */}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveRecipe(r.recipe_id)}
-                                className="shrink-0 p-1.5 rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                                title={t('meals.removeRecipe', 'Remove from meal')}
+                          {meal.recipes.map((r) => {
+                            const isExpanded = expandedRecipeIds.has(r.recipe_id)
+                            return (
+                              <motion.div
+                                key={r.recipe_id}
+                                layout
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0 }}
+                                transition={{ duration: 0.2, ease: EASE_OUT_EXPO }}
+                                className="rounded-xl border border-stone-200/80 bg-white overflow-hidden"
                               >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </motion.div>
-                          ))}
+                                {/* Recipe header row */}
+                                <div className="flex items-center gap-3 p-2.5">
+                                  {/* Thumbnail */}
+                                  {r.image_url ? (
+                                    <img
+                                      src={r.image_url}
+                                      alt={r.title}
+                                      className="w-10 h-10 rounded-lg object-cover shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-stone-200 to-stone-300 shrink-0" />
+                                  )}
+
+                                  {/* Title */}
+                                  <span className="flex-1 text-sm font-medium text-stone-700 truncate">
+                                    {r.title}
+                                  </span>
+
+                                  {/* Expand ingredients button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleRecipeExpand(r.recipe_id)}
+                                    className="shrink-0 p-1.5 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors"
+                                    title={t('meals.ingredients')}
+                                  >
+                                    <ChevronDown className={cn(
+                                      'h-3.5 w-3.5 transition-transform',
+                                      isExpanded && 'rotate-180',
+                                    )} />
+                                  </button>
+
+                                  {/* Remove button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveRecipe(r.recipe_id)}
+                                    className="shrink-0 p-1.5 rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                                    title={t('meals.removeRecipe', 'Remove from meal')}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+
+                                {/* Expandable ingredients */}
+                                <AnimatePresence>
+                                  {isExpanded && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.2 }}
+                                      className="overflow-hidden"
+                                    >
+                                      <div className="px-3 pb-3 pt-1 border-t border-stone-100">
+                                        <RecipeIngredientsList recipeId={r.recipe_id} compact />
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </motion.div>
+                            )
+                          })}
                         </AnimatePresence>
                       </div>
+                    )}
+
+                    {/* Cooking guide button */}
+                    {meal.recipes.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowCookingGuide(true)}
+                        className="mt-3 w-full py-2.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 text-amber-800 rounded-xl font-semibold text-sm hover:from-amber-100 hover:to-orange-100 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <CookingPot className="w-4 h-4" />
+                        {t('meals.cookingGuide', 'Start Cooking')}
+                      </button>
                     )}
 
                     {/* Add recipe toggle */}
@@ -439,6 +505,15 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
               </>
             )}
           </motion.div>
+
+          {/* Cooking guide overlay */}
+          {meal && (
+            <MealCookingGuide
+              open={showCookingGuide}
+              onClose={() => setShowCookingGuide(false)}
+              meal={meal}
+            />
+          )}
         </>
       )}
     </AnimatePresence>
