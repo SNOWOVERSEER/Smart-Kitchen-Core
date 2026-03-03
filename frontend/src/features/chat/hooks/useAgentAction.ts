@@ -43,6 +43,7 @@ export function useAgentAction() {
         isTyping: true,
         status: data.status,
         pendingAction: data.pending_action ?? undefined,
+        pendingRecipes: data.pending_recipes ?? undefined,
       })
 
       typewriterReveal(assistantId, data.response, updateMessage)
@@ -51,6 +52,8 @@ export function useAgentAction() {
         void queryClient.invalidateQueries({ queryKey: ['inventory'] })
         void queryClient.invalidateQueries({ queryKey: ['logs'] })
         void queryClient.invalidateQueries({ queryKey: ['shopping'] })
+        void queryClient.invalidateQueries({ queryKey: ['recipes'] })
+        void queryClient.invalidateQueries({ queryKey: ['meals'] })
       }
     },
     onError: (_error, _vars, context) => {

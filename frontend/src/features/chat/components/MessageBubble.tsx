@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { ChefHat } from 'lucide-react'
 import { type Message } from '../store'
+import { ChatRecipeCards } from './ChatRecipeCards'
 import { ConfirmCard } from './ConfirmCard'
 import { cn } from '@/lib/utils'
 
@@ -38,6 +39,9 @@ export function MessageBubble({ message, onConfirm }: MessageBubbleProps) {
           )}
         >
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          {message.pendingRecipes && message.pendingRecipes.length > 0 && (
+            <ChatRecipeCards recipes={message.pendingRecipes} />
+          )}
         </div>
 
         {message.status === 'awaiting_confirm' && message.pendingAction && (

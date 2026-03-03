@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Check } from 'lucide-react'
+import { X, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Check, CalendarPlus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useDeleteRecipe } from '@/features/recipes/hooks/useRecipes'
 import { useAddShoppingItem } from '@/features/shopping/hooks/useShoppingList'
 import { AddFromRecipeSheet } from './AddFromRecipeSheet'
+import { AddToMealSheet } from '@/features/meals/components/AddToMealSheet'
 import type { RecipeCard, SavedRecipe, RecipeIngredient } from '@/shared/lib/api.types'
 
 interface Props {
@@ -31,6 +32,7 @@ export function RecipeDetailOverlay({ recipe, open, onClose, onSave, onSkip, sav
   const isSaved = savedRecipeId != null
   const missingIngredients = recipe ? recipe.ingredients.filter(i => !i.have_in_stock) : []
   const [addSheetOpen, setAddSheetOpen] = useState(false)
+  const [mealSheetOpen, setMealSheetOpen] = useState(false)
   const [addedItems, setAddedItems] = useState<Set<string>>(new Set())
   const deleteRecipe = useDeleteRecipe()
   const addItem = useAddShoppingItem()
@@ -253,6 +255,15 @@ export function RecipeDetailOverlay({ recipe, open, onClose, onSave, onSkip, sav
                           {t('recipes.addMissingToList')}
                         </button>
                       )}
+                      {savedRecipeId && (
+                        <button
+                          onClick={() => setMealSheetOpen(true)}
+                          className="w-full py-2.5 bg-blue-50 text-blue-600 rounded-2xl font-semibold text-sm hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
+                        >
+                          <CalendarPlus className="w-4 h-4" />
+                          {t('meals.addToMeal', 'Add to meal')}
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           if (savedRecipeId) deleteRecipe.mutate(savedRecipeId, { onSuccess: onClose })
@@ -295,6 +306,15 @@ export function RecipeDetailOverlay({ recipe, open, onClose, onSave, onSkip, sav
           recipeId={savedRecipeId}
           open={addSheetOpen}
           onClose={() => setAddSheetOpen(false)}
+        />
+      )}
+
+      {/* AddToMealSheet */}
+      {savedRecipeId && (
+        <AddToMealSheet
+          recipeIds={[savedRecipeId]}
+          open={mealSheetOpen}
+          onClose={() => setMealSheetOpen(false)}
         />
       )}
     </>

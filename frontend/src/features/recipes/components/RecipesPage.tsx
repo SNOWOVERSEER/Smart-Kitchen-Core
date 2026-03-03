@@ -24,6 +24,7 @@ export function RecipesPage() {
   const [useExpiring, setUseExpiring] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [recipes, setRecipes] = useState<RecipeCard[]>([])
+  const [feasibilityNotice, setFeasibilityNotice] = useState<string | null>(null)
 
   const { data: savedRecipes } = useSavedRecipes()
   const savedCount = savedRecipes?.length ?? 0
@@ -38,10 +39,14 @@ export function RecipesPage() {
   }
 
   function handleGenerate() {
+    setFeasibilityNotice(null)
     generateMutation.mutate(
       { categories: selectedCategories, use_expiring: useExpiring, prompt: prompt || undefined },
       {
-        onSuccess: data => setRecipes(data.recipes),
+        onSuccess: data => {
+          setRecipes(data.recipes)
+          setFeasibilityNotice(data.feasibility_notice ?? null)
+        },
         onError: () => toast.error(t('recipes.generateFailed')),
       }
     )
@@ -258,6 +263,13 @@ export function RecipesPage() {
               </div>
             </motion.div>
           </div>
+
+          {feasibilityNotice && recipes.length > 0 && (
+            <div className="mx-3 sm:mx-4 lg:mx-0 mb-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 leading-relaxed">
+              <span className="font-medium">{t('recipes.feasibilityTitle')}</span>
+              {' '}{feasibilityNotice}
+            </div>
+          )}
 
           {/* Mode-based deck width keeps stack/fan centered while letting grid breathe */}
           <div

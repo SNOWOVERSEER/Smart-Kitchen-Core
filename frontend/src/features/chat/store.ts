@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AgentStatus, PendingActionResponse } from '@/shared/lib/api.types'
+import type { AgentStatus, PendingActionResponse, RecipeCard } from '@/shared/lib/api.types'
 
 export interface Message {
   id: string
@@ -8,6 +8,7 @@ export interface Message {
   timestamp: Date
   status?: AgentStatus
   pendingAction?: PendingActionResponse
+  pendingRecipes?: RecipeCard[]
   isTyping?: boolean
   confirmed?: 'yes' | 'no'
 }

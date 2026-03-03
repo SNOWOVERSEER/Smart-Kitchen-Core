@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { TopBar } from '@/shared/components/TopBar'
 import { DesktopPageHeader } from '@/shared/components/DesktopPageHeader'
 import { getAIConfigs, addAIConfig, deleteAIConfig, activateProvider } from '../api'
@@ -90,16 +91,18 @@ function ProfileTab() {
   const storeEmail = useAuthStore((s) => s.email)
   const [name, setName] = useState('')
   const [lang, setLang] = useState('en')
+  const [pantryBasics, setPantryBasics] = useState(true)
 
   useEffect(() => {
     if (profile) {
       setName(profile.display_name ?? '')
       setLang(profile.preferred_language ?? 'en')
+      setPantryBasics(profile.assume_pantry_basics ?? true)
     }
   }, [profile])
 
   const mutation = useMutation({
-    mutationFn: () => updateProfile({ display_name: name, preferred_language: lang }),
+    mutationFn: () => updateProfile({ display_name: name, preferred_language: lang, assume_pantry_basics: pantryBasics }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
       toast.success(t('settings.profile.success'))
@@ -181,6 +184,13 @@ function ProfileTab() {
               <SelectItem value="zh">{t('settings.profile.langZh')}</SelectItem>
             </SelectContent>
           </Select>
+        </SettingRow>
+
+        <SettingRow
+          label={t('settings.profile.pantryBasics')}
+          description={t('settings.profile.pantryBasicsDescription')}
+        >
+          <Switch checked={pantryBasics} onCheckedChange={setPantryBasics} />
         </SettingRow>
       </div>
 
