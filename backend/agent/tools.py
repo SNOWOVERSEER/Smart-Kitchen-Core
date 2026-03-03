@@ -152,5 +152,158 @@ def add_to_shopping_list(
     raise NotImplementedError
 
 
+@tool
+def search_saved_recipes(query: str = "") -> str:
+    """Search user's saved recipes by title or tags.
+
+    Args:
+        query: Optional search keyword to match against recipe titles or tags.
+               Leave empty to list recent saved recipes.
+    """
+    raise NotImplementedError
+
+
+@tool
+def get_recipe_details(recipe_id: int) -> str:
+    """Get full details of a saved recipe including ingredients and instructions.
+
+    Args:
+        recipe_id: The ID of the saved recipe to retrieve.
+    """
+    raise NotImplementedError
+
+
+@tool
+def generate_recipes_tool(prompt: str, categories: str = "", use_expiring: bool = False) -> str:
+    """Generate new recipe suggestions based on user's inventory and preferences.
+
+    Use this when the user explicitly asks you to generate or suggest recipe cards.
+    Do NOT use this for casual food questions — just answer those with your knowledge.
+
+    Args:
+        prompt: What the user wants — a dish name, cuisine preference, or general request.
+        categories: Comma-separated category filters. E.g. "asian,quick,vegetarian".
+        use_expiring: If true, prioritize ingredients expiring within 7 days.
+    """
+    raise NotImplementedError
+
+
+@tool
+def save_recipe(recipe_title: str) -> str:
+    """Save a recipe from the most recently generated batch.
+
+    Only works after generate_recipes_tool has been called in this conversation.
+
+    Args:
+        recipe_title: The exact title of the recipe to save.
+    """
+    raise NotImplementedError
+
+
+@tool
+def save_all_recipes() -> str:
+    """Save ALL recipes from the most recently generated batch at once.
+
+    Use this when the user wants to save all generated recipes (e.g. "save them all", "全部保存").
+    Only works after generate_recipes_tool has been called in this conversation.
+    """
+    raise NotImplementedError
+
+
+@tool
+def delete_recipe(recipe_id: int) -> str:
+    """Delete a saved recipe from the user's collection.
+
+    Args:
+        recipe_id: The ID of the saved recipe to delete.
+    """
+    raise NotImplementedError
+
+
+@tool
+def add_recipe_ingredients_to_shopping(recipe_id: int) -> str:
+    """Add all missing ingredients from a saved recipe to the shopping list.
+
+    Only adds ingredients that are NOT currently in stock.
+
+    Args:
+        recipe_id: The ID of the saved recipe.
+    """
+    raise NotImplementedError
+
+
+@tool
+def get_meals(date_from: str | None = None, date_to: str | None = None) -> list[dict]:
+    """Get the user's meals. Optionally filter by date range.
+
+    Args:
+        date_from: Start date in YYYY-MM-DD format (optional).
+        date_to: End date in YYYY-MM-DD format (optional).
+    """
+    raise NotImplementedError
+
+
+@tool
+def get_meal_details(meal_id: int) -> dict:
+    """Get full details of a specific meal including its recipes.
+
+    Args:
+        meal_id: The ID of the meal to retrieve.
+    """
+    raise NotImplementedError
+
+
+@tool
+def create_meal(name: str, recipe_ids: str = "", scheduled_date: str | None = None, meal_type: str | None = None) -> dict:
+    """Create a new meal (a named recipe collection).
+
+    Args:
+        name: Name of the meal in English. E.g. "Weekend BBQ", "Tuesday Dinner"
+        recipe_ids: Comma-separated saved recipe IDs to include. E.g. "12,34,56"
+        scheduled_date: Optional date in YYYY-MM-DD format.
+        meal_type: Optional meal type: "breakfast", "lunch", "dinner", or "snack".
+    """
+    raise NotImplementedError
+
+
+@tool
+def add_recipes_to_meal(meal_id: int, recipe_ids: str) -> dict:
+    """Add saved recipes to an existing meal.
+
+    Args:
+        meal_id: The meal ID to add recipes to.
+        recipe_ids: Comma-separated saved recipe IDs. E.g. "12,34"
+    """
+    raise NotImplementedError
+
+
+@tool
+def remove_recipe_from_meal(meal_id: int, recipe_id: int) -> dict:
+    """Remove a recipe from a meal.
+
+    Args:
+        meal_id: The meal ID.
+        recipe_id: The recipe ID to remove.
+    """
+    raise NotImplementedError
+
+
+@tool
+def delete_meal(meal_id: int) -> str:
+    """Delete a meal entirely.
+
+    Args:
+        meal_id: The ID of the meal to delete.
+    """
+    raise NotImplementedError
+
+
 # All tools for LLM binding
-ALL_TOOLS = [search_inventory, get_batch_details, add_item, consume_item, discard_batch, update_item, get_shopping_list, add_to_shopping_list]
+ALL_TOOLS = [
+    search_inventory, get_batch_details, get_shopping_list,
+    add_item, consume_item, discard_batch, update_item, add_to_shopping_list,
+    search_saved_recipes, get_recipe_details, generate_recipes_tool,
+    save_recipe, save_all_recipes, delete_recipe, add_recipe_ingredients_to_shopping,
+    get_meals, get_meal_details,
+    create_meal, add_recipes_to_meal, remove_recipe_from_meal, delete_meal,
+]

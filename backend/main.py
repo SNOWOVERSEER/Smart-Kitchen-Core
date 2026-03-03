@@ -1,6 +1,6 @@
 """FastAPI application with Supabase Auth and multi-user support."""
 
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from auth import get_current_user
@@ -28,6 +28,8 @@ from schemas import (
     # Shopping
     ShoppingItemCreate, ShoppingItemUpdate, ShoppingItemResponse,
     CompleteShoppingRequest, CompleteShoppingResult,
+    # Meals
+    MealCreate, MealUpdate, MealResponse, AddRecipesToMealRequest,
 )
 from barcode import lookup_barcode
 from photo_recognize import recognize_image, build_agent_text_from_items
@@ -41,7 +43,6 @@ from services import (
     update_inventory_item,
     get_transaction_logs,
     generate_recipes,
-    generate_recipe_image,
     save_recipe,
     get_saved_recipes,
     get_saved_recipe,
@@ -53,6 +54,13 @@ from services import (
     delete_shopping_item,
     delete_checked_shopping_items,
     complete_shopping,
+    create_meal,
+    get_meals,
+    get_meal,
+    update_meal,
+    delete_meal,
+    add_recipes_to_meal,
+    remove_recipe_from_meal,
 )
 
 
@@ -162,6 +170,7 @@ def get_profile(user_id: str = Depends(get_current_user)):
         id=profile["id"],
         display_name=profile.get("display_name"),
         preferred_language=profile.get("preferred_language", "en"),
+        assume_pantry_basics=profile.get("assume_pantry_basics", True),
     )
 
 
@@ -177,6 +186,7 @@ def update_profile(update: ProfileUpdate, user_id: str = Depends(get_current_use
         id=profile["id"],
         display_name=profile.get("display_name"),
         preferred_language=profile.get("preferred_language", "en"),
+        assume_pantry_basics=profile.get("assume_pantry_basics", True),
     )
 
 
@@ -419,6 +429,7 @@ def agent_action(request: AgentActionRequest, user_id: str = Depends(get_current
         status=result.get("status", "completed"),
         pending_action=pending,
         tool_calls=result.get("tool_calls", []),
+        pending_recipes=result.get("pending_recipes"),
     )
 
 
@@ -444,7 +455,6 @@ def generate_recipes_endpoint(
 @app.post("/api/v1/recipes", response_model=SavedRecipeResponse, status_code=201)
 def save_recipe_endpoint(
     request: SaveRecipeRequest,
-    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user),
 ) -> SavedRecipeResponse:
     row = save_recipe(
@@ -454,8 +464,6 @@ def save_recipe_endpoint(
         source_prompt=request.source_prompt,
         image_prompt=request.image_prompt,
     )
-    if request.image_prompt:
-        background_tasks.add_task(generate_recipe_image, row["id"], request.image_prompt, user_id)
     return row
 
 
@@ -477,22 +485,6 @@ def get_recipe_endpoint(
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
     return recipe
-
-
-@app.post("/api/v1/recipes/{recipe_id}/generate-image")
-def generate_image_endpoint(
-    recipe_id: int,
-    user_id: str = Depends(get_current_user),
-) -> dict:
-    recipe = get_saved_recipe(user_id, recipe_id)
-    if not recipe:
-        raise HTTPException(status_code=404, detail="Recipe not found")
-    if not recipe.get("image_prompt"):
-        raise HTTPException(status_code=400, detail="No image prompt for this recipe")
-    url = generate_recipe_image(recipe_id, recipe["image_prompt"], user_id)
-    if not url:
-        raise HTTPException(status_code=422, detail="Image generation failed or OpenAI not configured")
-    return {"image_url": url}
 
 
 @app.delete("/api/v1/recipes/{recipe_id}")
@@ -566,3 +558,48 @@ def delete_shopping_item_endpoint(
     if not delete_shopping_item(user_id, item_id):
         raise HTTPException(status_code=404, detail="Item not found")
     return {"message": "Item deleted"}
+
+
+# ── Meal endpoints ──
+
+@app.post("/api/v1/meals", response_model=MealResponse, status_code=201)
+def create_meal_endpoint(request: MealCreate, user_id: str = Depends(get_current_user)) -> MealResponse:
+    return create_meal(user_id, request)
+
+@app.get("/api/v1/meals", response_model=list[MealResponse])
+def list_meals_endpoint(date_from: str | None = None, date_to: str | None = None, user_id: str = Depends(get_current_user)) -> list[MealResponse]:
+    return get_meals(user_id, date_from=date_from, date_to=date_to)
+
+@app.get("/api/v1/meals/{meal_id}", response_model=MealResponse)
+def get_meal_endpoint(meal_id: int, user_id: str = Depends(get_current_user)) -> MealResponse:
+    meal = get_meal(user_id, meal_id)
+    if not meal:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    return meal
+
+@app.patch("/api/v1/meals/{meal_id}", response_model=MealResponse)
+def update_meal_endpoint(meal_id: int, request: MealUpdate, user_id: str = Depends(get_current_user)) -> MealResponse:
+    meal = update_meal(user_id, meal_id, request)
+    if not meal:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    return meal
+
+@app.delete("/api/v1/meals/{meal_id}")
+def delete_meal_endpoint(meal_id: int, user_id: str = Depends(get_current_user)) -> dict:
+    if not delete_meal(user_id, meal_id):
+        raise HTTPException(status_code=404, detail="Meal not found")
+    return {"message": "Meal deleted"}
+
+@app.post("/api/v1/meals/{meal_id}/recipes", response_model=MealResponse)
+def add_recipes_to_meal_endpoint(meal_id: int, request: AddRecipesToMealRequest, user_id: str = Depends(get_current_user)) -> MealResponse:
+    meal = add_recipes_to_meal(user_id, meal_id, request.recipe_ids)
+    if not meal:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    return meal
+
+@app.delete("/api/v1/meals/{meal_id}/recipes/{recipe_id}", response_model=MealResponse)
+def remove_recipe_from_meal_endpoint(meal_id: int, recipe_id: int, user_id: str = Depends(get_current_user)) -> MealResponse:
+    meal = remove_recipe_from_meal(user_id, meal_id, recipe_id)
+    if not meal:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    return meal

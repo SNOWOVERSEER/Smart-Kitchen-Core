@@ -3,6 +3,7 @@
 import uuid
 from typing import Any
 
+from langchain_core.messages import SystemMessage
 from langgraph.graph import StateGraph, END
 
 from agent.state import AgentState
@@ -15,6 +16,7 @@ from agent.nodes import (
     execute_write_tools,
     respond,
 )
+from agent.prompt import get_system_prompt
 from database import get_supabase_client
 
 
@@ -165,18 +167,34 @@ def run_agent(
         saved_messages = existing_state.get("messages", [])
         input_state["messages"] = saved_messages
         input_state["pending_writes"] = existing_state.get("pending_writes")
-        input_state["status"] = existing_state.get("status", "processing")
+        input_state["pending_recipes"] = existing_state.get("pending_recipes")
+        # Use agent_status (not DB status) to avoid collision
+        input_state["status"] = existing_state.get("agent_status", "processing")
     else:
         input_state["messages"] = []
 
+    # Ensure system message is first (Fix 1: correct ordering)
+    has_system = any(
+        isinstance(m, SystemMessage) or (isinstance(m, dict) and m.get("role") == "system")
+        for m in input_state["messages"]
+    )
+    if not has_system:
+        from agent.nodes import _detect_language, _get_user_language
+        user_lang = _get_user_language(user_id)
+        # Detect language from current input
+        if any("\u4e00" <= c <= "\u9fff" for c in input_text):
+            user_lang = "zh"
+        system_msg = {"role": "system", "content": get_system_prompt(user_lang)}
+        input_state["messages"] = [system_msg] + input_state["messages"]
+
     # Append new user message
-    input_state["messages"] = input_state.get("messages", []) + [
+    input_state["messages"] = input_state["messages"] + [
         {"role": "user", "content": input_text}
     ]
     input_state["user_id"] = user_id
 
     try:
-        result = app.invoke(input_state)
+        result = app.invoke(input_state, config={"recursion_limit": 25})
     except Exception as e:
         print(f"[ERROR] Graph execution failed: {e}")
         import traceback
@@ -197,18 +215,24 @@ def run_agent(
     # Serialize messages for checkpoint
     messages_to_save = _serialize_messages(result.get("messages", []))
 
-    # Save or clear checkpoint
-    if status == "completed":
+    # Save checkpoint — always preserve pending_recipes for follow-up turns
+    pending_recipes = result.get("pending_recipes")
+    if status == "completed" and not pending_recipes:
         checkpointer.complete(thread_id, messages_to_save)
         print(f"[CLEANUP] Thread {thread_id} completed")
     else:
+        # Keep thread active if there are pending_recipes (user may want to save them)
+        # Use "agent_status" to avoid collision with DB "status" column (Fix 3)
         checkpoint = {
             "messages": messages_to_save,
             "pending_writes": pending_writes,
-            "status": status,
+            "pending_recipes": pending_recipes,
+            "agent_status": status,
             "user_id": user_id,
         }
         checkpointer.put(thread_id, user_id, checkpoint)
+        if pending_recipes:
+            print(f"[CHECKPOINT] Thread {thread_id} kept active with {len(pending_recipes)} pending recipes")
 
     # Build pending_action for API response (matches frontend schema)
     pending_dict = None
@@ -244,4 +268,5 @@ def run_agent(
         "status": status,
         "pending_action": pending_dict,
         "tool_calls": tool_calls_log,
+        "pending_recipes": result.get("pending_recipes"),
     }

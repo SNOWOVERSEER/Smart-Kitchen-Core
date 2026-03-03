@@ -649,15 +649,76 @@ def _refresh_recipe_ingredient_stock(recipe_row: dict, inventory_rows: list[dict
     return refreshed_row
 
 
+# Common pantry staples — assumed available when user has assume_pantry_basics=True
+PANTRY_STAPLES = [
+    "salt", "pepper", "cooking oil", "olive oil", "sugar", "garlic",
+    "onion", "soy sauce", "vinegar", "flour", "butter", "eggs",
+    "water", "rice", "pasta",
+]
+
+# Categories that count as "real cooking ingredients" for feasibility check
+COOKING_CATEGORIES = {"meat", "seafood", "vegetable", "fruit", "dairy", "grain", "legume"}
+
+# Snack/beverage/condiment categories that don't count toward cooking feasibility
+NON_COOKING_CATEGORIES = {"snack", "beverage", "condiment", "sauce"}
+
+
+def _classify_prompt_mode(prompt: str | None) -> str:
+    """Detect if the user is requesting a specific dish or exploring."""
+    if not prompt:
+        return "exploratory"
+    words = prompt.strip().split()
+    action_words = {"use", "make", "cook", "with", "using", "something", "suggest", "recommend", "any", "give"}
+    if len(words) <= 6 and not any(w.lower() in action_words for w in words):
+        return "specific_dish"
+    return "exploratory"
+
+
+def _check_inventory_feasibility(inventory: list[dict]) -> tuple[bool, list[str]]:
+    """Check if inventory has enough real ingredients to cook with."""
+    cooking_items = []
+    for item in inventory:
+        cat = (item.get("category") or "").lower()
+        name = item.get("item_name", "")
+        if cat in COOKING_CATEGORIES:
+            cooking_items.append(name)
+        elif cat not in NON_COOKING_CATEGORIES and cat:
+            cooking_items.append(name)
+    return len(set(cooking_items)) >= 3, cooking_items
+
+
+def _get_user_taste_profile(user_id: str) -> list[str]:
+    """Extract tag frequency from saved recipes to understand user preferences."""
+    supabase = get_supabase_client()
+    result = (supabase.table("saved_recipes")
+              .select("tags")
+              .eq("user_id", user_id)
+              .order("created_at", desc=True)
+              .limit(30)
+              .execute())
+    tag_counts: dict[str, int] = {}
+    for row in (result.data or []):
+        for tag in (row.get("tags") or []):
+            if isinstance(tag, str):
+                tag_counts[tag.lower()] = tag_counts.get(tag.lower(), 0) + 1
+    return [tag for tag, _ in sorted(tag_counts.items(), key=lambda x: -x[1])[:5]]
+
+
+def _get_assume_pantry_basics(user_id: str) -> bool:
+    """Check if user has pantry basics assumption enabled."""
+    supabase = get_supabase_client()
+    result = (supabase.table("profiles")
+              .select("assume_pantry_basics")
+              .eq("id", user_id)
+              .limit(1)
+              .execute())
+    if result.data:
+        return result.data[0].get("assume_pantry_basics", True)
+    return True
+
+
 def generate_recipes(user_id: str, categories: list[str], use_expiring: bool, prompt: str | None) -> dict:
-    """
-    Call the user's LLM with structured output to generate RECIPES_PER_GENERATION recipe cards.
-    If use_expiring=True: fetches items expiring within 7 days (falls back to general inventory if none found).
-    If categories is non-empty: appends a style/category focus instruction.
-    If prompt is provided: appends user's special request.
-    Returns dict matching GenerateRecipesResponse schema.
-    Raises ValueError on LLM failure.
-    """
+    """Generate recipe cards with smart mode detection and feasibility checking."""
     from schemas import RecipeCard
     from agent.llm_factory import get_user_llm
     from pydantic import BaseModel as _BaseModel
@@ -670,57 +731,111 @@ def generate_recipes(user_id: str, categories: list[str], use_expiring: bool, pr
     supabase = get_supabase_client()
     all_inv = [item for item in get_all_inventory(user_id) if (item.get("quantity") or 0) > 0]
 
+    feasibility_notice: str | None = None
+
+    # --- Mode detection ---
+    prompt_mode = _classify_prompt_mode(prompt)
+
+    # --- Expiring items handling ---
     if use_expiring:
         cutoff = (date.today() + timedelta(days=7)).isoformat()
         result = (supabase.table("inventory")
-            .select("item_name, brand, quantity, unit, expiry_date")
+            .select("item_name, brand, quantity, unit, expiry_date, category")
             .eq("user_id", user_id).gt("quantity", 0)
             .lte("expiry_date", cutoff).not_.is_("expiry_date", "null")
             .order("expiry_date").limit(20).execute())
         expiring = result.data or []
         if expiring:
-            inventory_text = _format_inventory_for_prompt(expiring)
-            mode_instruction = "Prioritize using these expiring items:"
+            inventory_items = expiring
         else:
-            inventory_text = _format_inventory_for_prompt(all_inv[:15])
-            mode_instruction = f"Generate {RECIPES_PER_GENERATION} recipes using ingredients from this inventory:"
+            inventory_items = all_inv[:15]
     else:
-        inventory_text = _format_inventory_for_prompt(all_inv[:20])
-        mode_instruction = f"Generate {RECIPES_PER_GENERATION} recipes using ingredients from this inventory:"
+        inventory_items = all_inv[:20]
+
+    inventory_text = _format_inventory_for_prompt(inventory_items)
+
+    # --- Feasibility check (only for exploratory mode without explicit prompt) ---
+    is_feasible, cooking_items = _check_inventory_feasibility(inventory_items)
+    taste_tags = _get_user_taste_profile(user_id)
+
+    if not is_feasible and prompt_mode == "exploratory" and not prompt:
+        taste_hint = f" Based on your cooking history, you enjoy: {', '.join(taste_tags)}." if taste_tags else ""
+        feasibility_notice = (
+            f"Your pantry is a bit light for full recipes right now — "
+            f"here are suggestions you might enjoy that require minimal extra shopping.{taste_hint}"
+        )
+
+    # --- Pantry staples ---
+    assume_basics = _get_assume_pantry_basics(user_id)
+    staples_block = ""
+    if assume_basics:
+        staples_block = (
+            "\n\nCommon staples (assume the user has these even if not listed above): "
+            + ", ".join(PANTRY_STAPLES) + "."
+        )
+
+    # --- Build mode instruction ---
+    if prompt_mode == "specific_dish" and prompt:
+        mode_instruction = (
+            f'The user wants: "{prompt}".\n'
+            f"Recipe 1 MUST be this exact dish, prepared authentically.\n"
+            f"Recipes 2-{RECIPES_PER_GENERATION} should be complementary dishes from the same "
+            f"cuisine that pair well with it — sides, soups, appetizers, or desserts that "
+            f"form a cohesive meal. Do NOT generate random unrelated recipes."
+        )
+    elif not is_feasible and not prompt:
+        taste_str = f" The user enjoys: {', '.join(taste_tags)}." if taste_tags else ""
+        mode_instruction = (
+            f"The user's inventory is limited for cooking.{taste_str}\n"
+            f"Suggest {RECIPES_PER_GENERATION} practical, real recipes the user would enjoy. "
+            f"These should be simple dishes that use some of the available ingredients "
+            f"and require minimal extra shopping. Clearly mark which ingredients are NOT in stock."
+        )
+    else:
+        mode_instruction = f"Generate {RECIPES_PER_GENERATION} recipes using ingredients from this inventory."
+        if use_expiring:
+            mode_instruction = f"Prioritize using expiring items. " + mode_instruction
 
     if categories:
-        mode_instruction += f" Focus on these styles/categories: {', '.join(categories)}."
+        mode_instruction += f"\nFocus on these styles/categories: {', '.join(categories)}."
 
-    if prompt:
-        mode_instruction += f' User special request: "{prompt}"'
+    if prompt and prompt_mode == "exploratory":
+        mode_instruction += f'\nUser request: "{prompt}"'
 
-    if not use_expiring and not categories and not prompt:
-        mode_instruction = f"Generate {RECIPES_PER_GENERATION} recipes using ingredients from this inventory:"
+    # --- System prompt ---
+    system_prompt = f"""You are a practical recipe assistant. Your goal is to suggest real,
+delicious recipes that people actually cook.
 
-    system_prompt = f"""You are a creative recipe assistant.
 {mode_instruction}
 
 Available inventory:
-{inventory_text}
+{inventory_text}{staples_block}
 
 Rules:
-1. Include ALL ingredients each recipe needs — not only ones in stock.
-2. For each ingredient, set have_in_stock=true if a semantically matching item exists in the inventory above.
-   Match using culinary knowledge: "ground pork" matches "pork mince", "猪绞肉" matches "Coles pork mince".
-   Do NOT do exact string matching.
-3. Do NOT invent implausible ingredient combinations.
-4. instructions: numbered steps as separate strings (not a paragraph).
-5. cook_time_min: total time including prep.
-6. tags: lowercase English only. E.g. ["quick", "vegetarian", "asian"].
-7. All field values in English.
-8. image_prompt: Write a vivid 1-sentence DALL-E prompt for a professional food photo of this dish. E.g. "A steaming bowl of beef pho with fresh herbs and lime, Vietnamese street food aesthetic, warm natural light."
+1. Every recipe MUST be a real dish from an established cuisine tradition, or a reasonable
+   variation of one. Never invent implausible ingredient combinations.
+2. Do NOT force incompatible ingredients together just because they are in stock.
+   It is better to suggest a recipe that needs a few extra ingredients than to create
+   something no one would eat.
+3. Include ALL ingredients each recipe needs — not only ones in stock.
+4. For each ingredient, set have_in_stock=true if a semantically matching item exists in
+   the inventory above. Use culinary knowledge for matching: "ground pork" matches
+   "pork mince", "chicken breast" matches "chicken".
+5. instructions: numbered steps as separate strings.
+6. cook_time_min: total time including prep.
+7. tags: lowercase English only. E.g. ["quick", "vegetarian", "asian"].
+8. All field values in English.
+9. image_prompt: Write a vivid 1-sentence description for a professional food photo of
+   this dish. Include cuisine style, lighting, and presentation details.
+10. If the available ingredients are mostly snacks or non-cooking items, acknowledge this
+    and suggest simple, practical recipes anyway — do not force bizarre combinations.
 """
 
     try:
         output: _Output = structured_llm.invoke(system_prompt)
         recipes = output.recipes
+
         # Post-process: make have_in_stock deterministic and unit-aware
-        # so measurements like tbsp/tsp vs ml/L don't produce false missing tags.
         for recipe in recipes:
             for ingredient in recipe.ingredients:
                 matched_items = [
@@ -730,65 +845,15 @@ Rules:
                 covered, ratio = _is_ingredient_covered_by_inventory(ingredient, matched_items)
                 ingredient.have_in_stock = bool(ingredient.have_in_stock or covered)
                 in_stock = ingredient.have_in_stock
-                # Always expose ratio when computable — UI shows "have ~X / need Y" for every ingredient
                 ingredient.coverage_ratio = ratio
                 ingredient.batch_ids = [item["id"] for item in matched_items] if in_stock else []
-        return {"recipes": [r.model_dump() for r in recipes]}
+
+        return {
+            "recipes": [r.model_dump() for r in recipes],
+            "feasibility_notice": feasibility_notice,
+        }
     except Exception as exc:
         raise ValueError(f"Recipe generation failed: {exc}") from exc
-
-
-def generate_recipe_image(recipe_id: int, image_prompt: str, user_id: str) -> str | None:
-    """Generate a DALL-E image for a saved recipe. Returns URL or None (non-blocking)."""
-    supabase = get_supabase_client()
-    # Get user's active AI config
-    config_result = (supabase.table("user_ai_configs")
-        .select("provider, api_key_secret_id")
-        .eq("user_id", user_id)
-        .eq("is_active", True)
-        .execute())
-    if not config_result.data or config_result.data[0]["provider"] != "openai":
-        return None
-    # Decrypt API key using Vault — same pattern as llm_factory.py
-    secret_id = config_result.data[0]["api_key_secret_id"]
-    try:
-        from openai import OpenAI
-        # Decrypt API key from Vault using the same RPC call as llm_factory.py
-        secret_result = supabase.rpc(
-            "get_decrypted_secret",
-            {"secret_id": secret_id},
-        ).execute()
-        api_key = secret_result.data
-        client = OpenAI(api_key=api_key)
-        resp = client.images.generate(
-            model="dall-e-3",
-            prompt=image_prompt,
-            size="1024x1024",
-            quality="standard",
-            n=1,
-        )
-        url = resp.data[0].url
-        # Persist URL and verify write actually succeeded (avoid false-positive success).
-        supabase.table("saved_recipes").update({"image_url": url}).eq("id", recipe_id).eq("user_id", user_id).execute()
-        verify = (
-            supabase.table("saved_recipes")
-            .select("image_url")
-            .eq("id", recipe_id)
-            .eq("user_id", user_id)
-            .limit(1)
-            .execute()
-        )
-        if not verify.data:
-            print(f"[IMAGE] Failed to persist image_url: recipe #{recipe_id} not found for user {user_id}")
-            return None
-        persisted_url = verify.data[0].get("image_url")
-        if not persisted_url:
-            print(f"[IMAGE] Failed to persist image_url: recipe #{recipe_id} still has NULL image_url")
-            return None
-        return persisted_url
-    except Exception as e:
-        print(f"[IMAGE] generate_recipe_image failed for recipe #{recipe_id}: {e}")
-        return None  # Never fail a save because of image generation
 
 
 def save_recipe(
@@ -987,3 +1052,140 @@ def complete_shopping(
         failed_items=failed_items,
         inventory_ids=inventory_ids,
     )
+
+
+# ── Meal services ──
+
+def create_meal(user_id: str, data: "MealCreate") -> dict:
+    """Create a meal and optionally link recipes to it."""
+    supabase = get_supabase_client()
+    meal_data = {
+        "user_id": user_id,
+        "name": data.name,
+        "scheduled_date": data.scheduled_date.isoformat() if data.scheduled_date else None,
+        "meal_type": data.meal_type,
+        "notes": data.notes,
+    }
+    result = supabase.table("meals").insert(meal_data).execute()
+    meal = result.data[0]
+
+    if data.recipe_ids:
+        links = [
+            {"meal_id": meal["id"], "recipe_id": rid, "sort_order": i}
+            for i, rid in enumerate(data.recipe_ids)
+        ]
+        supabase.table("meal_recipes").insert(links).execute()
+
+    return get_meal(user_id, meal["id"])
+
+
+def get_meals(user_id: str, date_from: str | None = None, date_to: str | None = None) -> list[dict]:
+    """List user's meals with recipe summaries. Optionally filter by date range."""
+    supabase = get_supabase_client()
+    query = (supabase.table("meals")
+        .select("*, meal_recipes(recipe_id, sort_order, servings, saved_recipes(title, description, cook_time_min, servings, tags, image_url))")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True))
+    if date_from:
+        query = query.gte("scheduled_date", date_from)
+    if date_to:
+        query = query.lte("scheduled_date", date_to)
+    result = query.execute()
+    return [_format_meal(m) for m in (result.data or [])]
+
+
+def get_meal(user_id: str, meal_id: int) -> dict | None:
+    """Get a single meal with full recipe details."""
+    supabase = get_supabase_client()
+    result = (supabase.table("meals")
+        .select("*, meal_recipes(recipe_id, sort_order, servings, saved_recipes(title, description, cook_time_min, servings, tags, image_url))")
+        .eq("id", meal_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute())
+    if not result.data:
+        return None
+    return _format_meal(result.data[0])
+
+
+def update_meal(user_id: str, meal_id: int, data: "MealUpdate") -> dict | None:
+    """Update meal fields."""
+    supabase = get_supabase_client()
+    updates = {k: v for k, v in data.model_dump().items() if v is not None}
+    if "scheduled_date" in updates and updates["scheduled_date"]:
+        updates["scheduled_date"] = updates["scheduled_date"].isoformat()
+    if not updates:
+        return get_meal(user_id, meal_id)
+    result = (supabase.table("meals")
+        .update(updates)
+        .eq("id", meal_id)
+        .eq("user_id", user_id)
+        .execute())
+    if not result.data:
+        return None
+    return get_meal(user_id, meal_id)
+
+
+def delete_meal(user_id: str, meal_id: int) -> bool:
+    """Delete meal. Cascade deletes meal_recipes."""
+    supabase = get_supabase_client()
+    result = (supabase.table("meals")
+        .delete()
+        .eq("id", meal_id)
+        .eq("user_id", user_id)
+        .execute())
+    return bool(result.data)
+
+
+def add_recipes_to_meal(user_id: str, meal_id: int, recipe_ids: list[int]) -> dict | None:
+    """Add recipes to a meal. Skips duplicates."""
+    supabase = get_supabase_client()
+    meal = get_meal(user_id, meal_id)
+    if not meal:
+        return None
+    existing = {r["recipe_id"] for r in meal.get("recipes", [])}
+    max_order = max((r["sort_order"] for r in meal.get("recipes", [])), default=-1)
+    new_links = []
+    for i, rid in enumerate(recipe_ids):
+        if rid not in existing:
+            new_links.append({"meal_id": meal_id, "recipe_id": rid, "sort_order": max_order + 1 + i})
+    if new_links:
+        supabase.table("meal_recipes").insert(new_links).execute()
+    return get_meal(user_id, meal_id)
+
+
+def remove_recipe_from_meal(user_id: str, meal_id: int, recipe_id: int) -> dict | None:
+    """Remove a recipe from a meal."""
+    supabase = get_supabase_client()
+    meal = get_meal(user_id, meal_id)
+    if not meal:
+        return None
+    supabase.table("meal_recipes").delete().eq("meal_id", meal_id).eq("recipe_id", recipe_id).execute()
+    return get_meal(user_id, meal_id)
+
+
+def _format_meal(raw: dict) -> dict:
+    """Format a raw meal row with joined meal_recipes into MealResponse shape."""
+    recipes = []
+    for mr in sorted(raw.get("meal_recipes", []), key=lambda x: x.get("sort_order", 0)):
+        sr = mr.get("saved_recipes") or {}
+        recipes.append({
+            "recipe_id": mr["recipe_id"],
+            "title": sr.get("title", ""),
+            "description": sr.get("description"),
+            "cook_time_min": sr.get("cook_time_min"),
+            "servings": mr.get("servings") or sr.get("servings"),
+            "tags": sr.get("tags", []),
+            "image_url": sr.get("image_url"),
+            "sort_order": mr.get("sort_order", 0),
+        })
+    return {
+        "id": raw["id"],
+        "name": raw["name"],
+        "scheduled_date": raw.get("scheduled_date"),
+        "meal_type": raw.get("meal_type"),
+        "notes": raw.get("notes"),
+        "recipes": recipes,
+        "created_at": raw["created_at"],
+        "updated_at": raw["updated_at"],
+    }

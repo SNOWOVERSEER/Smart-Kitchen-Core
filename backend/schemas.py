@@ -36,10 +36,12 @@ class ProfileResponse(BaseModel):
     email: str | None = None
     display_name: str | None = None
     preferred_language: str = "en"
+    assume_pantry_basics: bool = True
 
 class ProfileUpdate(BaseModel):
     display_name: str | None = None
     preferred_language: str | None = None
+    assume_pantry_basics: bool | None = None
 
 
 # ── AI Config Schemas ──
@@ -181,6 +183,7 @@ class AgentActionResponse(BaseModel):
     status: str = Field(..., description="completed | awaiting_info | awaiting_confirm")
     pending_action: PendingActionResponse | None = None
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    pending_recipes: list[dict[str, Any]] | None = None
 
 
 # ── Photo Recognition Response (after AgentActionResponse to avoid forward ref) ──
@@ -211,6 +214,7 @@ class RecipeCard(BaseModel):
     instructions: list[str]
     tags: list[str] = Field(default_factory=list)
     image_prompt: str | None = None
+    image_url: str | None = None
 
 class GenerateRecipesRequest(BaseModel):
     categories: list[str] = Field(default_factory=list)
@@ -221,6 +225,7 @@ class GenerateRecipesRequest(BaseModel):
 
 class GenerateRecipesResponse(BaseModel):
     recipes: list[RecipeCard]
+    feasibility_notice: str | None = None
 
 class SaveRecipeRequest(BaseModel):
     recipe: RecipeCard
@@ -289,3 +294,42 @@ class CompleteShoppingResult(BaseModel):
     added_count: int
     failed_items: list[str]
     inventory_ids: list[int]
+
+
+# ── Meal schemas ──
+
+class MealCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    scheduled_date: date | None = None
+    meal_type: Literal['breakfast', 'lunch', 'dinner', 'snack'] | None = None
+    notes: str | None = None
+    recipe_ids: list[int] = Field(default_factory=list)
+
+class MealUpdate(BaseModel):
+    name: str | None = None
+    scheduled_date: date | None = None
+    meal_type: Literal['breakfast', 'lunch', 'dinner', 'snack'] | None = None
+    notes: str | None = None
+
+class MealRecipeResponse(BaseModel):
+    recipe_id: int
+    title: str
+    description: str | None = None
+    cook_time_min: int | None = None
+    servings: int | None = None
+    tags: list[str] = Field(default_factory=list)
+    image_url: str | None = None
+    sort_order: int = 0
+
+class MealResponse(BaseModel):
+    id: int
+    name: str
+    scheduled_date: date | None = None
+    meal_type: str | None = None
+    notes: str | None = None
+    recipes: list[MealRecipeResponse] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+class AddRecipesToMealRequest(BaseModel):
+    recipe_ids: list[int] = Field(..., min_length=1)

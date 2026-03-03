@@ -4,9 +4,8 @@ import json
 from datetime import date
 from typing import Any
 
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
-from agent.prompt import get_system_prompt
 from agent.state import AgentState, READ_TOOLS, WRITE_TOOLS
 from agent.tools import ALL_TOOLS
 from agent.llm_factory import get_user_llm
@@ -71,11 +70,10 @@ def _get_user_language(user_id: str) -> str:
 
 def handle_input(state: AgentState) -> dict:
     """
-    Prepare the initial state. Adds system message if this is the first turn.
-    Handles confirm/cancel for pending writes.
+    Handle confirm/cancel for pending writes, or pass through to agent.
+    System message is prepended in run_agent() to guarantee correct ordering.
     """
     messages = list(state.get("messages", []))
-    user_id = state.get("user_id", "")
 
     # Check if this is a confirmation of pending writes
     pending_writes = state.get("pending_writes")
@@ -111,22 +109,12 @@ def handle_input(state: AgentState) -> dict:
                 "response": cancel_msg,
             }
 
-    # Ensure system message is present
-    has_system = any(
-        isinstance(m, SystemMessage) or (isinstance(m, dict) and m.get("role") == "system")
-        for m in messages
-    )
-
-    if not has_system:
-        user_lang = _get_user_language(user_id)
-        # Also detect from current message
-        msg_lang = _detect_language(messages)
-        if msg_lang == "zh":
-            user_lang = "zh"
-
-        system_msg = SystemMessage(content=get_system_prompt(user_lang))
+        # Fix 4: User sent a new request while pending — discard with feedback
+        user_lang = _detect_language(messages)
+        from langchain_core.messages import AIMessage as _AIMsg
+        discard_msg = "Previous pending operation discarded. Processing your new request." if user_lang == "en" else "已取消之前的待确认操作，正在处理你的新请求。"
         return {
-            "messages": [system_msg],
+            "messages": [_AIMsg(content=discard_msg)],
             "pending_writes": None,
             "status": "processing",
         }
@@ -136,6 +124,28 @@ def handle_input(state: AgentState) -> dict:
 
 # ============ Node: agent_node ============
 
+MAX_HISTORY_MESSAGES = 20
+
+
+def _trim_messages(messages: list) -> list:
+    """Keep system message + last MAX_HISTORY_MESSAGES to avoid token overflow."""
+    if len(messages) <= MAX_HISTORY_MESSAGES + 1:
+        return messages
+
+    # Separate system message(s) from the rest
+    system_msgs = []
+    other_msgs = []
+    for m in messages:
+        role = getattr(m, "type", None) or (m.get("role") if isinstance(m, dict) else None)
+        if role == "system":
+            system_msgs.append(m)
+        else:
+            other_msgs.append(m)
+
+    # Keep system msgs + last N non-system msgs
+    return system_msgs + other_msgs[-MAX_HISTORY_MESSAGES:]
+
+
 def agent_node(state: AgentState) -> dict:
     """
     Call the LLM with bound tools. The LLM decides what to do:
@@ -144,7 +154,7 @@ def agent_node(state: AgentState) -> dict:
     - Respond directly with text (ask follow-up, answer query, etc.)
     """
     user_id = state.get("user_id", "")
-    messages = state.get("messages", [])
+    messages = _trim_messages(state.get("messages", []))
 
     llm = get_user_llm(user_id)
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
@@ -229,6 +239,49 @@ def execute_read_tools(state: AgentState) -> dict:
             elif tool_name == "get_shopping_list":
                 from services import get_shopping_items
                 result = get_shopping_items(user_id=state["user_id"])
+
+            elif tool_name == "search_saved_recipes":
+                from services import get_saved_recipes as _get_saved_recipes
+                query = args.get("query", "").strip().lower()
+                all_recipes = _get_saved_recipes(user_id, limit=50, offset=0)
+                if query:
+                    filtered = [
+                        r for r in all_recipes
+                        if query in r.get("title", "").lower()
+                        or any(query in (t or "").lower() for t in (r.get("tags") or []))
+                    ]
+                else:
+                    filtered = all_recipes[:10]
+                result = [
+                    {"id": r["id"], "title": r["title"], "tags": r.get("tags", []),
+                     "cook_time_min": r.get("cook_time_min")}
+                    for r in filtered
+                ]
+
+            elif tool_name == "get_recipe_details":
+                from services import get_saved_recipe as _get_saved_recipe
+                recipe = _get_saved_recipe(user_id, args["recipe_id"])
+                if recipe:
+                    result = recipe
+                else:
+                    result = {"error": f"Recipe #{args['recipe_id']} not found"}
+
+            elif tool_name == "get_meals":
+                from services import get_meals as _get_meals
+                result = _get_meals(
+                    user_id=user_id,
+                    date_from=args.get("date_from"),
+                    date_to=args.get("date_to"),
+                )
+
+            elif tool_name == "get_meal_details":
+                from services import get_meal as _get_meal
+                meal = _get_meal(user_id, args["meal_id"])
+                if meal:
+                    result = meal
+                else:
+                    result = {"error": f"Meal #{args['meal_id']} not found"}
+
             else:
                 result = f"Unknown read tool: {tool_name}"
 
@@ -293,6 +346,102 @@ def build_write_preview(state: AgentState) -> dict:
                 preview = f"添加到购物清单: {name}{qty_str}{note_str}"
             else:
                 preview = f"Add to shopping list: {name}{qty_str}{note_str}"
+
+        elif tool_name == "generate_recipes_tool":
+            cat_str = f" [{args.get('categories')}]" if args.get("categories") else ""
+            exp_str = " (prioritize expiring)" if args.get("use_expiring") else ""
+            if user_lang == "zh":
+                preview = f'生成菜谱建议: "{args["prompt"]}"{cat_str}{exp_str}'
+            else:
+                preview = f'Generate recipe suggestions: "{args["prompt"]}"{cat_str}{exp_str}'
+
+        elif tool_name == "save_recipe":
+            if user_lang == "zh":
+                preview = f'保存菜谱: "{args["recipe_title"]}"'
+            else:
+                preview = f'Save recipe: "{args["recipe_title"]}"'
+
+        elif tool_name == "save_all_recipes":
+            pending = state.get("pending_recipes") or []
+            if pending:
+                titles = ", ".join(r["title"] for r in pending)
+                if user_lang == "zh":
+                    preview = f"保存全部 {len(pending)} 道菜谱: {titles}"
+                else:
+                    preview = f"Save all {len(pending)} recipes: {titles}"
+            else:
+                if user_lang == "zh":
+                    preview = "没有待保存的菜谱"
+                else:
+                    preview = "No recipes to save"
+
+        elif tool_name == "delete_recipe":
+            from services import get_saved_recipe as _get_saved_recipe
+            recipe = _get_saved_recipe(user_id, args["recipe_id"])
+            title = recipe["title"] if recipe else f"#{args['recipe_id']}"
+            if user_lang == "zh":
+                preview = f'删除已保存的菜谱: "{title}"'
+            else:
+                preview = f'Delete saved recipe: "{title}"'
+
+        elif tool_name == "add_recipe_ingredients_to_shopping":
+            from services import get_saved_recipe as _get_saved_recipe
+            recipe = _get_saved_recipe(user_id, args["recipe_id"])
+            if recipe:
+                missing = [
+                    ing["name"] for ing in recipe.get("ingredients", [])
+                    if not ing.get("have_in_stock")
+                ]
+                items_str = ", ".join(missing[:5]) + ("..." if len(missing) > 5 else "")
+                if user_lang == "zh":
+                    preview = f'将 "{recipe["title"]}" 的 {len(missing)} 种缺少食材添加到购物清单: {items_str}'
+                else:
+                    preview = f'Add {len(missing)} missing ingredients from "{recipe["title"]}" to shopping list: {items_str}'
+            else:
+                if user_lang == "zh":
+                    preview = f"将菜谱 #{args['recipe_id']} 的食材添加到购物清单"
+                else:
+                    preview = f"Add ingredients from recipe #{args['recipe_id']} to shopping list"
+
+        elif tool_name == "create_meal":
+            name = args.get("name", "?")
+            date_str = f", date: {args['scheduled_date']}" if args.get("scheduled_date") else ""
+            type_str = f" ({args['meal_type']})" if args.get("meal_type") else ""
+            ids_str = f", recipes: [{args['recipe_ids']}]" if args.get("recipe_ids") else ""
+            if user_lang == "zh":
+                preview = f"创建餐食: {name}{type_str}{date_str}{ids_str}"
+            else:
+                preview = f"Create meal: {name}{type_str}{date_str}{ids_str}"
+
+        elif tool_name == "add_recipes_to_meal":
+            from services import get_meal as _get_meal
+            meal = _get_meal(user_id, args["meal_id"])
+            meal_name = meal["name"] if meal else f"#{args['meal_id']}"
+            if user_lang == "zh":
+                preview = f"将菜谱 [{args['recipe_ids']}] 添加到餐食 \"{meal_name}\""
+            else:
+                preview = f"Add recipes [{args['recipe_ids']}] to meal \"{meal_name}\""
+
+        elif tool_name == "remove_recipe_from_meal":
+            from services import get_meal as _get_meal, get_saved_recipe as _gsr
+            meal = _get_meal(user_id, args["meal_id"])
+            recipe = _gsr(user_id, args["recipe_id"])
+            meal_name = meal["name"] if meal else f"#{args['meal_id']}"
+            recipe_title = recipe["title"] if recipe else f"#{args['recipe_id']}"
+            if user_lang == "zh":
+                preview = f"从餐食 \"{meal_name}\" 中移除菜谱 \"{recipe_title}\""
+            else:
+                preview = f"Remove \"{recipe_title}\" from meal \"{meal_name}\""
+
+        elif tool_name == "delete_meal":
+            from services import get_meal as _get_meal
+            meal = _get_meal(user_id, args["meal_id"])
+            meal_name = meal["name"] if meal else f"#{args['meal_id']}"
+            if user_lang == "zh":
+                preview = f"删除餐食: \"{meal_name}\""
+            else:
+                preview = f"Delete meal: \"{meal_name}\""
+
         else:
             preview = f"Unknown write tool: {tool_name}"
 
@@ -507,6 +656,7 @@ def execute_write_tools(state: AgentState) -> dict:
             break
 
     results = []
+    new_pending_recipes = None
 
     for pw in pending_writes or []:
         tool_name = pw["tool"]
@@ -525,6 +675,172 @@ def execute_write_tools(state: AgentState) -> dict:
                 result_text = _execute_update(user_id, args, user_lang, raw_input)
             elif tool_name == "add_to_shopping_list":
                 result_text = _execute_add_to_shopping(user_id, args, user_lang)
+
+            elif tool_name == "generate_recipes_tool":
+                from services import generate_recipes as _generate_recipes
+                cats = [c.strip() for c in args.get("categories", "").split(",") if c.strip()]
+                gen_result = _generate_recipes(
+                    user_id=user_id,
+                    categories=cats,
+                    use_expiring=args.get("use_expiring", False),
+                    prompt=args["prompt"],
+                )
+                recipes_data = gen_result.get("recipes", [])
+                feasibility = gen_result.get("feasibility_notice")
+                new_pending_recipes = recipes_data
+                summary_parts = []
+                if feasibility:
+                    summary_parts.append(f"Note: {feasibility}")
+                for idx, r in enumerate(recipes_data, 1):
+                    time_str = f" ({r.get('cook_time_min', '?')} min)" if r.get("cook_time_min") else ""
+                    summary_parts.append(f"{idx}. {r['title']}{time_str} — {r.get('description', '')}")
+                result_text = "\n".join(summary_parts)
+
+            elif tool_name == "save_recipe":
+                from services import save_recipe as _save_recipe
+                pending = state.get("pending_recipes") or []
+                title = args["recipe_title"]
+                # Exact match first
+                match = next((r for r in pending if r["title"].lower() == title.lower()), None)
+                # Fuzzy match: check if query is a substring or if titles share significant words
+                if not match and pending:
+                    title_lower = title.lower()
+                    # Substring match
+                    match = next((r for r in pending if title_lower in r["title"].lower() or r["title"].lower() in title_lower), None)
+                if not match and pending:
+                    # Word overlap match (>= 50% of words match)
+                    title_words = set(title.lower().split())
+                    best_score, best_r = 0, None
+                    for r in pending:
+                        r_words = set(r["title"].lower().split())
+                        overlap = len(title_words & r_words)
+                        score = overlap / max(len(title_words), len(r_words), 1)
+                        if score > best_score:
+                            best_score, best_r = score, r
+                    if best_score >= 0.4:
+                        match = best_r
+                if not match:
+                    avail = ", ".join(r["title"] for r in pending)
+                    result_text = f'Recipe "{title}" not found in recent generation. Available: {avail}' if user_lang == "en" else f'在最近生成的菜谱中未找到 "{title}"。可选: {avail}'
+                else:
+                    saved = _save_recipe(
+                        user_id=user_id,
+                        recipe=match,
+                        source_mode="agent",
+                        source_prompt=title,
+                        image_prompt=match.get("image_prompt"),
+                    )
+                    result_text = f'Saved: "{saved["title"]}" (ID #{saved["id"]})' if user_lang == "en" else f'已保存: "{saved["title"]}" (ID #{saved["id"]})'
+                    # Fix 6: Remove saved recipe from pending to prevent duplicate saves
+                    remaining = [r for r in pending if r is not match]
+                    new_pending_recipes = remaining if remaining else []
+
+            elif tool_name == "save_all_recipes":
+                from services import save_recipe as _save_recipe_all
+                pending = state.get("pending_recipes") or []
+                if not pending:
+                    result_text = "No recipes to save" if user_lang == "en" else "没有待保存的菜谱"
+                else:
+                    saved_titles = []
+                    for recipe in pending:
+                        saved = _save_recipe_all(
+                            user_id=user_id,
+                            recipe=recipe,
+                            source_mode="agent",
+                            source_prompt=recipe.get("title", ""),
+                            image_prompt=recipe.get("image_prompt"),
+                        )
+                        saved_titles.append(f'"{saved["title"]}" (#{saved["id"]})')
+                    titles_str = ", ".join(saved_titles)
+                    result_text = f"Saved {len(saved_titles)} recipes: {titles_str}" if user_lang == "en" else f"已保存 {len(saved_titles)} 道菜谱: {titles_str}"
+                    # Clear pending recipes after saving all
+                    new_pending_recipes = []
+
+            elif tool_name == "delete_recipe":
+                from services import delete_saved_recipe as _delete_saved_recipe
+                _delete_saved_recipe(user_id, args["recipe_id"])
+                result_text = f"Deleted recipe #{args['recipe_id']}" if user_lang == "en" else f"已删除菜谱 #{args['recipe_id']}"
+
+            elif tool_name == "add_recipe_ingredients_to_shopping":
+                from services import get_saved_recipe as _get_saved_recipe, add_shopping_item
+                from schemas import ShoppingItemCreate
+                recipe = _get_saved_recipe(user_id, args["recipe_id"])
+                if not recipe:
+                    result_text = f"Recipe #{args['recipe_id']} not found" if user_lang == "en" else f"找不到菜谱 #{args['recipe_id']}"
+                else:
+                    missing = [
+                        ing for ing in recipe.get("ingredients", [])
+                        if not ing.get("have_in_stock")
+                    ]
+                    added = []
+                    for ing in missing:
+                        item = ShoppingItemCreate(
+                            item_name=ing["name"],
+                            quantity=ing.get("quantity"),
+                            unit=ing.get("unit"),
+                            source="recipe",
+                            source_recipe_id=recipe["id"],
+                            source_recipe_title=recipe["title"],
+                        )
+                        add_shopping_item(user_id, item)
+                        added.append(ing["name"])
+                    items_str = ", ".join(added)
+                    result_text = f"Added {len(added)} items to shopping list: {items_str}" if user_lang == "en" else f"已将 {len(added)} 种食材添加到购物清单: {items_str}"
+
+            elif tool_name == "create_meal":
+                from services import create_meal as _create_meal
+                from schemas import MealCreate
+                rid_str = args.get("recipe_ids", "")
+                rids = [int(x.strip()) for x in rid_str.split(",") if x.strip()] if rid_str else []
+                sd = None
+                if args.get("scheduled_date"):
+                    try:
+                        sd = date.fromisoformat(args["scheduled_date"])
+                    except ValueError:
+                        pass
+                meal_data = MealCreate(
+                    name=args["name"],
+                    scheduled_date=sd,
+                    meal_type=args.get("meal_type"),
+                    recipe_ids=rids,
+                )
+                meal = _create_meal(user_id, meal_data)
+                recipe_names = ", ".join(r["title"] for r in meal.get("recipes", []))
+                date_info = f" on {meal.get('scheduled_date')}" if meal.get("scheduled_date") else ""
+                if user_lang == "zh":
+                    result_text = f"已创建餐食: \"{meal['name']}\"{date_info}"
+                    if recipe_names:
+                        result_text += f"\n   菜谱: {recipe_names}"
+                else:
+                    result_text = f"Created meal: \"{meal['name']}\"{date_info}"
+                    if recipe_names:
+                        result_text += f"\n   Recipes: {recipe_names}"
+
+            elif tool_name == "add_recipes_to_meal":
+                from services import add_recipes_to_meal as _add_to_meal
+                rid_str = args.get("recipe_ids", "")
+                rids = [int(x.strip()) for x in rid_str.split(",") if x.strip()]
+                meal = _add_to_meal(user_id, args["meal_id"], rids)
+                if not meal:
+                    result_text = f"Meal #{args['meal_id']} not found" if user_lang == "en" else f"找不到餐食 #{args['meal_id']}"
+                else:
+                    result_text = f"Added {len(rids)} recipe(s) to \"{meal['name']}\"" if user_lang == "en" else f"已将 {len(rids)} 道菜谱添加到 \"{meal['name']}\""
+
+            elif tool_name == "remove_recipe_from_meal":
+                from services import remove_recipe_from_meal as _remove_from_meal
+                meal = _remove_from_meal(user_id, args["meal_id"], args["recipe_id"])
+                if not meal:
+                    result_text = f"Meal #{args['meal_id']} not found" if user_lang == "en" else f"找不到餐食 #{args['meal_id']}"
+                else:
+                    result_text = f"Removed recipe from \"{meal['name']}\"" if user_lang == "en" else f"已从 \"{meal['name']}\" 中移除菜谱"
+
+            elif tool_name == "delete_meal":
+                from services import delete_meal as _delete_meal
+                if _delete_meal(user_id, args["meal_id"]):
+                    result_text = f"Deleted meal #{args['meal_id']}" if user_lang == "en" else f"已删除餐食 #{args['meal_id']}"
+                else:
+                    result_text = f"Meal #{args['meal_id']} not found" if user_lang == "en" else f"找不到餐食 #{args['meal_id']}"
+
             else:
                 result_text = f"Unknown tool: {tool_name}"
 
@@ -546,13 +862,16 @@ def execute_write_tools(state: AgentState) -> dict:
 
     combined = "\n\n".join(results)
 
-    return {
+    update: dict[str, Any] = {
         "messages": [AIMessage(content=combined)],
         "pending_writes": None,
         "status": "completed",
         "response": combined,
         "tool_calls_log": tool_calls_log,
     }
+    if new_pending_recipes is not None:
+        update["pending_recipes"] = new_pending_recipes
+    return update
 
 
 def _execute_add(user_id: str, args: dict, lang: str, raw_input: str = "") -> str:
