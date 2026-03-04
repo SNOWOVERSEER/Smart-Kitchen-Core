@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import { Trash2, Zap, ChevronDown, ChevronUp, BookOpen } from 'lucide-react'
 import {
   Select,
@@ -330,11 +331,10 @@ export function ItemEditSheet({ item, open, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-stone-500">{t('shopping.expiryDate')}</label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={expiryDate}
                     onChange={(e) => setExpiryDate(e.target.value)}
-                    className="h-10 bg-stone-50 border-stone-200"
+                    className="h-10 bg-[#F5EFE6] border-0 focus-visible:ring-primary/30"
                   />
                 </div>
                 <button

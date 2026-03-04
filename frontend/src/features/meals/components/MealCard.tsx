@@ -2,7 +2,7 @@ import { useRef, useCallback, useState } from 'react'
 import { motion, type PanInfo } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { format, parseISO } from 'date-fns'
-import { CalendarDays, CalendarX2, GripVertical } from 'lucide-react'
+import { CalendarDays, CalendarX2, GripVertical, BookOpen } from 'lucide-react'
 import { MEAL_TYPE_CONFIG, EASE_OUT_EXPO } from '@/features/meals/lib/mealConstants'
 import type { MealType } from '@/features/meals/lib/mealConstants'
 import { useMealDragOptional } from '@/features/meals/lib/MealDragContext'
@@ -108,7 +108,14 @@ export function MealCard({ meal, onSelect, index, enableDrag, onReschedule, onUn
         </p>
 
         <div className="flex items-center gap-2">
-          {meal.scheduled_date ? (
+          {meal.is_template ? (
+            <span className="text-xs text-primary/70 flex items-center gap-1 font-medium">
+              <BookOpen className="w-3 h-3" />
+              {meal.instance_count != null && meal.instance_count > 0
+                ? t('meals.usedCount', 'Used {{count}} times', { count: meal.instance_count })
+                : t('meals.template', 'Template')}
+            </span>
+          ) : meal.scheduled_date ? (
             <span className="text-xs text-stone-500 flex items-center gap-1">
               <CalendarDays className="w-3 h-3" />
               {format(parseISO(meal.scheduled_date), 'MMM d')}

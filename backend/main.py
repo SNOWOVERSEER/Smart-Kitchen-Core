@@ -29,7 +29,7 @@ from schemas import (
     ShoppingItemCreate, ShoppingItemUpdate, ShoppingItemResponse,
     CompleteShoppingRequest, CompleteShoppingResult,
     # Meals
-    MealCreate, MealUpdate, MealResponse, AddRecipesToMealRequest,
+    MealCreate, MealUpdate, MealResponse, AddRecipesToMealRequest, InstantiateMealRequest,
 )
 from barcode import lookup_barcode
 from photo_recognize import recognize_image, build_agent_text_from_items
@@ -61,6 +61,7 @@ from services import (
     delete_meal,
     add_recipes_to_meal,
     remove_recipe_from_meal,
+    instantiate_meal,
 )
 
 
@@ -567,8 +568,8 @@ def create_meal_endpoint(request: MealCreate, user_id: str = Depends(get_current
     return create_meal(user_id, request)
 
 @app.get("/api/v1/meals", response_model=list[MealResponse])
-def list_meals_endpoint(date_from: str | None = None, date_to: str | None = None, user_id: str = Depends(get_current_user)) -> list[MealResponse]:
-    return get_meals(user_id, date_from=date_from, date_to=date_to)
+def list_meals_endpoint(date_from: str | None = None, date_to: str | None = None, is_template: bool | None = None, user_id: str = Depends(get_current_user)) -> list[MealResponse]:
+    return get_meals(user_id, date_from=date_from, date_to=date_to, is_template=is_template)
 
 @app.get("/api/v1/meals/{meal_id}", response_model=MealResponse)
 def get_meal_endpoint(meal_id: int, user_id: str = Depends(get_current_user)) -> MealResponse:
@@ -589,6 +590,18 @@ def delete_meal_endpoint(meal_id: int, user_id: str = Depends(get_current_user))
     if not delete_meal(user_id, meal_id):
         raise HTTPException(status_code=404, detail="Meal not found")
     return {"message": "Meal deleted"}
+
+@app.post("/api/v1/meals/{meal_id}/instantiate", response_model=MealResponse, status_code=201)
+def instantiate_meal_endpoint(meal_id: int, request: InstantiateMealRequest, user_id: str = Depends(get_current_user)) -> MealResponse:
+    meal = instantiate_meal(
+        user_id, meal_id,
+        scheduled_date=request.scheduled_date.isoformat(),
+        meal_type=request.meal_type,
+        name=request.name,
+    )
+    if not meal:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return meal
 
 @app.post("/api/v1/meals/{meal_id}/recipes", response_model=MealResponse)
 def add_recipes_to_meal_endpoint(meal_id: int, request: AddRecipesToMealRequest, user_id: str = Depends(get_current_user)) -> MealResponse:

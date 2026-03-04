@@ -317,6 +317,9 @@ export interface MealResponse {
   scheduled_date: string | null
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | null
   notes: string | null
+  is_template: boolean
+  template_id: number | null
+  instance_count?: number | null
   recipes: MealRecipeResponse[]
   created_at: string
   updated_at: string
@@ -328,6 +331,7 @@ export interface MealCreate {
   meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
   notes?: string
   recipe_ids?: number[]
+  is_template?: boolean
 }
 
 export interface MealUpdate {
@@ -335,6 +339,13 @@ export interface MealUpdate {
   scheduled_date?: string | null
   meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
   notes?: string | null
+  is_template?: boolean
+}
+
+export interface InstantiateMealRequest {
+  scheduled_date: string
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  name?: string
 }
 
 export interface AddRecipesToMealRequest {

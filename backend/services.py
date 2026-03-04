@@ -1065,6 +1065,7 @@ def create_meal(user_id: str, data: "MealCreate") -> dict:
         "scheduled_date": data.scheduled_date.isoformat() if data.scheduled_date else None,
         "meal_type": data.meal_type,
         "notes": data.notes,
+        "is_template": data.is_template,
     }
     result = supabase.table("meals").insert(meal_data).execute()
     meal = result.data[0]
@@ -1079,18 +1080,41 @@ def create_meal(user_id: str, data: "MealCreate") -> dict:
     return get_meal(user_id, meal["id"])
 
 
-def get_meals(user_id: str, date_from: str | None = None, date_to: str | None = None) -> list[dict]:
-    """List user's meals with recipe summaries. Optionally filter by date range."""
+def get_meals(
+    user_id: str,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    is_template: bool | None = None,
+) -> list[dict]:
+    """List user's meals with recipe summaries. Optionally filter by date range or template status."""
     supabase = get_supabase_client()
     query = (supabase.table("meals")
         .select("*, meal_recipes(recipe_id, sort_order, servings, saved_recipes(title, description, cook_time_min, servings, tags, image_url))")
         .eq("user_id", user_id)
         .order("created_at", desc=True))
+    if is_template is not None:
+        query = query.eq("is_template", is_template)
     if date_from:
         query = query.gte("scheduled_date", date_from)
     if date_to:
         query = query.lte("scheduled_date", date_to)
     result = query.execute()
+
+    # For templates, annotate with instance_count
+    if is_template:
+        template_ids = [m["id"] for m in (result.data or [])]
+        instance_counts: dict[int, int] = {}
+        if template_ids:
+            count_result = (supabase.table("meals")
+                .select("template_id")
+                .eq("user_id", user_id)
+                .in_("template_id", template_ids)
+                .execute())
+            for row in (count_result.data or []):
+                tid = row["template_id"]
+                instance_counts[tid] = instance_counts.get(tid, 0) + 1
+        return [_format_meal(m, instance_count=instance_counts.get(m["id"], 0)) for m in (result.data or [])]
+
     return [_format_meal(m) for m in (result.data or [])]
 
 
@@ -1109,11 +1133,12 @@ def get_meal(user_id: str, meal_id: int) -> dict | None:
 
 
 def update_meal(user_id: str, meal_id: int, data: "MealUpdate") -> dict | None:
-    """Update meal fields."""
+    """Update meal fields. Uses exclude_unset to allow setting fields to None."""
     supabase = get_supabase_client()
-    updates = {k: v for k, v in data.model_dump().items() if v is not None}
-    if "scheduled_date" in updates and updates["scheduled_date"]:
-        updates["scheduled_date"] = updates["scheduled_date"].isoformat()
+    updates = data.model_dump(exclude_unset=True)
+    if "scheduled_date" in updates:
+        sd = updates["scheduled_date"]
+        updates["scheduled_date"] = sd.isoformat() if sd else None
     if not updates:
         return get_meal(user_id, meal_id)
     result = (supabase.table("meals")
@@ -1164,7 +1189,40 @@ def remove_recipe_from_meal(user_id: str, meal_id: int, recipe_id: int) -> dict 
     return get_meal(user_id, meal_id)
 
 
-def _format_meal(raw: dict) -> dict:
+def instantiate_meal(user_id: str, template_id: int, scheduled_date: str, meal_type: str | None = None, name: str | None = None) -> dict | None:
+    """Create a meal instance from a template, copying its recipes."""
+    supabase = get_supabase_client()
+    # Fetch template
+    template = get_meal(user_id, template_id)
+    if not template or not template.get("is_template"):
+        return None
+
+    # Create instance
+    instance_data = {
+        "user_id": user_id,
+        "name": name or template["name"],
+        "scheduled_date": scheduled_date,
+        "meal_type": meal_type or template.get("meal_type"),
+        "notes": template.get("notes"),
+        "is_template": False,
+        "template_id": template_id,
+    }
+    result = supabase.table("meals").insert(instance_data).execute()
+    instance = result.data[0]
+
+    # Copy recipe links from template
+    template_recipes = template.get("recipes", [])
+    if template_recipes:
+        links = [
+            {"meal_id": instance["id"], "recipe_id": r["recipe_id"], "sort_order": r.get("sort_order", i)}
+            for i, r in enumerate(template_recipes)
+        ]
+        supabase.table("meal_recipes").insert(links).execute()
+
+    return get_meal(user_id, instance["id"])
+
+
+def _format_meal(raw: dict, instance_count: int | None = None) -> dict:
     """Format a raw meal row with joined meal_recipes into MealResponse shape."""
     recipes = []
     for mr in sorted(raw.get("meal_recipes", []), key=lambda x: x.get("sort_order", 0)):
@@ -1185,6 +1243,9 @@ def _format_meal(raw: dict) -> dict:
         "scheduled_date": raw.get("scheduled_date"),
         "meal_type": raw.get("meal_type"),
         "notes": raw.get("notes"),
+        "is_template": raw.get("is_template", False),
+        "template_id": raw.get("template_id"),
+        "instance_count": instance_count,
         "recipes": recipes,
         "created_at": raw["created_at"],
         "updated_at": raw["updated_at"],

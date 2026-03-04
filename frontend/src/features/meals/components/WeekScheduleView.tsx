@@ -9,8 +9,6 @@ import {
   isToday,
 } from 'date-fns'
 import { cn } from '@/lib/utils'
-import { MEAL_TYPE_CONFIG } from '../lib/mealConstants'
-import type { MealType } from '../lib/mealConstants'
 import { useMealDragOptional } from '../lib/MealDragContext'
 import type { MealResponse } from '@/shared/lib/api.types'
 
@@ -28,6 +26,7 @@ export function WeekScheduleView({
   onSelectDate,
   meals,
   onSelectMeal,
+  onUnschedule,
   className,
 }: WeekScheduleViewProps) {
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 })
@@ -47,39 +46,68 @@ export function WeekScheduleView({
     return map
   }, [meals])
 
+  // Drag context for drop-target registration
+  const dragCtx = useMealDragOptional()
+  const dayRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const isDragging = dragCtx?.draggedMealId != null
+  const hoveredDate = dragCtx?.hoveredDate ?? null
+
+  // Register day cell rects for hit-testing (same pattern as WeekCalendarStrip)
+  useLayoutEffect(() => {
+    if (!dragCtx) return
+    const rects = Array.from(dayRefs.current.entries()).map(([dateKey, el]) => ({
+      dateKey,
+      rect: el.getBoundingClientRect(),
+    }))
+    dragCtx.registerDayRects(rects)
+  })
+
+  const setDayRef = useCallback((dateKey: string, el: HTMLDivElement | null) => {
+    if (el) dayRefs.current.set(dateKey, el)
+    else dayRefs.current.delete(dateKey)
+  }, [])
+
   const goToPrevWeek = () => onSelectDate(addDays(selectedDate, -7))
   const goToNextWeek = () => onSelectDate(addDays(selectedDate, 7))
 
   return (
     <div
       className={cn(
-        'bg-white rounded-2xl border border-stone-200/60 shadow-[0_2px_12px_-4px_rgba(28,22,18,0.08)] overflow-hidden',
+        'bg-white rounded-2xl border shadow-[0_2px_12px_-4px_rgba(28,22,18,0.08)] overflow-hidden transition-all duration-200',
+        isDragging
+          ? 'border-primary/50 ring-2 ring-primary/15 shadow-[0_4px_20px_-4px_rgba(28,22,18,0.15)]'
+          : 'border-stone-200/60',
         className,
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-stone-100">
+      <div className="flex items-center justify-between px-3.5 py-2 border-b border-stone-100">
         <button
           type="button"
           onClick={goToPrevWeek}
-          className="w-7 h-7 rounded-full hover:bg-stone-100 flex items-center justify-center transition-colors"
+          className="w-6.5 h-6.5 rounded-full hover:bg-stone-100 flex items-center justify-center transition-colors"
         >
           <ChevronLeft className="w-4 h-4 text-stone-400" />
         </button>
-        <span className="text-[11px] font-bold uppercase tracking-[0.09em] text-stone-400">
-          {format(weekStart, 'MMM yyyy')}
+        <span
+          className={cn(
+            'text-[11px] font-bold uppercase tracking-[0.09em]',
+            isDragging ? 'text-primary' : 'text-stone-400',
+          )}
+        >
+          {isDragging ? 'Drop on a day to schedule' : format(weekStart, 'MMM yyyy')}
         </span>
         <button
           type="button"
           onClick={goToNextWeek}
-          className="w-7 h-7 rounded-full hover:bg-stone-100 flex items-center justify-center transition-colors"
+          className="w-6.5 h-6.5 rounded-full hover:bg-stone-100 flex items-center justify-center transition-colors"
         >
           <ChevronRight className="w-4 h-4 text-stone-400" />
         </button>
       </div>
 
       {/* Days */}
-      <div className="divide-y divide-stone-100">
+      <div className="p-2 sm:p-2.5">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={format(weekStart, 'yyyy-MM-dd')}
@@ -87,100 +115,111 @@ export function WeekScheduleView({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="divide-y divide-stone-100"
+            className="grid grid-cols-4 sm:grid-cols-7 gap-2"
           >
             {days.map((day) => {
               const dateStr = format(day, 'yyyy-MM-dd')
               const dayMeals = mealsByDate.get(dateStr) ?? []
               const isTodayDate = isToday(day)
               const isSelected = isSameDay(day, selectedDate)
+              const isHovered = isDragging && hoveredDate === dateStr
 
               return (
                 <div
                   key={dateStr}
+                  ref={(el) => setDayRef(dateStr, el)}
                   className={cn(
-                    'flex gap-3 px-3 py-2 cursor-pointer transition-colors hover:bg-stone-50/60',
-                    isSelected && 'bg-primary/[0.03]',
+                    'rounded-xl border p-2 cursor-pointer transition-all flex flex-col min-h-[86px] sm:min-h-[92px]',
+                    isHovered
+                      ? 'border-primary/50 bg-primary/[0.06] ring-2 ring-primary/20 scale-[1.02]'
+                      : isSelected
+                        ? 'border-primary/40 bg-primary/[0.04]'
+                        : 'border-stone-200/70 hover:bg-stone-50/70',
                   )}
                   onClick={() => onSelectDate(day)}
                 >
-                  {/* Day label */}
-                  <div className="w-10 shrink-0 flex flex-col items-center pt-0.5">
-                    <span
-                      className={cn(
-                        'text-[10px] uppercase tracking-wider leading-tight',
-                        isTodayDate ? 'text-primary font-bold' : 'text-stone-400',
-                      )}
-                    >
-                      {format(day, 'EEE').slice(0, 3)}
-                    </span>
-                    <span
-                      className={cn(
-                        'text-[17px] font-semibold leading-tight',
-                        isTodayDate
-                          ? 'text-primary'
-                          : isSelected
-                            ? 'text-[#1C1612]'
-                            : 'text-stone-500',
-                      )}
-                    >
-                      {format(day, 'd')}
-                    </span>
+                  {/* Day header */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex flex-col leading-tight">
+                      <span
+                        className={cn(
+                          'text-[10px] uppercase tracking-wider',
+                          isHovered
+                            ? 'text-primary font-bold'
+                            : isTodayDate
+                              ? 'text-primary font-bold'
+                              : 'text-stone-400',
+                        )}
+                      >
+                        {format(day, 'EEE')}
+                      </span>
+                      <span
+                        className={cn(
+                          'text-[16px] font-semibold mt-0.5',
+                          isHovered
+                            ? 'text-primary'
+                            : isTodayDate
+                              ? 'text-primary'
+                              : isSelected
+                                ? 'text-[#1C1612]'
+                                : 'text-stone-500',
+                        )}
+                      >
+                        {format(day, 'd')}
+                      </span>
+                    </div>
+
+                    {dayMeals.length > 0 && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-500">
+                        {dayMeals.length}
+                      </span>
+                    )}
                   </div>
 
-                  {/* Meal chips */}
-                  <div className="flex-1 flex flex-col gap-1 min-h-[2rem] justify-center">
+                  {/* Meal preview */}
+                  <div className="mt-1.5 flex-1">
                     {dayMeals.length > 0 ? (
-                      dayMeals.map((meal) => {
-                        const mt = meal.meal_type as MealType | null
-                        const config = mt ? MEAL_TYPE_CONFIG[mt] : null
-                        return (
-                          <button
+                      <div className="flex flex-col gap-1">
+                        {dayMeals.map((meal) => (
+                          <div
                             key={meal.id}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onSelectMeal(meal.id)
-                            }}
-                            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-stone-200/60 hover:border-stone-300 shadow-[0_1px_3px_-1px_rgba(28,22,18,0.05)] text-left transition-colors bg-white"
+                            className="group/chip w-full min-h-6 px-2 py-1 rounded-lg border border-stone-200/70 bg-white text-left hover:border-stone-300 transition-colors flex items-start gap-1"
                           >
-                            <div
-                              className={cn(
-                                'w-1 self-stretch rounded-full shrink-0',
-                                config
-                                  ? `bg-gradient-to-b ${config.gradient}`
-                                  : 'bg-stone-300',
-                              )}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <span className="text-xs font-medium text-stone-700 truncate block">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onSelectMeal(meal.id)
+                              }}
+                              className="flex-1 min-w-0"
+                            >
+                              <span className="text-[10px] font-medium text-stone-700 leading-[1.3] whitespace-normal break-words block">
                                 {meal.name}
                               </span>
-                              {meal.recipes.length > 0 && (
-                                <span className="text-[10px] text-stone-400 truncate block">
-                                  {meal.recipes
-                                    .slice(0, 2)
-                                    .map((r) => r.title)
-                                    .join(', ')}
-                                </span>
-                              )}
-                            </div>
-                            {mt && config && (
-                              <span
-                                className={cn(
-                                  'text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0',
-                                  config.bgLight,
-                                  config.textColor,
-                                )}
+                            </button>
+                            {onUnschedule && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onUnschedule(meal.id)
+                                }}
+                                className="shrink-0 p-0.5 rounded-full text-stone-300 opacity-0 group-hover/chip:opacity-100 hover:text-red-500 hover:bg-red-50 transition-all"
                               >
-                                {mt.slice(0, 3)}
-                              </span>
+                                <CalendarX2 className="w-3 h-3" />
+                              </button>
                             )}
-                          </button>
-                        )
-                      })
+                          </div>
+                        ))}
+                      </div>
+                    ) : isHovered ? (
+                      <div className="h-6 flex items-center px-0.5">
+                        <span className="text-[10px] text-primary font-medium">Drop here</span>
+                      </div>
                     ) : (
-                      <span className="text-[11px] text-stone-300 italic">—</span>
+                      <div className="h-6 flex items-center px-0.5">
+                        <span className="text-[10px] text-stone-300 italic">No meals</span>
+                      </div>
                     )}
                   </div>
                 </div>

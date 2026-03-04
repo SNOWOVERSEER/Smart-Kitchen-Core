@@ -9,9 +9,11 @@ import {
   Trash2,
   CalendarDays,
   CookingPot,
+  BookOpen,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { DateInput } from '@/components/ui/date-input'
 import {
   useMeal,
   useUpdateMeal,
@@ -28,6 +30,12 @@ import { MealTypeSelector } from './MealTypeSelector'
 import { RecipePicker } from './RecipePicker'
 import { RecipeIngredientsList } from './RecipeIngredientsList'
 import { MealCookingGuide } from './MealCookingGuide'
+import {
+  MEAL_FORM_INPUT,
+  MEAL_FORM_LABEL,
+  MEAL_FORM_SECTION,
+  MEAL_FORM_TEXTAREA,
+} from './mealFormStyles'
 
 interface MealDetailOverlayProps {
   mealId: number | null
@@ -211,7 +219,8 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') handleNameBlur()
                           }}
-                          className="w-full bg-white/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-lg font-bold text-[#1C1612] outline-none focus:ring-2 focus:ring-white/50"
+                          className="w-full bg-white/60 backdrop-blur-sm rounded-lg px-3 py-1.5 text-[1.35rem] font-normal text-[#1C1612] outline-none focus:ring-2 focus:ring-white/50"
+                          style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
                         />
                       ) : (
                         <button
@@ -219,18 +228,28 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                           onClick={() => setEditingName(true)}
                           className="text-left w-full"
                         >
-                          <h2 className="text-xl font-bold text-[#1C1612] truncate leading-tight">
+                          <h2
+                            className="text-[1.45rem] font-normal text-[#1C1612] truncate leading-tight"
+                            style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
+                          >
                             {meal.name}
                           </h2>
                         </button>
                       )}
 
                       <div className="flex items-center gap-2 mt-1">
-                        {meal.scheduled_date && (
+                        {meal.is_template ? (
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary flex items-center gap-1">
+                            <BookOpen className="w-3 h-3" />
+                            {meal.instance_count != null && meal.instance_count > 0
+                              ? t('meals.usedCount', 'Used {{count}} times', { count: meal.instance_count })
+                              : t('meals.template', 'Template')}
+                          </span>
+                        ) : meal.scheduled_date ? (
                           <span className="text-xs text-stone-600/80 font-medium">
                             {meal.scheduled_date}
                           </span>
-                        )}
+                        ) : null}
                         {meal.meal_type && (
                           <span className={cn(
                             'text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full',
@@ -246,23 +265,25 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                 </div>
 
                 {/* Scrollable body */}
-                <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-5">
-                  {/* Date picker */}
-                  <div>
-                    <p className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-stone-400 mb-2">
-                      {t('meals.scheduledDate', 'Date')}
-                    </p>
-                    <input
-                      type="date"
-                      value={meal.scheduled_date ?? ''}
-                      onChange={(e) => handleDateChange(e.target.value)}
-                      className="w-full rounded-xl border border-stone-200/80 bg-white px-3 py-2 text-sm text-stone-700 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-colors"
-                    />
-                  </div>
+                <div className="flex-1 overflow-y-auto px-5 py-4 pb-6 flex flex-col gap-4">
+                  {/* Date picker (hidden for templates) */}
+                  {!meal.is_template && (
+                    <div className={MEAL_FORM_SECTION}>
+                      <p className={MEAL_FORM_LABEL}>
+                        {t('meals.scheduledDate', 'Date')}
+                      </p>
+                      <DateInput
+                        value={meal.scheduled_date ?? ''}
+                        onChange={(e) => handleDateChange(e.target.value)}
+                        className={MEAL_FORM_INPUT}
+                        portal
+                      />
+                    </div>
+                  )}
 
                   {/* Meal type selector */}
-                  <div>
-                    <p className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-stone-400 mb-2">
+                  <div className={MEAL_FORM_SECTION}>
+                    <p className={MEAL_FORM_LABEL}>
                       {t('meals.mealType', 'Meal type')}
                     </p>
                     <MealTypeSelector
@@ -272,8 +293,8 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                   </div>
 
                   {/* Notes */}
-                  <div>
-                    <p className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-stone-400 mb-2">
+                  <div className={MEAL_FORM_SECTION}>
+                    <p className={MEAL_FORM_LABEL}>
                       {t('meals.notes', 'Notes')}
                     </p>
                     <textarea
@@ -282,13 +303,13 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                       onBlur={handleNotesBlur}
                       placeholder={t('meals.notesPlaceholder', 'Optional notes...')}
                       rows={2}
-                      className="w-full rounded-xl border border-stone-200/80 bg-white px-3 py-2.5 text-sm text-stone-700 placeholder:text-stone-400 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 resize-none transition-colors"
+                      className={MEAL_FORM_TEXTAREA}
                     />
                   </div>
 
                   {/* Recipes in meal */}
-                  <div>
-                    <p className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-stone-400 mb-2">
+                  <div className={MEAL_FORM_SECTION}>
+                    <p className={MEAL_FORM_LABEL}>
                       {t('meals.addRecipes', 'Recipes')}
                     </p>
 
@@ -418,8 +439,8 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                           transition={{ duration: 0.2 }}
                           className="overflow-hidden"
                         >
-                          <div className="mt-3 flex flex-col gap-2">
-                            <p className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-stone-400">
+                          <div className="mt-3 flex flex-col gap-2 rounded-xl border border-stone-200/70 bg-white p-3">
+                            <p className={MEAL_FORM_LABEL}>
                               {t('meals.recipePickerTitle', 'Select recipes')}
                             </p>
                             <RecipePicker

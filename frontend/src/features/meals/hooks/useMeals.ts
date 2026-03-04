@@ -4,13 +4,19 @@ import i18next from 'i18next'
 import {
   getMeals, getMeal, createMeal, updateMeal, deleteMeal,
   addRecipesToMeal, removeRecipeFromMeal,
+  getMealTemplates, instantiateMeal,
 } from '@/features/meals/api'
-import type { MealCreate, MealUpdate, AddRecipesToMealRequest } from '@/shared/lib/api.types'
+import type { MealCreate, MealUpdate, AddRecipesToMealRequest, InstantiateMealRequest } from '@/shared/lib/api.types'
 
 const MEALS_KEY = ['meals'] as const
+const TEMPLATES_KEY = ['meals', 'templates'] as const
 
 export function useMeals() {
   return useQuery({ queryKey: MEALS_KEY, queryFn: () => getMeals() })
+}
+
+export function useMealTemplates() {
+  return useQuery({ queryKey: TEMPLATES_KEY, queryFn: () => getMealTemplates() })
 }
 
 export function useMeal(id: number) {
@@ -76,5 +82,18 @@ export function useRemoveRecipeFromMeal() {
       toast.success(i18next.t('meals.removed'))
     },
     onError: () => toast.error(i18next.t('meals.removeFailed', 'Failed to remove recipe')),
+  })
+}
+
+export function useInstantiateMeal() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ templateId, data }: { templateId: number; data: InstantiateMealRequest }) =>
+      instantiateMeal(templateId, data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: MEALS_KEY })
+      toast.success(i18next.t('meals.instantiated', 'Meal added to calendar'))
+    },
+    onError: () => toast.error(i18next.t('meals.instantiateFailed', 'Failed to add meal')),
   })
 }

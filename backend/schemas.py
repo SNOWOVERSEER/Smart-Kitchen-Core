@@ -304,12 +304,19 @@ class MealCreate(BaseModel):
     meal_type: Literal['breakfast', 'lunch', 'dinner', 'snack'] | None = None
     notes: str | None = None
     recipe_ids: list[int] = Field(default_factory=list)
+    is_template: bool = False
 
 class MealUpdate(BaseModel):
     name: str | None = None
     scheduled_date: date | None = None
     meal_type: Literal['breakfast', 'lunch', 'dinner', 'snack'] | None = None
     notes: str | None = None
+    is_template: bool | None = None
+
+class InstantiateMealRequest(BaseModel):
+    scheduled_date: date
+    meal_type: Literal['breakfast', 'lunch', 'dinner', 'snack'] | None = None
+    name: str | None = None
 
 class MealRecipeResponse(BaseModel):
     recipe_id: int
@@ -327,6 +334,9 @@ class MealResponse(BaseModel):
     scheduled_date: date | None = None
     meal_type: str | None = None
     notes: str | None = None
+    is_template: bool = False
+    template_id: int | None = None
+    instance_count: int | None = None
     recipes: list[MealRecipeResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

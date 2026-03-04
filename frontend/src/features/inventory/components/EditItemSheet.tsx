@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import {
@@ -336,11 +337,10 @@ export function EditItemSheet({ batch, open, onClose }: EditItemSheetProps) {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <FieldLabel>{t('inventory.editSheet.expiryDate')}</FieldLabel>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={form.expiry_date}
                     onChange={(e) => set('expiry_date', e.target.value)}
-                    className="h-10"
+                    className="h-10 bg-[#F5EFE6] border-0 focus-visible:ring-primary/30"
                   />
                 </div>
               </div>

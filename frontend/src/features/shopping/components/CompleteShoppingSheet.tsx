@@ -8,6 +8,7 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import { AlertCircle, BookOpen, CheckCircle2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ShoppingItem } from '@/shared/lib/api.types'
@@ -304,11 +305,11 @@ export function CompleteShoppingSheet({ open, onClose, checkedItems }: Props) {
                   <label className="text-[10px] text-stone-500 mb-1 block">
                     {t('shopping.expiryDate')}
                   </label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={state.expiryDate}
                     onChange={(e) => setExpiryDate(item.id, e.target.value)}
-                    className="h-8 text-xs bg-[#F5EFE6] border-0 focus-visible:ring-primary/30"
+                    className="h-8 text-xs bg-[#F5EFE6] border-0 focus-visible:ring-primary/30 pr-8"
+                    iconClassName="h-3.5 w-3.5"
                   />
                 </div>
 

@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -93,12 +93,11 @@ export function QuickStockSheet({ item, open, onClose }: Props) {
             <Label htmlFor="qs-expiry" className="text-sm font-medium mb-2 block">
               {t('inventory.addSheet.expiryDate')} <span className="text-muted-foreground font-normal">({t('common.optional')})</span>
             </Label>
-            <Input
+            <DateInput
               id="qs-expiry"
-              type="date"
               value={expiryDate}
               onChange={(e) => setExpiryDate(e.target.value)}
-              className="h-10"
+              className="h-10 bg-[#F5EFE6] border-0 focus-visible:ring-primary/30"
             />
           </div>
         </div>

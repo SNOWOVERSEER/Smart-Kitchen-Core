@@ -5,23 +5,60 @@ import {
   CalendarDays,
   Plus,
   Loader2,
-  GripVertical,
+  BookOpen,
   LayoutList,
+  AlertTriangle,
 } from 'lucide-react'
-import { parseISO, isBefore, isAfter, startOfDay, startOfWeek, addDays, subDays, format } from 'date-fns'
+import { parseISO, isBefore, isAfter, startOfDay, addDays, subDays, format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { TopBar } from '@/shared/components/TopBar'
 import { DesktopPageHeader } from '@/shared/components/DesktopPageHeader'
 import { Button } from '@/components/ui/button'
-import { useMeals, useCreateMeal, useUpdateMeal, useDeleteMeal } from '@/features/meals/hooks/useMeals'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
+  useMeals, useUpdateMeal, useDeleteMeal,
+  useMealTemplates, useInstantiateMeal,
+} from '@/features/meals/hooks/useMeals'
 import { MealDragProvider } from '@/features/meals/lib/MealDragContext'
-import type { MealResponse } from '@/shared/lib/api.types'
+import type { MealResponse, InstantiateMealRequest, MealUpdate } from '@/shared/lib/api.types'
 
 import { MealCard } from './MealCard'
 import { WeekCalendarStrip } from './WeekCalendarStrip'
 import { WeekScheduleView } from './WeekScheduleView'
 import { CreateMealSheet } from './CreateMealSheet'
 import { MealDetailOverlay } from './MealDetailOverlay'
+
+// ---------------------------------------------------------------------------
+// Meal type uniqueness — only one breakfast/lunch/dinner per day
+// ---------------------------------------------------------------------------
+
+const UNIQUE_MEAL_TYPES = new Set(['breakfast', 'lunch', 'dinner'])
+
+interface ReplaceConflict {
+  existingMeal: MealResponse
+  action:
+    | { type: 'instantiate'; templateId: number; data: InstantiateMealRequest }
+    | { type: 'move'; mealId: number; data: MealUpdate }
+}
+
+function findMealTypeConflict(
+  meals: MealResponse[],
+  targetDate: string,
+  mealType: string | null | undefined,
+  excludeId?: number,
+): MealResponse | undefined {
+  if (!mealType || !UNIQUE_MEAL_TYPES.has(mealType)) return undefined
+  return meals.find(
+    (m) => m.scheduled_date === targetDate && m.meal_type === mealType && m.id !== excludeId,
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Date filter helper
@@ -109,15 +146,20 @@ function Section({ label, meals, onSelect, onUnschedule }: SectionProps) {
 export function MealsPage() {
   const { t } = useTranslation()
   const { data: meals, isLoading } = useMeals()
+  const { data: templates } = useMealTemplates()
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedMealId, setSelectedMealId] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [dateFilter, setDateFilter] = useState<DateFilterKey>('all')
   const [calendarExpanded, setCalendarExpanded] = useState(false)
-  const otherMealsRef = useRef<HTMLDivElement>(null)
+  const [replaceConflict, setReplaceConflict] = useState<ReplaceConflict | null>(null)
+  const libraryRef = useRef<HTMLDivElement>(null)
 
   const today = startOfDay(new Date())
+
+  // Non-template meals (instances + legacy standalone meals)
+  const instances = useMemo(() => (meals ?? []).filter((m) => !m.is_template), [meals])
 
   const dateFilters: { key: DateFilterKey; label: string }[] = [
     { key: 'all', label: t('meals.filterAll', 'All') },
@@ -127,15 +169,14 @@ export function MealsPage() {
     { key: 'next30', label: t('meals.filterNext30', 'Next 30d') },
   ]
 
-  // Filtered meals for list view
+  // Filtered meals for list view (instances only)
   const filteredMeals = useMemo(() => {
-    const all = meals ?? []
-    if (dateFilter === 'all') return all
-    return all.filter((m) => {
+    if (dateFilter === 'all') return instances
+    return instances.filter((m) => {
       if (!m.scheduled_date) return false
       return matchesDateFilter(parseISO(m.scheduled_date), dateFilter, today)
     })
-  }, [meals, dateFilter, today])
+  }, [instances, dateFilter, today])
 
   // Group filtered meals into sections (list view)
   const upcoming = useMemo(
@@ -162,53 +203,20 @@ export function MealsPage() {
     [filteredMeals, today],
   )
 
-  // Computed data for calendar view
+  // Computed data for calendar view (instances only)
   const mealDates = useMemo(
-    () => new Set((meals ?? []).filter((m) => m.scheduled_date).map((m) => m.scheduled_date!)),
-    [meals],
+    () => new Set(instances.filter((m) => m.scheduled_date).map((m) => m.scheduled_date!)),
+    [instances],
   )
 
   const mealsForDate = useMemo(() => {
     const dateStr = format(selectedDate, 'yyyy-MM-dd')
-    return (meals ?? []).filter((m) => m.scheduled_date === dateStr)
-  }, [meals, selectedDate])
+    return instances.filter((m) => m.scheduled_date === dateStr)
+  }, [instances, selectedDate])
 
-  // "Other meals" — excluded dates depend on compact vs expanded mode
-  const otherMeals = useMemo(() => {
-    const all = meals ?? []
-
-    // Build set of dates already visible in the calendar area
-    let displayedDates: Set<string>
-    if (calendarExpanded) {
-      const ws = startOfWeek(selectedDate, { weekStartsOn: 1 })
-      displayedDates = new Set(
-        Array.from({ length: 7 }, (_, i) => format(addDays(ws, i), 'yyyy-MM-dd')),
-      )
-    } else {
-      displayedDates = new Set([format(selectedDate, 'yyyy-MM-dd')])
-    }
-
-    const base = all.filter((m) => !m.scheduled_date || !displayedDates.has(m.scheduled_date))
-
-    const filtered =
-      dateFilter === 'all'
-        ? base
-        : base.filter((m) => {
-            if (!m.scheduled_date) return false
-            return matchesDateFilter(parseISO(m.scheduled_date), dateFilter, today)
-          })
-
-    return filtered.sort((a, b) => {
-      if (!a.scheduled_date && b.scheduled_date) return -1
-      if (a.scheduled_date && !b.scheduled_date) return 1
-      if (a.scheduled_date && b.scheduled_date) return a.scheduled_date.localeCompare(b.scheduled_date)
-      return b.updated_at.localeCompare(a.updated_at)
-    })
-  }, [meals, selectedDate, calendarExpanded, dateFilter, today])
-
-  const createMeal = useCreateMeal()
   const updateMeal = useUpdateMeal()
   const deleteMeal = useDeleteMeal()
+  const instantiateMealMut = useInstantiateMeal()
 
   const handleUnscheduleDelete = useCallback(
     (mealId: number) => deleteMeal.mutate(mealId),
@@ -222,31 +230,71 @@ export function MealsPage() {
 
   const handleReschedule = useCallback(
     (mealId: number, newDate: string) => {
-      const source = (meals ?? []).find((m) => m.id === mealId)
+      // Look up source in both instances and templates
+      const source =
+        instances.find((m) => m.id === mealId) ??
+        (templates ?? []).find((m) => m.id === mealId)
       if (!source) return
-      const duplicate = (meals ?? []).find(
-        (m) => m.scheduled_date === newDate && m.name === source.name && m.meal_type === source.meal_type,
-      )
-      if (duplicate) return
-      createMeal.mutate({
-        name: source.name,
-        scheduled_date: newDate,
-        meal_type: source.meal_type ?? undefined,
-        notes: source.notes ?? undefined,
-        recipe_ids: source.recipes.map((r) => r.recipe_id),
-      })
-      setSelectedDate(parseISO(newDate))
+
+      // Check for meal-type conflict (one breakfast/lunch/dinner per day)
+      const conflict = findMealTypeConflict(instances, newDate, source.meal_type, mealId)
+
+      if (source.is_template) {
+        // Template → instantiate (create instance from template)
+        const data: InstantiateMealRequest = {
+          scheduled_date: newDate,
+          meal_type: (source.meal_type as InstantiateMealRequest['meal_type']) ?? undefined,
+        }
+        if (conflict) {
+          setReplaceConflict({ existingMeal: conflict, action: { type: 'instantiate', templateId: mealId, data } })
+          return
+        }
+        instantiateMealMut.mutate({ templateId: mealId, data })
+        setSelectedDate(parseISO(newDate))
+      } else if (source.scheduled_date) {
+        // Already scheduled instance → MOVE (update date, not copy)
+        const moveData: MealUpdate = { scheduled_date: newDate }
+        if (conflict) {
+          setReplaceConflict({ existingMeal: conflict, action: { type: 'move', mealId, data: moveData } })
+          return
+        }
+        updateMeal.mutate({ id: mealId, data: moveData })
+        setSelectedDate(parseISO(newDate))
+      } else {
+        // Unscheduled standalone → schedule it
+        const scheduleData: MealUpdate = { scheduled_date: newDate }
+        if (conflict) {
+          setReplaceConflict({ existingMeal: conflict, action: { type: 'move', mealId, data: scheduleData } })
+          return
+        }
+        updateMeal.mutate({ id: mealId, data: scheduleData })
+        setSelectedDate(parseISO(newDate))
+      }
     },
-    [meals, createMeal],
+    [instances, templates, updateMeal, instantiateMealMut],
   )
 
-  const hasMeals = (meals ?? []).length > 0
+  const handleConfirmReplace = useCallback(() => {
+    if (!replaceConflict) return
+    const { existingMeal, action } = replaceConflict
+    deleteMeal.mutate(existingMeal.id)
+    if (action.type === 'instantiate') {
+      instantiateMealMut.mutate({ templateId: action.templateId, data: action.data })
+      setSelectedDate(parseISO(action.data.scheduled_date))
+    } else {
+      updateMeal.mutate({ id: action.mealId, data: action.data })
+      if (action.data.scheduled_date) setSelectedDate(parseISO(action.data.scheduled_date))
+    }
+    setReplaceConflict(null)
+  }, [replaceConflict, deleteMeal, instantiateMealMut, updateMeal])
+
+  const hasMeals = instances.length > 0 || (templates ?? []).length > 0
 
   // Prevent outer scroll when scrolling inside the other-meals panel
   const handleOuterWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
       if (viewMode !== 'calendar') return
-      const panel = otherMealsRef.current
+      const panel = libraryRef.current
       if (!panel) return
       // Check if the wheel event target is inside the other-meals scroll area
       if (panel.contains(e.target as Node)) {
@@ -304,51 +352,43 @@ export function MealsPage() {
     </button>
   )
 
-  // ---------- Other meals section (shared between compact & expanded) ----------
-  const otherMealsSection = (
+  // ---------- Meal Library section (templates) ----------
+  const mealLibrarySection = (
     <div>
       <div className="flex items-center gap-2 mb-2 px-1">
+        <BookOpen className="w-3.5 h-3.5 text-stone-400" />
         <p className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-stone-400">
-          {t('meals.otherMeals', 'Other meals')} ({otherMeals.length})
+          {t('meals.mealLibrary', 'Meal Library')} ({(templates ?? []).length})
         </p>
-        {!calendarExpanded && (
-          <span className="flex items-center gap-1 text-[10px] text-stone-400/70">
-            <GripVertical className="w-3 h-3" />
-            {t('meals.dragHint', 'Drag to calendar to reschedule')}
-          </span>
-        )}
+        <span className="text-[10px] text-stone-400/70">
+          {t('meals.dragToSchedule', 'Drag to calendar to schedule')}
+        </span>
       </div>
 
-      <DateFilterChips
-        filters={dateFilters}
-        active={dateFilter}
-        onChange={setDateFilter}
-        className="pb-3"
-      />
-
-      {otherMeals.length > 0 ? (
+      {(templates ?? []).length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {otherMeals.map((meal, i) => (
+          {(templates ?? []).map((meal, i) => (
             <MealCard
               key={meal.id}
               meal={meal}
               onSelect={setSelectedMealId}
               index={i}
-              enableDrag={!calendarExpanded}
-              onReschedule={!calendarExpanded ? handleReschedule : undefined}
+              enableDrag
+              onReschedule={handleReschedule}
             />
           ))}
         </div>
-      ) : dateFilter !== 'all' ? (
+      ) : (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col items-center py-8 text-center gap-2"
         >
-          <CalendarDays className="w-7 h-7 text-stone-300" />
-          <p className="text-xs text-stone-400">{t('meals.noMealsForDate', 'No meals found')}</p>
+          <BookOpen className="w-7 h-7 text-stone-300" />
+          <p className="text-xs text-stone-400">{t('meals.noTemplates', 'No meal templates yet')}</p>
+          <p className="text-[10px] text-stone-400/60">{t('meals.templateHint', 'Templates are reusable meal blueprints')}</p>
         </motion.div>
-      ) : null}
+      )}
     </div>
   )
 
@@ -373,7 +413,7 @@ export function MealsPage() {
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto" onWheel={handleOuterWheel}>
         {/* Desktop header */}
-        <div className="hidden lg:block px-6 pt-6">
+        <div className="hidden lg:block px-6 pt-6 pb-3">
           <DesktopPageHeader
             icon={CalendarDays}
             title={t('meals.title', 'Meals')}
@@ -432,7 +472,12 @@ export function MealsPage() {
         </div>
 
         {/* Main content */}
-        <div className="px-4 sm:px-5 lg:px-6 pb-24 lg:pb-8">
+        <div
+          className={cn(
+            'px-4 sm:px-5 lg:px-6 lg:pb-8',
+            viewMode === 'calendar' ? 'pb-14' : 'pb-20',
+          )}
+        >
           {isLoading ? (
             <div className="flex justify-center py-16">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -473,40 +518,47 @@ export function MealsPage() {
                 >
                   <MealDragProvider>
                     {/* ---- Sticky calendar area ---- */}
-                    <div className="sticky top-0 z-10 bg-[#FAF6F1] -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 pt-1 pb-3">
-                      <AnimatePresence mode="wait" initial={false}>
-                        {calendarExpanded ? (
-                          <motion.div
-                            key="expanded"
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.25 }}
-                            className="overflow-hidden"
-                          >
-                            <WeekScheduleView
-                              selectedDate={selectedDate}
-                              onSelectDate={setSelectedDate}
-                              meals={meals ?? []}
-                              onSelectMeal={setSelectedMealId}
-                            />
-                          </motion.div>
-                        ) : (
-                          <motion.div
-                            key="compact"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.15 }}
-                          >
-                            <WeekCalendarStrip
-                              selectedDate={selectedDate}
-                              onSelectDate={setSelectedDate}
-                              mealDates={mealDates}
-                            />
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                    <div
+                      className={cn(
+                        '-mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 pt-1 bg-[#FAF6F1]',
+                        calendarExpanded ? 'pb-2' : 'sticky top-0 z-10 pb-3',
+                      )}
+                    >
+                      <motion.div layout transition={{ layout: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}>
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          {calendarExpanded ? (
+                            <motion.div
+                              key="expanded"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <WeekScheduleView
+                                selectedDate={selectedDate}
+                                onSelectDate={setSelectedDate}
+                                meals={instances}
+                                onSelectMeal={setSelectedMealId}
+                                onUnschedule={handleUnscheduleDelete}
+                              />
+                            </motion.div>
+                          ) : (
+                            <motion.div
+                              key="compact"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.15 }}
+                            >
+                              <WeekCalendarStrip
+                                selectedDate={selectedDate}
+                                onSelectDate={setSelectedDate}
+                                mealDates={mealDates}
+                              />
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
                     </div>
 
                     {/* ---- Compact: meals for selected date ---- */}
@@ -555,10 +607,15 @@ export function MealsPage() {
 
                     {/* ---- Other meals (independently scrollable) ---- */}
                     <div
-                      ref={otherMealsRef}
-                      className="mt-2 max-h-[50vh] overflow-y-auto rounded-xl"
+                      ref={libraryRef}
+                      className={cn(
+                        'rounded-xl',
+                        calendarExpanded
+                          ? 'mt-1'
+                          : 'mt-2 lg:max-h-[50vh] lg:overflow-y-auto',
+                      )}
                     >
-                      {otherMealsSection}
+                      {mealLibrarySection}
                     </div>
                   </MealDragProvider>
                 </motion.div>
@@ -631,12 +688,67 @@ export function MealsPage() {
       )}
 
       {/* Sheets */}
-      <CreateMealSheet open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateMealSheet
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        meals={meals ?? []}
+      />
       <MealDetailOverlay
         mealId={selectedMealId}
         open={selectedMealId !== null}
         onClose={() => setSelectedMealId(null)}
       />
+
+      {/* Replace meal confirmation dialog */}
+      <Dialog open={replaceConflict !== null} onOpenChange={(v) => { if (!v) setReplaceConflict(null) }}>
+        <DialogContent showCloseButton={false} className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-4.5 h-4.5 text-amber-500" />
+              </div>
+              <DialogTitle className="text-base">
+                {t('meals.replaceConfirmTitle', 'Replace existing meal?')}
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-sm text-stone-500 mt-2">
+              {replaceConflict && (() => {
+                const { existingMeal, action } = replaceConflict
+                const dateStr = action.type === 'instantiate'
+                  ? action.data.scheduled_date
+                  : action.data.scheduled_date ?? ''
+                const source = action.type === 'instantiate'
+                  ? (templates ?? []).find((m) => m.id === action.templateId)
+                  : instances.find((m) => m.id === action.mealId)
+                return t('meals.replaceConfirmDesc', {
+                  date: dateStr ? format(parseISO(dateStr), 'MMM d') : '',
+                  mealType: existingMeal.meal_type
+                    ? t(`meals.${existingMeal.meal_type}`, existingMeal.meal_type)
+                    : '',
+                  existingName: existingMeal.name,
+                  newName: source?.name ?? '',
+                  defaultValue: '{{date}} already has a {{mealType}}. Replace "{{existingName}}" with "{{newName}}"?',
+                })
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-row gap-2 sm:flex-row">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setReplaceConflict(null)}
+            >
+              {t('common.cancel', 'Cancel')}
+            </Button>
+            <Button
+              className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
+              onClick={handleConfirmReplace}
+            >
+              {t('meals.replace', 'Replace')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

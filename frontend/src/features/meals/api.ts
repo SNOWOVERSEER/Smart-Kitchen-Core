@@ -4,6 +4,7 @@ import type {
   MealCreate,
   MealUpdate,
   AddRecipesToMealRequest,
+  InstantiateMealRequest,
 } from '@/shared/lib/api.types'
 
 export async function getMeals(dateFrom?: string, dateTo?: string): Promise<MealResponse[]> {
@@ -11,6 +12,16 @@ export async function getMeals(dateFrom?: string, dateTo?: string): Promise<Meal
   if (dateFrom) params.set('date_from', dateFrom)
   if (dateTo) params.set('date_to', dateTo)
   const response = await apiClient.get<MealResponse[]>(`/api/v1/meals?${params}`)
+  return response.data
+}
+
+export async function getMealTemplates(): Promise<MealResponse[]> {
+  const response = await apiClient.get<MealResponse[]>('/api/v1/meals?is_template=true')
+  return response.data
+}
+
+export async function instantiateMeal(templateId: number, data: InstantiateMealRequest): Promise<MealResponse> {
+  const response = await apiClient.post<MealResponse>(`/api/v1/meals/${templateId}/instantiate`, data)
   return response.data
 }
 
