@@ -18,6 +18,7 @@ import {
   useMeal,
   useUpdateMeal,
   useDeleteMeal,
+  useCreateMeal,
   useAddRecipesToMeal,
   useRemoveRecipeFromMeal,
 } from '@/features/meals/hooks/useMeals'
@@ -48,6 +49,7 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
   const { data: meal, isLoading } = useMeal(mealId != null && mealId > 0 ? mealId : 0)
   const updateMeal = useUpdateMeal()
   const deleteMeal = useDeleteMeal()
+  const createMeal = useCreateMeal()
   const addRecipes = useAddRecipesToMeal()
   const removeRecipe = useRemoveRecipeFromMeal()
 
@@ -147,6 +149,17 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
     } catch {
       // errors handled by hook toast
     }
+  }
+
+  const handleSaveAsTemplate = () => {
+    if (!meal) return
+    createMeal.mutate({
+      name: meal.name,
+      meal_type: (meal.meal_type as 'breakfast' | 'lunch' | 'dinner' | 'snack') ?? undefined,
+      notes: meal.notes ?? undefined,
+      recipe_ids: meal.recipes.map((r) => r.recipe_id),
+      is_template: true,
+    })
   }
 
   const confirmDelete = () => {
@@ -402,18 +415,6 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                       </div>
                     )}
 
-                    {/* Cooking guide button */}
-                    {meal.recipes.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowCookingGuide(true)}
-                        className="mt-3 w-full py-2.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 text-amber-800 rounded-xl font-semibold text-sm hover:from-amber-100 hover:to-orange-100 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <CookingPot className="w-4 h-4" />
-                        {t('meals.cookingGuide', 'Start Cooking')}
-                      </button>
-                    )}
-
                     {/* Add recipe toggle */}
                     <button
                       type="button"
@@ -468,19 +469,51 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                   </div>
                 </div>
 
-                {/* Footer — delete action */}
+                {/* Footer — actions */}
                 <div className="shrink-0 border-t border-stone-200/60 bg-[#FFFEF9]">
                   {!showDeleteConfirm && (
-                    <div className="px-5 py-4">
-                      <button
-                        type="button"
-                        onClick={() => setShowDeleteConfirm(true)}
-                        disabled={deleteMeal.isPending}
-                        className="w-full py-2.5 bg-red-50 text-red-600 rounded-2xl font-semibold text-sm hover:bg-red-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        {t('meals.deleteMeal', 'Delete meal')}
-                      </button>
+                    <div className="px-5 py-4 flex flex-col gap-2">
+                      <div className="flex gap-2.5">
+                        {meal.recipes.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowCookingGuide(true)}
+                            className="flex-1 py-2.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 text-amber-800 rounded-2xl font-semibold text-sm hover:from-amber-100 hover:to-orange-100 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <CookingPot className="w-4 h-4" />
+                            {t('meals.cookingGuide', 'Start Cooking')}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setShowDeleteConfirm(true)}
+                          disabled={deleteMeal.isPending}
+                          className={cn(
+                            'py-2.5 bg-red-50 text-red-600 rounded-2xl font-semibold text-sm hover:bg-red-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-50',
+                            meal.recipes.length > 0 ? 'flex-1' : 'w-full',
+                          )}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          {t('meals.deleteMeal', 'Delete meal')}
+                        </button>
+                      </div>
+                      {!meal.is_template && (
+                        <button
+                          type="button"
+                          onClick={handleSaveAsTemplate}
+                          disabled={createMeal.isPending}
+                          className="w-full py-2.5 bg-stone-100 text-stone-600 rounded-2xl font-semibold text-sm hover:bg-stone-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {createMeal.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <BookOpen className="w-4 h-4" />
+                              {t('meals.saveAsTemplate', 'Save as template')}
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   )}
 

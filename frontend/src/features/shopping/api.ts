@@ -36,6 +36,11 @@ export async function deleteCheckedItems(): Promise<{ deleted_count: number }> {
   return response.data
 }
 
+export async function deleteAllShoppingItems(): Promise<{ deleted_count: number }> {
+  const response = await apiClient.delete<{ deleted_count: number }>('/api/v1/shopping/all')
+  return response.data
+}
+
 export async function completeShopping(req: CompleteShoppingRequest): Promise<CompleteShoppingResult> {
   const response = await apiClient.post<CompleteShoppingResult>('/api/v1/shopping/complete', req)
   return response.data

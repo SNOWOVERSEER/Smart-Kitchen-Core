@@ -29,9 +29,9 @@ export function useCreateMeal() {
     mutationFn: (data: MealCreate) => createMeal(data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: MEALS_KEY })
-      toast.success(i18next.t('meals.created'))
+      toast.success(i18next.t('meals.created'), { id: 'meal-action' })
     },
-    onError: () => toast.error(i18next.t('meals.createFailed', 'Failed to create meal')),
+    onError: () => toast.error(i18next.t('meals.createFailed', 'Failed to create meal'), { id: 'meal-action' }),
   })
 }
 
@@ -41,9 +41,9 @@ export function useUpdateMeal() {
     mutationFn: ({ id, data }: { id: number; data: MealUpdate }) => updateMeal(id, data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: MEALS_KEY })
-      toast.success(i18next.t('meals.updated'))
+      toast.success(i18next.t('meals.updated'), { id: 'meal-action' })
     },
-    onError: () => toast.error(i18next.t('meals.updateFailed', 'Failed to update meal')),
+    onError: () => toast.error(i18next.t('meals.updateFailed', 'Failed to update meal'), { id: 'meal-action' }),
   })
 }
 
@@ -53,9 +53,9 @@ export function useDeleteMeal() {
     mutationFn: (id: number) => deleteMeal(id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: MEALS_KEY })
-      toast.success(i18next.t('meals.deleted'))
+      toast.success(i18next.t('meals.deleted'), { id: 'meal-action' })
     },
-    onError: () => toast.error(i18next.t('meals.deleteFailed', 'Failed to delete meal')),
+    onError: () => toast.error(i18next.t('meals.deleteFailed', 'Failed to delete meal'), { id: 'meal-action' }),
   })
 }
 
@@ -66,9 +66,9 @@ export function useAddRecipesToMeal() {
       addRecipesToMeal(mealId, data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: MEALS_KEY })
-      toast.success(i18next.t('meals.added'))
+      toast.success(i18next.t('meals.added'), { id: 'meal-recipe' })
     },
-    onError: () => toast.error(i18next.t('meals.addFailed', 'Failed to add recipes')),
+    onError: () => toast.error(i18next.t('meals.addFailed', 'Failed to add recipes'), { id: 'meal-recipe' }),
   })
 }
 
@@ -79,9 +79,9 @@ export function useRemoveRecipeFromMeal() {
       removeRecipeFromMeal(mealId, recipeId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: MEALS_KEY })
-      toast.success(i18next.t('meals.removed'))
+      toast.success(i18next.t('meals.removed'), { id: 'meal-recipe' })
     },
-    onError: () => toast.error(i18next.t('meals.removeFailed', 'Failed to remove recipe')),
+    onError: () => toast.error(i18next.t('meals.removeFailed', 'Failed to remove recipe'), { id: 'meal-recipe' }),
   })
 }
 
@@ -92,8 +92,8 @@ export function useInstantiateMeal() {
       instantiateMeal(templateId, data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: MEALS_KEY })
-      toast.success(i18next.t('meals.instantiated', 'Meal added to calendar'))
+      toast.success(i18next.t('meals.instantiated', 'Meal added to calendar'), { id: 'meal-action' })
     },
-    onError: () => toast.error(i18next.t('meals.instantiateFailed', 'Failed to add meal')),
+    onError: () => toast.error(i18next.t('meals.instantiateFailed', 'Failed to add meal'), { id: 'meal-action' }),
   })
 }

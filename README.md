@@ -8,6 +8,7 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 - **FEFO Logic**: First Expired, First Out — automatically prioritizes open and soonest-expiring items
 - **AI-Powered Agent**: Natural language interface (Chinese + English) using a tool-calling ReAct loop
 - **Recipe Studio**: Generate recipe cards from pantry + preferences, save favorites, and generate dish images
+- **Meal Planner**: Template + Instance architecture — create reusable meal templates in a library, drag to calendar to schedule instances, week schedule view with drag-and-drop
 - **Shopping List Flow**: Add items manually/from recipes/agent, then convert checked items into inventory in one step
 - **Human-in-the-Loop**: Preview + confirmation before any write operation (consume/discard/update)
 - **Multi-Turn Conversations**: Conversation state persisted via Supabase checkpointing
@@ -41,6 +42,7 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 | `/dashboard` | Protected inventory dashboard |
 | `/recipes` | Protected recipe generation + card stage |
 | `/shopping` | Protected shopping list |
+| `/meals` | Protected meal planner (calendar + list view, meal library) |
 | `/chat`, `/history`, `/barcode`, `/settings` | Protected utility pages |
 
 ## Quick Start
@@ -226,6 +228,25 @@ DELETE /api/v1/shopping/{item_id}      # Delete one item
 ]
 ```
 
+### Meals
+
+```http
+POST   /api/v1/meals                              # Create meal (with optional recipe_ids, is_template)
+GET    /api/v1/meals?date_from=&date_to=&is_template=  # List meals; is_template=true returns templates with instance_count
+GET    /api/v1/meals/{meal_id}                     # Get meal with recipes
+PATCH  /api/v1/meals/{meal_id}                     # Update meal fields
+DELETE /api/v1/meals/{meal_id}                     # Delete meal (cascades to meal_recipes)
+POST   /api/v1/meals/{meal_id}/instantiate         # Create instance from template (copies recipes)
+POST   /api/v1/meals/{meal_id}/recipes             # Add recipes to meal
+DELETE /api/v1/meals/{meal_id}/recipes/{recipe_id} # Remove recipe from meal
+```
+
+**Template + Instance model:**
+- **Template** (`is_template: true`): Reusable meal blueprint stored in Meal Library
+- **Instance** (`is_template: false`): Scheduled calendar entry, linked to template via `template_id`
+- Drag template to calendar = instantiate. Drag instance between dates = move (no duplication).
+- One breakfast/lunch/dinner per day enforced with replace confirmation dialog.
+
 ### AI Agent
 
 ```http
@@ -298,6 +319,12 @@ User confirms → execute_write → respond
 | `discard_batch` | Write | Remove a batch |
 | `update_item` | Write | Change location, is_open, quantity, or expiry |
 | `add_to_shopping_list` | Write | Add an item to shopping list |
+| `get_meals` | Read | List user's meals (with date range filter) |
+| `get_meal_details` | Read | Get meal with recipes |
+| `create_meal` | Write | Create a meal with optional recipes |
+| `add_recipes_to_meal` | Write | Add recipes to existing meal |
+| `remove_recipe_from_meal` | Write | Remove recipe from meal |
+| `delete_meal` | Write | Delete a meal |
 
 ### Key Behaviors
 
@@ -347,6 +374,8 @@ Result:
 | `agent_conversations` | Multi-turn conversation checkpoints    |
 | `saved_recipes`       | User-liked recipes + prompts + image URL |
 | `shopping_items`      | User shopping items + source metadata  |
+| `meals`               | Meal templates + instances (Template+Instance architecture) |
+| `meal_recipes`        | Many-to-many link between meals and recipes |
 
 All tables have Row-Level Security. API keys are stored encrypted in Supabase Vault.
 
@@ -381,6 +410,7 @@ smart-kitchen-core/
 │       │   ├── landing/     # Landing page (includes login/register entry)
 │       │   ├── inventory/   # Dashboard, item cards, add/edit/consume sheets
 │       │   ├── recipes/     # Recipe prompt panel + fan/stack/grid card stage
+│       │   ├── meals/       # Meal planner — Template+Instance, WeekScheduleView, drag-to-schedule
 │       │   ├── shopping/    # Shopping list CRUD + complete-to-inventory flow
 │       │   ├── chat/        # Agent drawer (desktop) + chat page (mobile)
 │       │   ├── history/     # Transaction log with filters + export

@@ -363,7 +363,9 @@
     "heroTitle": "购物清单",
     "heroSub": "{{count}} 件待购 · {{recipeCount}} 件来自食谱",
     "heroSubEmpty": "清单已准备好，快去填充吧",
-    "draftLabel": "草稿",
+    "clearAll": "清空列表",
+    "clearedAll": "已清除 {{count}} 件",
+    "clearAllFailed": "清空失败",
     "completeHint": "准备加入库存",
     "completeNItems": "入库 {{count}} 件",
     "missingQtyWarning": "{{count}} 件商品缺少数量信息，请在下方补充。",
@@ -478,7 +480,8 @@
     "instantiated": "已添加到日历",
     "instantiateFailed": "添加失败",
     "dragToSchedule": "拖到日历上排期",
-    "noTemplates": "还没有餐食模板"
+    "noTemplates": "还没有餐食模板",
+    "dateRequiredHint": "非模板餐食需要指定日期"
   },
   "common": {
     "cancel": "取消",

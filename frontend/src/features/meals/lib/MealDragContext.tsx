@@ -18,15 +18,26 @@ interface MealDragContextValue {
 
 const MealDragContext = createContext<MealDragContextValue | null>(null)
 
-export function MealDragProvider({ children }: { children: ReactNode }) {
+interface MealDragProviderProps {
+  children: ReactNode
+  onDragActiveChange?: (active: boolean) => void
+}
+
+export function MealDragProvider({ children, onDragActiveChange }: MealDragProviderProps) {
   const [draggedMealId, setDraggedMealId] = useState<number | null>(null)
   const [hoveredDate, setHoveredDate] = useState<string | null>(null)
   const dayRectsRef = useRef<DayRect[]>([])
+  const onDragActiveChangeRef = useRef(onDragActiveChange)
+  onDragActiveChangeRef.current = onDragActiveChange
 
-  const startDrag = useCallback((mealId: number) => setDraggedMealId(mealId), [])
+  const startDrag = useCallback((mealId: number) => {
+    setDraggedMealId(mealId)
+    onDragActiveChangeRef.current?.(true)
+  }, [])
   const endDrag = useCallback(() => {
     setDraggedMealId(null)
     setHoveredDate(null)
+    onDragActiveChangeRef.current?.(false)
   }, [])
 
   const registerDayRects = useCallback((rects: DayRect[]) => {

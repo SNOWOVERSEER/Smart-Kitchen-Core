@@ -295,7 +295,7 @@ export function MealCookingGuide({ open, onClose, meal }: MealCookingGuideProps)
 
           {/* Guide card */}
           <motion.div
-            className="fixed inset-x-2 bottom-2 top-6 z-[60] rounded-3xl border-2 border-stone-200/60 shadow-2xl overflow-hidden flex flex-col bg-[#FFFEF9] lg:inset-x-auto lg:left-1/2 lg:-translate-x-1/2 lg:w-[720px] lg:top-8 lg:bottom-auto lg:max-h-[90vh]"
+            className="fixed inset-x-2 bottom-2 top-6 z-[60] rounded-3xl border-2 border-stone-200/60 shadow-2xl overflow-hidden flex flex-col bg-[#FFFEF9] lg:inset-x-auto lg:left-1/2 lg:-translate-x-1/2 lg:w-[720px] lg:top-8 lg:bottom-8 lg:max-h-[90vh]"
             initial={{ opacity: 0, scale: 0.96, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 10 }}

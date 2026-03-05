@@ -1002,6 +1002,16 @@ def delete_checked_shopping_items(user_id: str) -> int:
     return len(result.data or [])
 
 
+def delete_all_shopping_items(user_id: str) -> int:
+    """Delete all shopping items for user. Returns count deleted."""
+    supabase = get_supabase_client()
+    result = (supabase.table("shopping_items")
+        .delete()
+        .eq("user_id", user_id)
+        .execute())
+    return len(result.data or [])
+
+
 def complete_shopping(
     user_id: str,
     item_ids: list[int],

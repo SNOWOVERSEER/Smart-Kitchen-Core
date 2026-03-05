@@ -53,6 +53,7 @@ from services import (
     update_shopping_item,
     delete_shopping_item,
     delete_checked_shopping_items,
+    delete_all_shopping_items,
     complete_shopping,
     create_meal,
     get_meals,
@@ -548,6 +549,12 @@ def update_shopping_item_endpoint(
 @app.delete("/api/v1/shopping/checked")
 def delete_checked_items_endpoint(user_id: str = Depends(get_current_user)) -> dict:
     count = delete_checked_shopping_items(user_id)
+    return {"deleted_count": count}
+
+
+@app.delete("/api/v1/shopping/all")
+def delete_all_shopping_items_endpoint(user_id: str = Depends(get_current_user)) -> dict:
+    count = delete_all_shopping_items(user_id)
     return {"deleted_count": count}
 
 

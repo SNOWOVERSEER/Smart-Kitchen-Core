@@ -363,7 +363,9 @@
     "heroTitle": "Shopping List",
     "heroSub": "{{count}} items to buy · {{recipeCount}} from recipes",
     "heroSubEmpty": "Your list is ready to fill",
-    "draftLabel": "Draft",
+    "clearAll": "Clear all",
+    "clearedAll": "Cleared {{count}} items",
+    "clearAllFailed": "Failed to clear list",
     "completeHint": "Ready to add to inventory",
     "completeNItems": "Stock {{count}} items",
     "missingQtyWarning": "{{count}} item(s) are missing quantity — you can add it below.",
@@ -478,7 +480,8 @@
     "instantiated": "Meal added to calendar",
     "instantiateFailed": "Failed to add meal",
     "dragToSchedule": "Drag to calendar to schedule",
-    "noTemplates": "No meal templates yet"
+    "noTemplates": "No meal templates yet",
+    "dateRequiredHint": "A date is required for non-template meals"
   },
   "common": {
     "cancel": "Cancel",

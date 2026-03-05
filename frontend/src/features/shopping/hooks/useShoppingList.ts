@@ -8,6 +8,7 @@ import {
   updateShoppingItem,
   deleteShoppingItem,
   deleteCheckedItems,
+  deleteAllShoppingItems,
   completeShopping,
 } from '@/features/shopping/api'
 import type {
@@ -30,7 +31,7 @@ export function useAddShoppingItem() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
-    onError: () => toast.error('Failed to add item'),
+    onError: () => toast.error('Failed to add item', { id: 'shopping-action' }),
   })
 }
 
@@ -40,9 +41,9 @@ export function useAddShoppingItemsBulk() {
     mutationFn: (items: ShoppingItemCreate[]) => addShoppingItemsBulk(items),
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
-      toast.success(i18next.t('shopping.addedBulk', { count: data.length }))
+      toast.success(i18next.t('shopping.addedBulk', { count: data.length }), { id: 'shopping-action' })
     },
-    onError: () => toast.error(i18next.t('shopping.completeFailed')),
+    onError: () => toast.error(i18next.t('shopping.completeFailed'), { id: 'shopping-action' }),
   })
 }
 
@@ -75,7 +76,7 @@ export function useToggleShoppingItem() {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) qc.setQueryData(SHOPPING_KEY, ctx.previous)
-      toast.error('Failed to update item')
+      toast.error('Failed to update item', { id: 'shopping-action' })
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
@@ -101,7 +102,7 @@ export function useDeleteShoppingItem() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
-    onError: () => toast.error('Failed to delete item'),
+    onError: () => toast.error('Failed to delete item', { id: 'shopping-action' }),
   })
 }
 
@@ -112,7 +113,19 @@ export function useDeleteCheckedItems() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
-    onError: () => toast.error('Failed to clear items'),
+    onError: () => toast.error('Failed to clear items', { id: 'shopping-action' }),
+  })
+}
+
+export function useDeleteAllShoppingItems() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: deleteAllShoppingItems,
+    onSuccess: (data) => {
+      void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
+      toast.success(i18next.t('shopping.clearedAll', { count: data.deleted_count }), { id: 'shopping-action' })
+    },
+    onError: () => toast.error(i18next.t('shopping.clearAllFailed', 'Failed to clear list'), { id: 'shopping-action' }),
   })
 }
 
@@ -125,11 +138,11 @@ export function useCompleteShopping() {
       void qc.invalidateQueries({ queryKey: ['inventory'] })
       void qc.invalidateQueries({ queryKey: ['recipes'] })
       if (data.failed_items.length > 0) {
-        toast.error(i18next.t('shopping.completeFailed'))
+        toast.error(i18next.t('shopping.completeFailed'), { id: 'shopping-complete' })
       } else {
-        toast.success(i18next.t('shopping.completeSuccess', { count: data.added_count }))
+        toast.success(i18next.t('shopping.completeSuccess', { count: data.added_count }), { id: 'shopping-complete' })
       }
     },
-    onError: () => toast.error(i18next.t('shopping.completeFailed')),
+    onError: () => toast.error(i18next.t('shopping.completeFailed'), { id: 'shopping-complete' }),
   })
 }

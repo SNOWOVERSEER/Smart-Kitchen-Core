@@ -154,6 +154,7 @@ export function MealsPage() {
   const [dateFilter, setDateFilter] = useState<DateFilterKey>('all')
   const [calendarExpanded, setCalendarExpanded] = useState(false)
   const [replaceConflict, setReplaceConflict] = useState<ReplaceConflict | null>(null)
+  const [isDragActive, setIsDragActive] = useState(false)
   const libraryRef = useRef<HTMLDivElement>(null)
 
   const today = startOfDay(new Date())
@@ -208,6 +209,19 @@ export function MealsPage() {
     () => new Set(instances.filter((m) => m.scheduled_date).map((m) => m.scheduled_date!)),
     [instances],
   )
+
+  // Map date → unique meal types for colored calendar dots
+  const mealDateTypes = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const m of instances) {
+      if (!m.scheduled_date) continue
+      const existing = map.get(m.scheduled_date) ?? []
+      if (m.meal_type && !existing.includes(m.meal_type)) existing.push(m.meal_type)
+      else if (!m.meal_type && !existing.includes('_default')) existing.push('_default')
+      map.set(m.scheduled_date, existing)
+    }
+    return map
+  }, [instances])
 
   const mealsForDate = useMemo(() => {
     const dateStr = format(selectedDate, 'yyyy-MM-dd')
@@ -410,10 +424,16 @@ export function MealsPage() {
         }
       />
 
+      {/* Desktop floating TopBar (avatar + notifications) */}
+      <TopBar
+        actionsOnly
+        className="hidden lg:flex fixed top-4 right-4 z-30 rounded-xl border border-stone-200/80 bg-white/90 backdrop-blur-sm px-2 py-1.5 shadow-sm"
+      />
+
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto" onWheel={handleOuterWheel}>
-        {/* Desktop header */}
-        <div className="hidden lg:block px-6 pt-6 pb-3">
+      <div className={cn('flex-1', isDragActive ? 'overflow-visible' : 'overflow-y-auto')} onWheel={handleOuterWheel}>
+        {/* Desktop header — pr-36 reserves space for the floating TopBar */}
+        <div className="hidden lg:block px-6 pr-36 pt-6 pb-3">
           <DesktopPageHeader
             icon={CalendarDays}
             title={t('meals.title', 'Meals')}
@@ -516,7 +536,7 @@ export function MealsPage() {
                   transition={{ duration: 0.2 }}
                   className="flex flex-col"
                 >
-                  <MealDragProvider>
+                  <MealDragProvider onDragActiveChange={setIsDragActive}>
                     {/* ---- Sticky calendar area ---- */}
                     <div
                       className={cn(
@@ -554,6 +574,7 @@ export function MealsPage() {
                                 selectedDate={selectedDate}
                                 onSelectDate={setSelectedDate}
                                 mealDates={mealDates}
+                                mealDateTypes={mealDateTypes}
                               />
                             </motion.div>
                           )}
@@ -612,7 +633,9 @@ export function MealsPage() {
                         'rounded-xl',
                         calendarExpanded
                           ? 'mt-1'
-                          : 'mt-2 lg:max-h-[50vh] lg:overflow-y-auto',
+                          : isDragActive
+                            ? 'mt-2'
+                            : 'mt-2 lg:max-h-[50vh] lg:overflow-y-auto',
                       )}
                     >
                       {mealLibrarySection}

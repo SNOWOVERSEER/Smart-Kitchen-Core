@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { DateInput } from '@/components/ui/date-input'
 import { useMeals, useCreateMeal, useAddRecipesToMeal } from '@/features/meals/hooks/useMeals'
 import { cn } from '@/lib/utils'
 import {
@@ -20,6 +22,7 @@ import {
   MEAL_FORM_SECONDARY_BUTTON,
   MEAL_FORM_SECTION,
 } from './mealFormStyles'
+import { MealTypeSelector } from './MealTypeSelector'
 
 interface AddToMealSheetProps {
   recipeIds: number[]
@@ -37,6 +40,9 @@ export function AddToMealSheet({ recipeIds, open, onClose }: AddToMealSheetProps
   const [mode, setMode] = useState<'existing' | 'new'>(hasMeals ? 'existing' : 'new')
   const [selectedMealId, setSelectedMealId] = useState<number | null>(null)
   const [newMealName, setNewMealName] = useState('')
+  const [newIsTemplate, setNewIsTemplate] = useState(true)
+  const [newScheduledDate, setNewScheduledDate] = useState('')
+  const [newMealType, setNewMealType] = useState<string | null>(null)
 
   const isPending = createMeal.isPending || addRecipes.isPending
 
@@ -47,23 +53,35 @@ export function AddToMealSheet({ recipeIds, open, onClose }: AddToMealSheetProps
         setMode(hasMeals ? 'existing' : 'new')
         setSelectedMealId(null)
         setNewMealName('')
+        setNewIsTemplate(true)
+        setNewScheduledDate('')
+        setNewMealType(null)
         onClose()
       }
     },
     [hasMeals, onClose],
   )
 
+  const newNeedsDate = mode === 'new' && !newIsTemplate && !newScheduledDate
   const canSubmit =
     !isPending &&
     recipeIds.length > 0 &&
-    (mode === 'new' ? newMealName.trim().length > 0 : selectedMealId !== null)
+    (mode === 'new'
+      ? newMealName.trim().length > 0 && !newNeedsDate
+      : selectedMealId !== null)
 
   const handleSubmit = async () => {
     if (!canSubmit) return
 
     try {
       if (mode === 'new') {
-        await createMeal.mutateAsync({ name: newMealName.trim(), recipe_ids: recipeIds })
+        await createMeal.mutateAsync({
+          name: newMealName.trim(),
+          recipe_ids: recipeIds,
+          is_template: newIsTemplate || undefined,
+          scheduled_date: newScheduledDate || undefined,
+          meal_type: (newMealType as 'breakfast' | 'lunch' | 'dinner' | 'snack') ?? undefined,
+        })
       } else {
         await addRecipes.mutateAsync({
           mealId: selectedMealId!,
@@ -141,18 +159,60 @@ export function AddToMealSheet({ recipeIds, open, onClose }: AddToMealSheetProps
               </div>
 
               {mode === 'new' && (
-                <div className={MEAL_FORM_SECTION}>
-                  <label className={MEAL_FORM_LABEL}>
-                    {t('meals.name', 'Meal name')}
-                  </label>
-                  <Input
-                    autoFocus
-                    value={newMealName}
-                    onChange={(e) => setNewMealName(e.target.value)}
-                    placeholder={t('meals.namePlaceholder', 'e.g. Weekend BBQ')}
-                    className={MEAL_FORM_INPUT}
-                  />
-                </div>
+                <>
+                  <div className={MEAL_FORM_SECTION}>
+                    <label className={MEAL_FORM_LABEL}>
+                      {t('meals.name', 'Meal name')}
+                    </label>
+                    <Input
+                      autoFocus
+                      value={newMealName}
+                      onChange={(e) => setNewMealName(e.target.value)}
+                      placeholder={t('meals.namePlaceholder', 'e.g. Weekend BBQ')}
+                      className={MEAL_FORM_INPUT}
+                    />
+                  </div>
+
+                  <div className={MEAL_FORM_SECTION}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className={MEAL_FORM_LABEL}>
+                          {t('meals.saveAsTemplate', 'Save as template')}
+                        </label>
+                        <p className="text-[10.5px] text-stone-400 mt-0.5">
+                          {t('meals.templateHint', 'Templates are reusable meal blueprints')}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={newIsTemplate}
+                        onCheckedChange={setNewIsTemplate}
+                      />
+                    </div>
+                  </div>
+
+                  <div className={MEAL_FORM_SECTION}>
+                    <label className={MEAL_FORM_LABEL}>
+                      {t('meals.scheduledDate', 'Date')}
+                    </label>
+                    <DateInput
+                      value={newScheduledDate}
+                      onChange={(e) => setNewScheduledDate(e.target.value)}
+                      className={MEAL_FORM_INPUT}
+                    />
+                    {newNeedsDate && (
+                      <p className="text-[11px] text-amber-600 mt-1">
+                        {t('meals.dateRequiredHint', 'A date is required for non-template meals')}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className={MEAL_FORM_SECTION}>
+                    <label className={MEAL_FORM_LABEL}>
+                      {t('meals.mealType', 'Meal type')}
+                    </label>
+                    <MealTypeSelector value={newMealType} onChange={setNewMealType} />
+                  </div>
+                </>
               )}
 
               <div className={MEAL_FORM_SECTION}>

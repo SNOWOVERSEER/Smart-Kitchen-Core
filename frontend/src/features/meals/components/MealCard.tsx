@@ -88,10 +88,14 @@ export function MealCard({ meal, onSelect, index, enableDrag, onReschedule, onUn
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.06, ease: EASE_OUT_EXPO }}
       whileTap={isDragging ? undefined : { scale: 0.97 }}
-      // Direct drag — no long-press needed
       drag={canDrag || undefined}
       dragSnapToOrigin
-      whileDrag={{ scale: 1.04, boxShadow: '0 16px 48px -8px rgba(28,22,18,0.3)', zIndex: 50 }}
+      whileDrag={{
+        scale: 0.5,
+        boxShadow: '0 16px 48px -8px rgba(28,22,18,0.3)',
+        zIndex: 50,
+        transition: { scale: { duration: 0.25, ease: EASE_OUT_EXPO } },
+      }}
       onDragStart={canDrag ? handleDragStart : undefined}
       onDrag={canDrag ? handleDrag : undefined}
       onDragEnd={canDrag ? handleDragEnd : undefined}

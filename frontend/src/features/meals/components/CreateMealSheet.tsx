@@ -60,7 +60,7 @@ export function CreateMealSheet({ open, onClose, meals }: CreateMealSheetProps) 
   const [scheduledDate, setScheduledDate] = useState('')
   const [mealType, setMealType] = useState<string | null>(null)
   const [selectedRecipeIds, setSelectedRecipeIds] = useState<number[]>([])
-  const [isTemplate, setIsTemplate] = useState(false)
+  const [isTemplate, setIsTemplate] = useState(true)
   const [conflictMeal, setConflictMeal] = useState<MealResponse | null>(null)
 
   const resetForm = useCallback(() => {
@@ -68,7 +68,7 @@ export function CreateMealSheet({ open, onClose, meals }: CreateMealSheetProps) 
     setScheduledDate('')
     setMealType(null)
     setSelectedRecipeIds([])
-    setIsTemplate(false)
+    setIsTemplate(true)
     setConflictMeal(null)
   }, [])
 
@@ -88,11 +88,12 @@ export function CreateMealSheet({ open, onClose, meals }: CreateMealSheetProps) 
     )
   }, [])
 
-  const canSubmit = name.trim().length > 0 && !createMeal.isPending
+  const needsDate = !isTemplate && !scheduledDate
+  const canSubmit = name.trim().length > 0 && !needsDate && !createMeal.isPending
 
   const buildMealData = () => ({
     name: name.trim(),
-    scheduled_date: isTemplate ? undefined : (scheduledDate || undefined),
+    scheduled_date: scheduledDate || undefined,
     meal_type:
       (mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack') ?? undefined,
     recipe_ids:
@@ -203,29 +204,32 @@ export function CreateMealSheet({ open, onClose, meals }: CreateMealSheetProps) 
                 </div>
               </motion.div>
 
-              {/* Date (hidden when saving as template) */}
-              {!isTemplate && (
-                <motion.div
-                  custom={2}
-                  variants={sectionVariants}
-                  initial="hidden"
-                  animate="visible"
-                  className={MEAL_FORM_SECTION}
-                >
-                  <label className={MEAL_FORM_LABEL}>
-                    {t('meals.scheduledDate', 'Date')}
-                  </label>
-                  <DateInput
-                    value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
-                    className={MEAL_FORM_INPUT}
-                  />
-                </motion.div>
-              )}
+              {/* Date */}
+              <motion.div
+                custom={2}
+                variants={sectionVariants}
+                initial="hidden"
+                animate="visible"
+                className={MEAL_FORM_SECTION}
+              >
+                <label className={MEAL_FORM_LABEL}>
+                  {t('meals.scheduledDate', 'Date')}
+                </label>
+                <DateInput
+                  value={scheduledDate}
+                  onChange={(e) => setScheduledDate(e.target.value)}
+                  className={MEAL_FORM_INPUT}
+                />
+                {needsDate && (
+                  <p className="text-[11px] text-amber-600 mt-1">
+                    {t('meals.dateRequiredHint', 'A date is required for non-template meals')}
+                  </p>
+                )}
+              </motion.div>
 
               {/* Meal type */}
               <motion.div
-                custom={isTemplate ? 2 : 3}
+                custom={3}
                 variants={sectionVariants}
                 initial="hidden"
                 animate="visible"
@@ -239,7 +243,7 @@ export function CreateMealSheet({ open, onClose, meals }: CreateMealSheetProps) 
 
               {/* Recipe picker */}
               <motion.div
-                custom={isTemplate ? 3 : 4}
+                custom={4}
                 variants={sectionVariants}
                 initial="hidden"
                 animate="visible"

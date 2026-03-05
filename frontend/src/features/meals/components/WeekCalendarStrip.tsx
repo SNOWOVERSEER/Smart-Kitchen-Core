@@ -11,13 +11,15 @@ import {
 } from 'date-fns'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { EASE_OUT_EXPO } from '../lib/mealConstants'
+import { EASE_OUT_EXPO, MEAL_TYPE_CONFIG, DEFAULT_MEAL_DOT, type MealType } from '../lib/mealConstants'
 import { useMealDragOptional } from '../lib/MealDragContext'
 
 interface WeekCalendarStripProps {
   selectedDate: Date
   onSelectDate: (date: Date) => void
   mealDates: Set<string>
+  /** Maps date string → set of meal_type values present on that date */
+  mealDateTypes?: Map<string, string[]>
   className?: string
 }
 
@@ -25,6 +27,7 @@ export function WeekCalendarStrip({
   selectedDate,
   onSelectDate,
   mealDates,
+  mealDateTypes,
   className,
 }: WeekCalendarStripProps) {
   const { t } = useTranslation()
@@ -204,11 +207,24 @@ export function WeekCalendarStrip({
 
                     <div
                       className={cn(
-                        'w-1.5 h-1.5 rounded-full mt-1 transition-opacity',
-                        hasMeals ? 'bg-primary' : 'bg-transparent',
+                        'flex items-center gap-[3px] mt-1 transition-opacity h-1.5',
                         hasAnyHover && !isHovered ? 'opacity-0' : 'opacity-100',
                       )}
-                    />
+                    >
+                      {hasMeals ? (
+                        (mealDateTypes?.get(dateKey) ?? ['_default']).slice(0, 3).map((type, i) => {
+                          const config = MEAL_TYPE_CONFIG[type as MealType]
+                          return (
+                            <div
+                              key={`${type}-${i}`}
+                              className={cn('w-1.5 h-1.5 rounded-full', config?.dotColor ?? DEFAULT_MEAL_DOT)}
+                            />
+                          )
+                        })
+                      ) : (
+                        <div className="w-1.5 h-1.5 rounded-full bg-transparent" />
+                      )}
+                    </div>
                   </motion.div>
                 )
               })}

@@ -18,9 +18,9 @@ export function useAddItem() {
     mutationFn: (data: AddInventoryRequest) => addInventoryItem(data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: INVENTORY_KEY })
-      toast.success('Item added')
+      toast.success('Item added', { id: 'inventory-action' })
     },
-    onError: () => toast.error('Failed to add item'),
+    onError: () => toast.error('Failed to add item', { id: 'inventory-action' }),
   })
 }
 
@@ -29,9 +29,9 @@ export function useUpdateBatch() {
     mutationFn: ({ id, data }: { id: number; data: UpdateInventoryRequest }) => updateBatch(id, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: INVENTORY_KEY })
-      toast.success('Batch updated')
+      toast.success('Batch updated', { id: 'inventory-action' })
     },
-    onError: () => toast.error('Failed to update batch'),
+    onError: () => toast.error('Failed to update batch', { id: 'inventory-action' }),
   })
 }
 
@@ -40,9 +40,9 @@ export function useDeleteBatch() {
     mutationFn: (id: number) => deleteBatch(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: INVENTORY_KEY })
-      toast.success('Batch removed')
+      toast.success('Batch removed', { id: 'inventory-action' })
     },
-    onError: () => toast.error('Failed to remove batch'),
+    onError: () => toast.error('Failed to remove batch', { id: 'inventory-action' }),
   })
 }
 
@@ -51,8 +51,8 @@ export function useConsumeItem() {
     mutationFn: (data: ConsumeRequest) => consumeItem(data),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: INVENTORY_KEY })
-      toast.success(result.message)
+      toast.success(result.message, { id: 'inventory-action' })
     },
-    onError: () => toast.error('Failed to consume item'),
+    onError: () => toast.error('Failed to consume item', { id: 'inventory-action' }),
   })
 }

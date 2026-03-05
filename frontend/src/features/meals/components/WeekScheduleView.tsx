@@ -9,6 +9,7 @@ import {
   isToday,
 } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { MEAL_TYPE_CONFIG, type MealType } from '../lib/mealConstants'
 import { useMealDragOptional } from '../lib/MealDragContext'
 import type { MealResponse } from '@/shared/lib/api.types'
 
@@ -180,20 +181,36 @@ export function WeekScheduleView({
                   <div className="mt-1.5 flex-1">
                     {dayMeals.length > 0 ? (
                       <div className="flex flex-col gap-1">
-                        {dayMeals.map((meal) => (
+                        {dayMeals.map((meal) => {
+                          const mealConfig = meal.meal_type
+                            ? MEAL_TYPE_CONFIG[meal.meal_type as MealType]
+                            : undefined
+                          return (
                           <div
                             key={meal.id}
-                            className="group/chip w-full min-h-6 px-2 py-1 rounded-lg border border-stone-200/70 bg-white text-left hover:border-stone-300 transition-colors flex items-start gap-1"
+                            className={cn(
+                              'group/chip w-full min-h-6 rounded-lg border text-left transition-colors flex items-start gap-1 overflow-hidden',
+                              mealConfig
+                                ? `${mealConfig.chipBorder} ${mealConfig.chipBg} hover:border-opacity-80`
+                                : 'border-stone-200/70 bg-white hover:border-stone-300',
+                            )}
                           >
+                            {/* Left accent bar */}
+                            {mealConfig && (
+                              <div className={cn('w-[2.5px] shrink-0 self-stretch bg-gradient-to-b', mealConfig.gradient)} />
+                            )}
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 onSelectMeal(meal.id)
                               }}
-                              className="flex-1 min-w-0"
+                              className={cn('flex-1 min-w-0 py-1', mealConfig ? 'pl-1.5 pr-1' : 'px-2')}
                             >
-                              <span className="text-[10px] font-medium text-stone-700 leading-[1.3] whitespace-normal break-words block">
+                              <span className={cn(
+                                'text-[10px] font-medium leading-[1.3] whitespace-normal break-words block',
+                                mealConfig ? mealConfig.textColor : 'text-stone-700',
+                              )}>
                                 {meal.name}
                               </span>
                             </button>
@@ -204,13 +221,14 @@ export function WeekScheduleView({
                                   e.stopPropagation()
                                   onUnschedule(meal.id)
                                 }}
-                                className="shrink-0 p-0.5 rounded-full text-stone-300 opacity-0 group-hover/chip:opacity-100 hover:text-red-500 hover:bg-red-50 transition-all"
+                                className="shrink-0 p-0.5 mr-0.5 mt-0.5 rounded-full text-stone-300 opacity-0 group-hover/chip:opacity-100 hover:text-red-500 hover:bg-red-50 transition-all"
                               >
                                 <CalendarX2 className="w-3 h-3" />
                               </button>
                             )}
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     ) : isHovered ? (
                       <div className="h-6 flex items-center px-0.5">

@@ -12,6 +12,7 @@ import {
   useShoppingList,
   useAddShoppingItem,
   useDeleteCheckedItems,
+  useDeleteAllShoppingItems,
 } from '../hooks/useShoppingList'
 import type { ShoppingItem } from '@/shared/lib/api.types'
 import { useSavedRecipes } from '@/features/recipes/hooks/useRecipes'
@@ -29,6 +30,7 @@ export function ShoppingPage() {
   const { data: savedRecipes } = useSavedRecipes()
   const addItem = useAddShoppingItem()
   const clearChecked = useDeleteCheckedItems()
+  const clearAll = useDeleteAllShoppingItems()
   const savedCount = savedRecipes?.length ?? 0
 
   const uncheckedItems = items.filter((item) => !item.is_checked)
@@ -114,33 +116,21 @@ export function ShoppingPage() {
                   ? t('shopping.heroSub', { count: uncheckedItems.length, recipeCount: recipeItemCount })
                   : t('shopping.heroSubEmpty')
               }
-              rightSlot={uncheckedItems.length > 0 ? (
-                <span className="shrink-0 px-2.5 py-1 rounded-full bg-stone-200/70 text-stone-500 text-[11px] font-semibold">
-                  {t('shopping.draftLabel')}
-                </span>
-              ) : undefined}
             />
           </div>
 
-          <div className="lg:hidden flex items-end justify-between gap-3">
-            <div>
-              <h1
-                className="text-[clamp(1.45rem,5.5vw,1.85rem)] leading-[1.06] tracking-[-0.01em] text-[#1C1612]"
-                style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
-              >
-                {t('shopping.heroTitle')}
-              </h1>
-              <p className="mt-1.5 text-sm text-stone-500 leading-snug">
-                {uncheckedItems.length > 0
-                  ? t('shopping.heroSub', { count: uncheckedItems.length, recipeCount: recipeItemCount })
-                  : t('shopping.heroSubEmpty')}
-              </p>
-            </div>
-            {uncheckedItems.length > 0 && (
-              <span className="shrink-0 px-2.5 py-1 rounded-full bg-stone-200/70 text-stone-500 text-[11px] font-semibold">
-                {t('shopping.draftLabel')}
-              </span>
-            )}
+          <div className="lg:hidden">
+            <h1
+              className="text-[clamp(1.45rem,5.5vw,1.85rem)] leading-[1.06] tracking-[-0.01em] text-[#1C1612]"
+              style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
+            >
+              {t('shopping.heroTitle')}
+            </h1>
+            <p className="mt-1.5 text-sm text-stone-500 leading-snug">
+              {uncheckedItems.length > 0
+                ? t('shopping.heroSub', { count: uncheckedItems.length, recipeCount: recipeItemCount })
+                : t('shopping.heroSubEmpty')}
+            </p>
           </div>
         </div>
 
@@ -216,9 +206,21 @@ export function ShoppingPage() {
               {/* Unchecked items */}
               {uncheckedItems.length > 0 && (
                 <motion.div layout>
-                  <p className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-stone-400 mb-2 px-1">
-                    {t('shopping.uncheckedSection')} ({uncheckedItems.length})
-                  </p>
+                  <div className="flex items-center justify-between mb-2 px-1">
+                    <p className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-stone-400">
+                      {t('shopping.uncheckedSection')} ({uncheckedItems.length})
+                    </p>
+                    {items.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => clearAll.mutate()}
+                        disabled={clearAll.isPending}
+                        className="text-[10.5px] font-medium text-stone-400 hover:text-destructive transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        {t('shopping.clearAll', 'Clear all')}
+                      </button>
+                    )}
+                  </div>
                   <div className="bg-white rounded-2xl border border-stone-200/60 shadow-[0_2px_16px_-6px_rgba(28,22,18,0.09)] overflow-hidden">
                     <AnimatePresence initial={false} mode="popLayout">
                       {uncheckedItems.map((item, idx) => (
