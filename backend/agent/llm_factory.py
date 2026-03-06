@@ -48,6 +48,13 @@ def get_user_llm(user_id: str) -> BaseChatModel:
                 model=config["model_id"],
                 temperature=0,
             )
+        elif config["provider"] == "minimax":
+            return ChatOpenAI(
+                api_key=api_key,
+                base_url="https://api.minimax.io/v1",
+                model=config["model_id"],
+                temperature=0,
+            )
 
     # Fallback to server default
     if DEFAULT_OPENAI_API_KEY:

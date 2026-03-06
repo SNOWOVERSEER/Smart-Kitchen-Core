@@ -30,11 +30,11 @@ def search_inventory(
 
 
 @tool
-def get_batch_details(batch_id: int) -> dict[str, Any] | None:
+def get_batch_details(batch_id: str) -> dict[str, Any] | None:
     """Get detailed information about a specific inventory batch by its ID.
 
     Args:
-        batch_id: The batch ID number to look up.
+        batch_id: The encoded batch ID to look up. E.g. "inv_86Rf07xd"
     """
     raise NotImplementedError
 
@@ -88,13 +88,13 @@ def consume_item(
 
 @tool
 def discard_batch(
-    batch_id: int,
+    batch_id: str,
     reason: str | None = None,
 ) -> dict[str, Any]:
     """Discard an entire batch from inventory (e.g. expired, spoiled).
 
     Args:
-        batch_id: The ID of the batch to discard.
+        batch_id: The encoded ID of the batch to discard. E.g. "inv_86Rf07xd"
         reason: Optional reason for discarding. E.g. "expired", "spoiled"
     """
     raise NotImplementedError
@@ -102,7 +102,7 @@ def discard_batch(
 
 @tool
 def update_item(
-    batch_id: int,
+    batch_id: str,
     item_name: str | None = None,
     location: str | None = None,
     is_open: bool | None = None,
@@ -115,7 +115,7 @@ def update_item(
     adjusting quantities, correcting information, or renaming an item.
 
     Args:
-        batch_id: The ID of the batch to update.
+        batch_id: The encoded ID of the batch to update. E.g. "inv_86Rf07xd"
         item_name: New English item name (for renaming, e.g. "Coca Cola" -> "Coke").
         location: New storage location. Must be: "Fridge", "Freezer", or "Pantry"
         is_open: Whether the package is open.
@@ -164,17 +164,23 @@ def search_saved_recipes(query: str = "") -> str:
 
 
 @tool
-def get_recipe_details(recipe_id: int) -> str:
+def get_recipe_details(recipe_id: str) -> str:
     """Get full details of a saved recipe including ingredients and instructions.
 
     Args:
-        recipe_id: The ID of the saved recipe to retrieve.
+        recipe_id: The encoded ID of the saved recipe. E.g. "rcp_QRgqJvO8"
     """
     raise NotImplementedError
 
 
 @tool
-def generate_recipes_tool(prompt: str, categories: str = "", use_expiring: bool = False) -> str:
+def generate_recipes_tool(
+    prompt: str,
+    categories: str = "",
+    use_expiring: bool = False,
+    count: int = 4,
+    as_meal_set: bool = False,
+) -> str:
     """Generate new recipe suggestions based on user's inventory and preferences.
 
     Use this when the user explicitly asks you to generate or suggest recipe cards.
@@ -184,6 +190,8 @@ def generate_recipes_tool(prompt: str, categories: str = "", use_expiring: bool 
         prompt: What the user wants — a dish name, cuisine preference, or general request.
         categories: Comma-separated category filters. E.g. "asian,quick,vegetarian".
         use_expiring: If true, prioritize ingredients expiring within 7 days.
+        count: Number of recipes to generate (1-12). Default 4.
+        as_meal_set: If true, generate a coordinated meal set (main + sides/soups/desserts) instead of independent dishes. Only use when user explicitly asks for a meal set or multi-course meal.
     """
     raise NotImplementedError
 
@@ -211,23 +219,23 @@ def save_all_recipes() -> str:
 
 
 @tool
-def delete_recipe(recipe_id: int) -> str:
+def delete_recipe(recipe_id: str) -> str:
     """Delete a saved recipe from the user's collection.
 
     Args:
-        recipe_id: The ID of the saved recipe to delete.
+        recipe_id: The encoded ID of the saved recipe. E.g. "rcp_QRgqJvO8"
     """
     raise NotImplementedError
 
 
 @tool
-def add_recipe_ingredients_to_shopping(recipe_id: int) -> str:
+def add_recipe_ingredients_to_shopping(recipe_id: str) -> str:
     """Add all missing ingredients from a saved recipe to the shopping list.
 
     Only adds ingredients that are NOT currently in stock.
 
     Args:
-        recipe_id: The ID of the saved recipe.
+        recipe_id: The encoded ID of the saved recipe. E.g. "rcp_QRgqJvO8"
     """
     raise NotImplementedError
 
@@ -244,11 +252,11 @@ def get_meals(date_from: str | None = None, date_to: str | None = None) -> list[
 
 
 @tool
-def get_meal_details(meal_id: int) -> dict:
+def get_meal_details(meal_id: str) -> dict:
     """Get full details of a specific meal including its recipes.
 
     Args:
-        meal_id: The ID of the meal to retrieve.
+        meal_id: The encoded ID of the meal. E.g. "meal_Kd3x9p2q"
     """
     raise NotImplementedError
 
@@ -259,7 +267,7 @@ def create_meal(name: str, recipe_ids: str = "", scheduled_date: str | None = No
 
     Args:
         name: Name of the meal in English. E.g. "Weekend BBQ", "Tuesday Dinner"
-        recipe_ids: Comma-separated saved recipe IDs to include. E.g. "12,34,56"
+        recipe_ids: Comma-separated saved recipe IDs to include. E.g. "rcp_QRgqJvO8,rcp_Kd3x9p2q"
         scheduled_date: Optional date in YYYY-MM-DD format.
         meal_type: Optional meal type: "breakfast", "lunch", "dinner", or "snack".
     """
@@ -267,33 +275,33 @@ def create_meal(name: str, recipe_ids: str = "", scheduled_date: str | None = No
 
 
 @tool
-def add_recipes_to_meal(meal_id: int, recipe_ids: str) -> dict:
+def add_recipes_to_meal(meal_id: str, recipe_ids: str) -> dict:
     """Add saved recipes to an existing meal.
 
     Args:
-        meal_id: The meal ID to add recipes to.
-        recipe_ids: Comma-separated saved recipe IDs. E.g. "12,34"
+        meal_id: The encoded meal ID. E.g. "meal_Kd3x9p2q"
+        recipe_ids: Comma-separated saved recipe IDs. E.g. "rcp_QRgqJvO8,rcp_Kd3x9p2q"
     """
     raise NotImplementedError
 
 
 @tool
-def remove_recipe_from_meal(meal_id: int, recipe_id: int) -> dict:
+def remove_recipe_from_meal(meal_id: str, recipe_id: str) -> dict:
     """Remove a recipe from a meal.
 
     Args:
-        meal_id: The meal ID.
-        recipe_id: The recipe ID to remove.
+        meal_id: The encoded meal ID. E.g. "meal_Kd3x9p2q"
+        recipe_id: The encoded recipe ID to remove. E.g. "rcp_QRgqJvO8"
     """
     raise NotImplementedError
 
 
 @tool
-def delete_meal(meal_id: int) -> str:
+def delete_meal(meal_id: str) -> str:
     """Delete a meal entirely.
 
     Args:
-        meal_id: The ID of the meal to delete.
+        meal_id: The encoded ID of the meal. E.g. "meal_Kd3x9p2q"
     """
     raise NotImplementedError
 

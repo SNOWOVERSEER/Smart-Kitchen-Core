@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from database import get_supabase_client
+from id_codec import encode_id, decode_or_int, encode_inventory_row, encode_meal_row, encode_shopping_row, encode_recipe_row, encode_log_row, INVENTORY, RECIPE, MEAL, SHOPPING, LOG
 from schemas import (
     InventoryItemCreate,
     InventoryItemUpdate,
@@ -21,6 +22,7 @@ def add_inventory_item(
     item: InventoryItemCreate,
     thread_id: str | None = None,
     raw_input: str | None = None,
+    source: str = "manual",
 ) -> dict:
     """Add a new inventory batch."""
     supabase = get_supabase_client()
@@ -36,6 +38,9 @@ def add_inventory_item(
     result = supabase.table("inventory").insert(data).execute()
     row = result.data[0]
 
+    # Derive source: if agent provided thread_id or raw_input, it's "agent"
+    effective_source = "agent" if (thread_id or raw_input) else source
+
     log_transaction(
         user_id=user_id,
         intent="INBOUND",
@@ -48,10 +53,12 @@ def add_inventory_item(
             "brand": row.get("brand"),
             "quantity": row["quantity"],
             "unit": row["unit"],
+            "location": row.get("location"),
+            "source": effective_source,
         },
     )
 
-    return row
+    return encode_inventory_row(row)
 
 
 def get_inventory_grouped(user_id: str) -> list[InventoryGroupResponse]:
@@ -84,7 +91,7 @@ def get_inventory_grouped(user_id: str) -> list[InventoryGroupResponse]:
                 item_name=item_name,
                 total_quantity=total_qty,
                 unit=unit,
-                batches=[InventoryItemResponse(**b) for b in batches],
+                batches=[InventoryItemResponse(**encode_inventory_row(b)) for b in batches],
             )
         )
 
@@ -101,7 +108,7 @@ def get_all_inventory(user_id: str) -> list[dict]:
         .order("item_name")
         .execute()
     )
-    return result.data
+    return [encode_inventory_row(r) for r in result.data]
 
 
 def discard_batch(
@@ -109,6 +116,7 @@ def discard_batch(
     batch_id: int,
     thread_id: str | None = None,
     raw_input: str | None = None,
+    source: str = "manual",
 ) -> dict | None:
     """Discard a specific batch by ID."""
     supabase = get_supabase_client()
@@ -125,6 +133,7 @@ def discard_batch(
         return None
 
     item = fetch.data[0]
+    effective_source = "agent" if (thread_id or raw_input) else source
 
     log_transaction(
         user_id=user_id,
@@ -137,11 +146,12 @@ def discard_batch(
             "item_name": item["item_name"],
             "remaining_quantity": item["quantity"],
             "unit": item["unit"],
+            "source": effective_source,
         },
     )
 
     supabase.table("inventory").delete().eq("id", batch_id).eq("user_id", user_id).execute()
-    return item
+    return encode_inventory_row(item)
 
 
 # ── Smart Consumption (FEFO) ──
@@ -154,6 +164,7 @@ def consume_item(
     thread_id: str | None = None,
     raw_input: str | None = None,
     ai_reasoning: str | None = None,
+    source: str = "manual",
 ) -> ConsumeResult:
     """FEFO consumption scoped to user."""
     supabase = get_supabase_client()
@@ -219,13 +230,15 @@ def consume_item(
         supabase.table("inventory").update(update_data).eq("id", batch["id"]).execute()
 
         affected.append({
-            "batch_id": batch["id"],
+            "batch_id": encode_id(INVENTORY, batch["id"]),
             "brand": batch.get("brand"),
             "expiry_date": batch.get("expiry_date"),
             "deducted": deduct,
             "old_quantity": old_qty,
             "new_quantity": new_qty,
         })
+
+    effective_source = "agent" if (thread_id or raw_input) else source
 
     log_transaction(
         user_id=user_id,
@@ -238,7 +251,9 @@ def consume_item(
             "brand_filter": brand,
             "requested_amount": amount,
             "consumed_amount": amount - remaining,
+            "unit": batches[0].get("unit") if batches else None,
             "affected_batches": affected,
+            "source": effective_source,
         },
     )
 
@@ -295,7 +310,7 @@ def update_inventory_item(
             .eq("user_id", user_id)
             .execute()
         )
-        return fetch.data[0] if fetch.data else None
+        return encode_inventory_row(fetch.data[0]) if fetch.data else None
 
     result = (
         supabase.table("inventory")
@@ -304,7 +319,21 @@ def update_inventory_item(
         .eq("user_id", user_id)
         .execute()
     )
-    return result.data[0] if result.data else None
+    if result.data:
+        row = result.data[0]
+        log_transaction(
+            user_id=user_id,
+            intent="UPDATE",
+            operation_details={
+                "action": "update_inventory",
+                "batch_id": batch_id,
+                "item_name": row.get("item_name"),
+                "updates": data,
+                "source": "manual",
+            },
+        )
+        return encode_inventory_row(row)
+    return None
 
 
 def search_inventory(
@@ -330,7 +359,7 @@ def search_inventory(
         query = query.ilike("location", location)
 
     result = query.order("is_open", desc=True).order("expiry_date", nullsfirst=False).execute()
-    return result.data
+    return [encode_inventory_row(r) for r in result.data]
 
 
 def update_batch(
@@ -367,6 +396,8 @@ def update_batch(
 
     row = result.data[0]
 
+    effective_source = "agent" if (thread_id or raw_input) else "manual"
+
     log_transaction(
         user_id=user_id,
         intent="UPDATE",
@@ -377,10 +408,11 @@ def update_batch(
             "batch_id": batch_id,
             "item_name": row["item_name"],
             "updates": safe_updates,
+            "source": effective_source,
         },
     )
 
-    return row
+    return encode_inventory_row(row)
 
 
 def get_transaction_logs(user_id: str, limit: int = 50) -> list[dict]:
@@ -394,7 +426,7 @@ def get_transaction_logs(user_id: str, limit: int = 50) -> list[dict]:
         .limit(limit)
         .execute()
     )
-    return result.data
+    return [encode_log_row(r) for r in result.data]
 
 
 # ── Recipe services ──
@@ -413,7 +445,7 @@ def _format_inventory_for_prompt(items: list[dict]) -> str:
     return "\n".join(lines) if lines else "No inventory items found."
 
 
-RECIPES_PER_GENERATION = 6  # Change this to generate more or fewer recipes per request
+DEFAULT_RECIPES_COUNT = 4  # Default when user doesn't specify a count
 
 _UNIT_ALIASES: dict[str, str] = {
     "l": "L",
@@ -717,7 +749,14 @@ def _get_assume_pantry_basics(user_id: str) -> bool:
     return True
 
 
-def generate_recipes(user_id: str, categories: list[str], use_expiring: bool, prompt: str | None) -> dict:
+def generate_recipes(
+    user_id: str,
+    categories: list[str],
+    use_expiring: bool,
+    prompt: str | None,
+    count: int | None = None,
+    as_meal_set: bool = False,
+) -> dict:
     """Generate recipe cards with smart mode detection and feasibility checking."""
     from schemas import RecipeCard
     from agent.llm_factory import get_user_llm
@@ -732,6 +771,7 @@ def generate_recipes(user_id: str, categories: list[str], use_expiring: bool, pr
     all_inv = [item for item in get_all_inventory(user_id) if (item.get("quantity") or 0) > 0]
 
     feasibility_notice: str | None = None
+    recipe_count = count if count is not None else DEFAULT_RECIPES_COUNT
 
     # --- Mode detection ---
     prompt_mode = _classify_prompt_mode(prompt)
@@ -775,32 +815,41 @@ def generate_recipes(user_id: str, categories: list[str], use_expiring: bool, pr
         )
 
     # --- Build mode instruction ---
-    if prompt_mode == "specific_dish" and prompt:
+    if as_meal_set and prompt and prompt_mode == "specific_dish":
+        # Meal set centered around a specific dish
         mode_instruction = (
-            f'The user wants: "{prompt}".\n'
+            f'The user wants a coordinated meal set centered around: "{prompt}".\n'
             f"Recipe 1 MUST be this exact dish, prepared authentically.\n"
-            f"Recipes 2-{RECIPES_PER_GENERATION} should be complementary dishes from the same "
+            f"Recipes 2-{recipe_count} should be complementary dishes from the same "
             f"cuisine that pair well with it — sides, soups, appetizers, or desserts that "
             f"form a cohesive meal. Do NOT generate random unrelated recipes."
         )
+    elif as_meal_set:
+        # Meal set without a specific anchor dish
+        mode_instruction = (
+            f"Generate {recipe_count} recipes that together form a complete, cohesive meal. "
+            f"Include a main dish and complementary sides, soups, or desserts that work together."
+        )
+        if prompt:
+            mode_instruction += f'\nTheme/preference: "{prompt}"'
     elif not is_feasible and not prompt:
         taste_str = f" The user enjoys: {', '.join(taste_tags)}." if taste_tags else ""
         mode_instruction = (
             f"The user's inventory is limited for cooking.{taste_str}\n"
-            f"Suggest {RECIPES_PER_GENERATION} practical, real recipes the user would enjoy. "
+            f"Suggest {recipe_count} practical, real recipes the user would enjoy. "
             f"These should be simple dishes that use some of the available ingredients "
             f"and require minimal extra shopping. Clearly mark which ingredients are NOT in stock."
         )
     else:
-        mode_instruction = f"Generate {RECIPES_PER_GENERATION} recipes using ingredients from this inventory."
+        # Default: independent dishes
+        mode_instruction = f"Generate {recipe_count} independent recipes using ingredients from this inventory."
+        if prompt:
+            mode_instruction += f'\nUser request: "{prompt}"'
         if use_expiring:
             mode_instruction = f"Prioritize using expiring items. " + mode_instruction
 
     if categories:
         mode_instruction += f"\nFocus on these styles/categories: {', '.join(categories)}."
-
-    if prompt and prompt_mode == "exploratory":
-        mode_instruction += f'\nUser request: "{prompt}"'
 
     # --- System prompt ---
     system_prompt = f"""You are a practical recipe assistant. Your goal is to suggest real,
@@ -878,7 +927,23 @@ def save_recipe(
         "source_prompt": source_prompt,
         "image_prompt": image_prompt,
     }).execute()
-    return result.data[0]
+    row = result.data[0]
+
+    log_transaction(
+        user_id=user_id,
+        intent="RECIPE_SAVE",
+        operation_details={
+            "action": "save_recipe",
+            "recipe_id": row["id"],
+            "title": row["title"],
+            "source_mode": source_mode,
+            "source": "recipe",
+            "tags": recipe.get("tags", []),
+            "ingredient_count": len(recipe.get("ingredients", [])),
+        },
+    )
+
+    return encode_recipe_row(row)
 
 
 def get_saved_recipes(user_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
@@ -896,7 +961,7 @@ def get_saved_recipes(user_id: str, limit: int = 20, offset: int = 0) -> list[di
         return []
 
     live_inventory = [item for item in get_all_inventory(user_id) if (item.get("quantity") or 0) > 0]
-    return [_refresh_recipe_ingredient_stock(row, live_inventory) for row in rows]
+    return [encode_recipe_row(_refresh_recipe_ingredient_stock(row, live_inventory)) for row in rows]
 
 
 def get_saved_recipe(user_id: str, recipe_id: int) -> dict | None:
@@ -912,18 +977,37 @@ def get_saved_recipe(user_id: str, recipe_id: int) -> dict | None:
         return None
 
     live_inventory = [item for item in get_all_inventory(user_id) if (item.get("quantity") or 0) > 0]
-    return _refresh_recipe_ingredient_stock(result.data[0], live_inventory)
+    return encode_recipe_row(_refresh_recipe_ingredient_stock(result.data[0], live_inventory))
 
 
 def delete_saved_recipe(user_id: str, recipe_id: int) -> bool:
     """Delete recipe by ID. Returns True if found and deleted."""
     supabase = get_supabase_client()
+    # Fetch title before deleting for the log
+    fetch = (supabase.table("saved_recipes")
+        .select("id, title")
+        .eq("id", recipe_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute())
     result = (supabase.table("saved_recipes")
         .delete()
         .eq("id", recipe_id)
         .eq("user_id", user_id)
         .execute())
-    return bool(result.data)
+    deleted = bool(result.data)
+    if deleted and fetch.data:
+        log_transaction(
+            user_id=user_id,
+            intent="RECIPE_DELETE",
+            operation_details={
+                "action": "delete_recipe",
+                "recipe_id": recipe_id,
+                "title": fetch.data[0]["title"],
+                "source": "manual",
+            },
+        )
+    return deleted
 
 
 # ── Shopping list services ──
@@ -937,7 +1021,7 @@ def get_shopping_items(user_id: str) -> list[dict]:
         .order("is_checked")        # False (unchecked) first
         .order("created_at", desc=True)
         .execute())
-    return result.data or []
+    return [encode_shopping_row(r) for r in (result.data or [])]
 
 
 def add_shopping_item(user_id: str, item: "ShoppingItemCreate") -> dict:
@@ -945,16 +1029,55 @@ def add_shopping_item(user_id: str, item: "ShoppingItemCreate") -> dict:
     supabase = get_supabase_client()
     data = item.model_dump()
     data["user_id"] = user_id
+    if data.get("source_recipe_id"):
+        data["source_recipe_id"] = decode_or_int(data["source_recipe_id"])
     result = supabase.table("shopping_items").insert(data).execute()
-    return result.data[0]
+    row = result.data[0]
+
+    log_transaction(
+        user_id=user_id,
+        intent="SHOPPING_ADD",
+        operation_details={
+            "action": "add_shopping_item",
+            "item_name": row["item_name"],
+            "quantity": row.get("quantity"),
+            "unit": row.get("unit"),
+            "source": row.get("source", "manual"),
+            "source_recipe_title": row.get("source_recipe_title"),
+        },
+    )
+
+    return encode_shopping_row(row)
 
 
 def add_shopping_items_bulk(user_id: str, items: list["ShoppingItemCreate"]) -> list[dict]:
     """Bulk insert shopping items — single Supabase round-trip."""
     supabase = get_supabase_client()
-    rows = [{"user_id": user_id, **item.model_dump()} for item in items]
+    rows = []
+    for item in items:
+        d = {"user_id": user_id, **item.model_dump()}
+        if d.get("source_recipe_id"):
+            d["source_recipe_id"] = decode_or_int(d["source_recipe_id"])
+        rows.append(d)
     result = supabase.table("shopping_items").insert(rows).execute()
-    return result.data or []
+    inserted = result.data or []
+
+    if inserted:
+        item_names = [r["item_name"] for r in inserted]
+        source = inserted[0].get("source", "manual")
+        log_transaction(
+            user_id=user_id,
+            intent="SHOPPING_ADD",
+            operation_details={
+                "action": "bulk_add_shopping",
+                "item_names": item_names,
+                "count": len(inserted),
+                "source": source,
+                "source_recipe_title": inserted[0].get("source_recipe_title"),
+            },
+        )
+
+    return [encode_shopping_row(r) for r in inserted]
 
 
 def update_shopping_item(
@@ -971,13 +1094,27 @@ def update_shopping_item(
             .eq("id", item_id)
             .eq("user_id", user_id)
             .execute())
-        return fetch.data[0] if fetch.data else None
+        return encode_shopping_row(fetch.data[0]) if fetch.data else None
     result = (supabase.table("shopping_items")
         .update(patch)
         .eq("id", item_id)
         .eq("user_id", user_id)
         .execute())
-    return result.data[0] if result.data else None
+    if result.data:
+        row = result.data[0]
+        log_transaction(
+            user_id=user_id,
+            intent="SHOPPING_UPDATE",
+            operation_details={
+                "action": "update_shopping_item",
+                "item_id": item_id,
+                "item_name": row.get("item_name"),
+                "updates": patch,
+                "source": "manual",
+            },
+        )
+        return encode_shopping_row(row)
+    return None
 
 
 def delete_shopping_item(user_id: str, item_id: int) -> bool:
@@ -988,7 +1125,20 @@ def delete_shopping_item(user_id: str, item_id: int) -> bool:
         .eq("id", item_id)
         .eq("user_id", user_id)
         .execute())
-    return bool(result.data)
+    deleted = bool(result.data)
+    if deleted:
+        row = result.data[0]
+        log_transaction(
+            user_id=user_id,
+            intent="SHOPPING_DELETE",
+            operation_details={
+                "action": "delete_shopping_item",
+                "item_id": item_id,
+                "item_name": row.get("item_name"),
+                "source": "manual",
+            },
+        )
+    return deleted
 
 
 def delete_checked_shopping_items(user_id: str) -> int:
@@ -999,7 +1149,20 @@ def delete_checked_shopping_items(user_id: str) -> int:
         .eq("user_id", user_id)
         .eq("is_checked", True)
         .execute())
-    return len(result.data or [])
+    count = len(result.data or [])
+    if count > 0:
+        names = [r.get("item_name") for r in result.data]
+        log_transaction(
+            user_id=user_id,
+            intent="SHOPPING_DELETE",
+            operation_details={
+                "action": "delete_checked_shopping_items",
+                "count": count,
+                "item_names": names,
+                "source": "manual",
+            },
+        )
+    return count
 
 
 def delete_all_shopping_items(user_id: str) -> int:
@@ -1009,7 +1172,18 @@ def delete_all_shopping_items(user_id: str) -> int:
         .delete()
         .eq("user_id", user_id)
         .execute())
-    return len(result.data or [])
+    count = len(result.data or [])
+    if count > 0:
+        log_transaction(
+            user_id=user_id,
+            intent="SHOPPING_DELETE",
+            operation_details={
+                "action": "delete_all_shopping_items",
+                "count": count,
+                "source": "manual",
+            },
+        )
+    return count
 
 
 def complete_shopping(
@@ -1026,7 +1200,7 @@ def complete_shopping(
     supabase = get_supabase_client()
     added_count = 0
     failed_items: list[str] = []
-    inventory_ids: list[int] = []
+    inventory_ids: list[str] = []
 
     for item_id in item_ids:
         result = (supabase.table("shopping_items")
@@ -1051,11 +1225,24 @@ def complete_shopping(
                 expiry_date=None,
             )
             new_batch = add_inventory_item(user_id=user_id, item=inv_item)
-            inventory_ids.append(new_batch["id"])
+            inventory_ids.append(encode_id(INVENTORY, new_batch["id"]))
             added_count += 1
             supabase.table("shopping_items").delete().eq("id", item_id).eq("user_id", user_id).execute()
         except Exception:
             failed_items.append(row["item_name"])
+
+    if added_count > 0:
+        log_transaction(
+            user_id=user_id,
+            intent="SHOPPING_COMPLETE",
+            operation_details={
+                "action": "complete_shopping",
+                "added_count": added_count,
+                "failed_count": len(failed_items),
+                "failed_items": failed_items,
+                "source": "shopping",
+            },
+        )
 
     return CompleteShoppingResult(
         added_count=added_count,
@@ -1081,11 +1268,27 @@ def create_meal(user_id: str, data: "MealCreate") -> dict:
     meal = result.data[0]
 
     if data.recipe_ids:
+        decoded_rids = [decode_or_int(rid) for rid in data.recipe_ids]
         links = [
             {"meal_id": meal["id"], "recipe_id": rid, "sort_order": i}
-            for i, rid in enumerate(data.recipe_ids)
+            for i, rid in enumerate(decoded_rids)
         ]
         supabase.table("meal_recipes").insert(links).execute()
+
+    log_transaction(
+        user_id=user_id,
+        intent="MEAL_CREATE",
+        operation_details={
+            "action": "create_meal",
+            "meal_id": meal["id"],
+            "name": data.name,
+            "meal_type": data.meal_type,
+            "is_template": data.is_template,
+            "scheduled_date": data.scheduled_date.isoformat() if data.scheduled_date else None,
+            "recipe_count": len(data.recipe_ids) if data.recipe_ids else 0,
+            "source": "manual",
+        },
+    )
 
     return get_meal(user_id, meal["id"])
 
@@ -1158,34 +1361,91 @@ def update_meal(user_id: str, meal_id: int, data: "MealUpdate") -> dict | None:
         .execute())
     if not result.data:
         return None
+    row = result.data[0]
+    log_transaction(
+        user_id=user_id,
+        intent="MEAL_UPDATE",
+        operation_details={
+            "action": "update_meal",
+            "meal_id": meal_id,
+            "name": row.get("name"),
+            "updates": updates,
+            "source": "manual",
+        },
+    )
     return get_meal(user_id, meal_id)
 
 
 def delete_meal(user_id: str, meal_id: int) -> bool:
     """Delete meal. Cascade deletes meal_recipes."""
     supabase = get_supabase_client()
+    # Fetch name before deleting for the log
+    fetch = (supabase.table("meals")
+        .select("id, name, meal_type, is_template")
+        .eq("id", meal_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute())
     result = (supabase.table("meals")
         .delete()
         .eq("id", meal_id)
         .eq("user_id", user_id)
         .execute())
-    return bool(result.data)
+    deleted = bool(result.data)
+    if deleted and fetch.data:
+        m = fetch.data[0]
+        log_transaction(
+            user_id=user_id,
+            intent="MEAL_DELETE",
+            operation_details={
+                "action": "delete_meal",
+                "meal_id": meal_id,
+                "name": m["name"],
+                "meal_type": m.get("meal_type"),
+                "is_template": m.get("is_template", False),
+                "source": "manual",
+            },
+        )
+    return deleted
 
 
 def add_recipes_to_meal(user_id: str, meal_id: int, recipe_ids: list[int]) -> dict | None:
     """Add recipes to a meal. Skips duplicates."""
     supabase = get_supabase_client()
-    meal = get_meal(user_id, meal_id)
-    if not meal:
-        return None
-    existing = {r["recipe_id"] for r in meal.get("recipes", [])}
-    max_order = max((r["sort_order"] for r in meal.get("recipes", [])), default=-1)
+    # Query existing recipe links directly (don't use formatted meal to avoid encoded IDs)
+    existing_result = (supabase.table("meal_recipes")
+        .select("recipe_id")
+        .eq("meal_id", meal_id)
+        .execute())
+    existing = {r["recipe_id"] for r in (existing_result.data or [])}
+    max_order_result = (supabase.table("meal_recipes")
+        .select("sort_order")
+        .eq("meal_id", meal_id)
+        .order("sort_order", desc=True)
+        .limit(1)
+        .execute())
+    max_order = max_order_result.data[0]["sort_order"] if max_order_result.data else -1
     new_links = []
     for i, rid in enumerate(recipe_ids):
         if rid not in existing:
             new_links.append({"meal_id": meal_id, "recipe_id": rid, "sort_order": max_order + 1 + i})
     if new_links:
         supabase.table("meal_recipes").insert(new_links).execute()
+        # Fetch meal name for log
+        meal_data = get_meal(user_id, meal_id)
+        log_transaction(
+            user_id=user_id,
+            intent="MEAL_UPDATE",
+            operation_details={
+                "action": "add_recipes_to_meal",
+                "meal_id": meal_id,
+                "name": meal_data.get("name") if meal_data else None,
+                "added_recipe_ids": [l["recipe_id"] for l in new_links],
+                "count": len(new_links),
+                "source": "manual",
+            },
+        )
+        return meal_data
     return get_meal(user_id, meal_id)
 
 
@@ -1195,7 +1455,25 @@ def remove_recipe_from_meal(user_id: str, meal_id: int, recipe_id: int) -> dict 
     meal = get_meal(user_id, meal_id)
     if not meal:
         return None
+    # Find recipe title for the log
+    recipe_title = None
+    for r in meal.get("recipes", []):
+        if str(r.get("recipe_id")) == str(recipe_id) or r.get("recipe_id") == recipe_id:
+            recipe_title = r.get("title")
+            break
     supabase.table("meal_recipes").delete().eq("meal_id", meal_id).eq("recipe_id", recipe_id).execute()
+    log_transaction(
+        user_id=user_id,
+        intent="MEAL_UPDATE",
+        operation_details={
+            "action": "remove_recipe_from_meal",
+            "meal_id": meal_id,
+            "name": meal.get("name"),
+            "removed_recipe_id": recipe_id,
+            "removed_recipe_title": recipe_title,
+            "source": "manual",
+        },
+    )
     return get_meal(user_id, meal_id)
 
 
@@ -1220,14 +1498,32 @@ def instantiate_meal(user_id: str, template_id: int, scheduled_date: str, meal_t
     result = supabase.table("meals").insert(instance_data).execute()
     instance = result.data[0]
 
-    # Copy recipe links from template
-    template_recipes = template.get("recipes", [])
-    if template_recipes:
+    # Copy recipe links from template (query raw DB, not formatted meal which has encoded IDs)
+    template_recipe_links = (supabase.table("meal_recipes")
+        .select("recipe_id, sort_order")
+        .eq("meal_id", template_id)
+        .order("sort_order")
+        .execute())
+    if template_recipe_links.data:
         links = [
             {"meal_id": instance["id"], "recipe_id": r["recipe_id"], "sort_order": r.get("sort_order", i)}
-            for i, r in enumerate(template_recipes)
+            for i, r in enumerate(template_recipe_links.data)
         ]
         supabase.table("meal_recipes").insert(links).execute()
+
+    log_transaction(
+        user_id=user_id,
+        intent="MEAL_SCHEDULE",
+        operation_details={
+            "action": "instantiate_meal",
+            "meal_id": instance["id"],
+            "template_id": template_id,
+            "name": instance["name"],
+            "scheduled_date": scheduled_date,
+            "meal_type": meal_type or template.get("meal_type"),
+            "source": "meal",
+        },
+    )
 
     return get_meal(user_id, instance["id"])
 
@@ -1238,7 +1534,7 @@ def _format_meal(raw: dict, instance_count: int | None = None) -> dict:
     for mr in sorted(raw.get("meal_recipes", []), key=lambda x: x.get("sort_order", 0)):
         sr = mr.get("saved_recipes") or {}
         recipes.append({
-            "recipe_id": mr["recipe_id"],
+            "recipe_id": encode_id(RECIPE, mr["recipe_id"]),
             "title": sr.get("title", ""),
             "description": sr.get("description"),
             "cook_time_min": sr.get("cook_time_min"),
@@ -1247,14 +1543,15 @@ def _format_meal(raw: dict, instance_count: int | None = None) -> dict:
             "image_url": sr.get("image_url"),
             "sort_order": mr.get("sort_order", 0),
         })
+    template_id = raw.get("template_id")
     return {
-        "id": raw["id"],
+        "id": encode_id(MEAL, raw["id"]),
         "name": raw["name"],
         "scheduled_date": raw.get("scheduled_date"),
         "meal_type": raw.get("meal_type"),
         "notes": raw.get("notes"),
         "is_template": raw.get("is_template", False),
-        "template_id": raw.get("template_id"),
+        "template_id": encode_id(MEAL, template_id) if template_id else None,
         "instance_count": instance_count,
         "recipes": recipes,
         "created_at": raw["created_at"],

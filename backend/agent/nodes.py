@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from agent.state import AgentState, READ_TOOLS, WRITE_TOOLS
 from agent.tools import ALL_TOOLS
 from agent.llm_factory import get_user_llm
+from id_codec import decode_or_int
 from services import (
     search_inventory,
     update_batch,
@@ -124,7 +125,7 @@ def handle_input(state: AgentState) -> dict:
 
 # ============ Node: agent_node ============
 
-MAX_HISTORY_MESSAGES = 20
+MAX_HISTORY_MESSAGES = 40
 
 
 def _trim_messages(messages: list) -> list:
@@ -227,15 +228,17 @@ def execute_read_tools(state: AgentState) -> dict:
                     location=args.get("location"),
                 )
             elif tool_name == "get_batch_details":
+                from id_codec import encode_inventory_row
                 supabase = get_supabase_client()
+                real_id = decode_or_int(args["batch_id"])
                 fetch = (
                     supabase.table("inventory")
                     .select("*")
-                    .eq("id", args["batch_id"])
+                    .eq("id", real_id)
                     .eq("user_id", user_id)
                     .execute()
                 )
-                result = fetch.data[0] if fetch.data else None
+                result = encode_inventory_row(fetch.data[0]) if fetch.data else None
             elif tool_name == "get_shopping_list":
                 from services import get_shopping_items
                 result = get_shopping_items(user_id=state["user_id"])
@@ -260,11 +263,12 @@ def execute_read_tools(state: AgentState) -> dict:
 
             elif tool_name == "get_recipe_details":
                 from services import get_saved_recipe as _get_saved_recipe
-                recipe = _get_saved_recipe(user_id, args["recipe_id"])
+                real_rid = decode_or_int(args["recipe_id"])
+                recipe = _get_saved_recipe(user_id, real_rid)
                 if recipe:
                     result = recipe
                 else:
-                    result = {"error": f"Recipe #{args['recipe_id']} not found"}
+                    result = {"error": f"Recipe {args['recipe_id']} not found"}
 
             elif tool_name == "get_meals":
                 from services import get_meals as _get_meals
@@ -276,11 +280,12 @@ def execute_read_tools(state: AgentState) -> dict:
 
             elif tool_name == "get_meal_details":
                 from services import get_meal as _get_meal
-                meal = _get_meal(user_id, args["meal_id"])
+                real_mid = decode_or_int(args["meal_id"])
+                meal = _get_meal(user_id, real_mid)
                 if meal:
                     result = meal
                 else:
-                    result = {"error": f"Meal #{args['meal_id']} not found"}
+                    result = {"error": f"Meal {args['meal_id']} not found"}
 
             else:
                 result = f"Unknown read tool: {tool_name}"
@@ -348,12 +353,14 @@ def build_write_preview(state: AgentState) -> dict:
                 preview = f"Add to shopping list: {name}{qty_str}{note_str}"
 
         elif tool_name == "generate_recipes_tool":
+            n = args.get("count", 4)
             cat_str = f" [{args.get('categories')}]" if args.get("categories") else ""
             exp_str = " (prioritize expiring)" if args.get("use_expiring") else ""
+            set_str = " (meal set)" if args.get("as_meal_set") else ""
             if user_lang == "zh":
-                preview = f'生成菜谱建议: "{args["prompt"]}"{cat_str}{exp_str}'
+                preview = f'生成 {n} 个菜谱建议: "{args["prompt"]}"{cat_str}{exp_str}{set_str}'
             else:
-                preview = f'Generate recipe suggestions: "{args["prompt"]}"{cat_str}{exp_str}'
+                preview = f'Generate {n} recipe suggestions: "{args["prompt"]}"{cat_str}{exp_str}{set_str}'
 
         elif tool_name == "save_recipe":
             if user_lang == "zh":
@@ -377,8 +384,8 @@ def build_write_preview(state: AgentState) -> dict:
 
         elif tool_name == "delete_recipe":
             from services import get_saved_recipe as _get_saved_recipe
-            recipe = _get_saved_recipe(user_id, args["recipe_id"])
-            title = recipe["title"] if recipe else f"#{args['recipe_id']}"
+            recipe = _get_saved_recipe(user_id, decode_or_int(args["recipe_id"]))
+            title = recipe["title"] if recipe else args['recipe_id']
             if user_lang == "zh":
                 preview = f'删除已保存的菜谱: "{title}"'
             else:
@@ -386,7 +393,7 @@ def build_write_preview(state: AgentState) -> dict:
 
         elif tool_name == "add_recipe_ingredients_to_shopping":
             from services import get_saved_recipe as _get_saved_recipe
-            recipe = _get_saved_recipe(user_id, args["recipe_id"])
+            recipe = _get_saved_recipe(user_id, decode_or_int(args["recipe_id"]))
             if recipe:
                 missing = [
                     ing["name"] for ing in recipe.get("ingredients", [])
@@ -399,9 +406,9 @@ def build_write_preview(state: AgentState) -> dict:
                     preview = f'Add {len(missing)} missing ingredients from "{recipe["title"]}" to shopping list: {items_str}'
             else:
                 if user_lang == "zh":
-                    preview = f"将菜谱 #{args['recipe_id']} 的食材添加到购物清单"
+                    preview = f"将菜谱 {args['recipe_id']} 的食材添加到购物清单"
                 else:
-                    preview = f"Add ingredients from recipe #{args['recipe_id']} to shopping list"
+                    preview = f"Add ingredients from recipe {args['recipe_id']} to shopping list"
 
         elif tool_name == "create_meal":
             name = args.get("name", "?")
@@ -415,8 +422,8 @@ def build_write_preview(state: AgentState) -> dict:
 
         elif tool_name == "add_recipes_to_meal":
             from services import get_meal as _get_meal
-            meal = _get_meal(user_id, args["meal_id"])
-            meal_name = meal["name"] if meal else f"#{args['meal_id']}"
+            meal = _get_meal(user_id, decode_or_int(args["meal_id"]))
+            meal_name = meal["name"] if meal else args['meal_id']
             if user_lang == "zh":
                 preview = f"将菜谱 [{args['recipe_ids']}] 添加到餐食 \"{meal_name}\""
             else:
@@ -424,10 +431,10 @@ def build_write_preview(state: AgentState) -> dict:
 
         elif tool_name == "remove_recipe_from_meal":
             from services import get_meal as _get_meal, get_saved_recipe as _gsr
-            meal = _get_meal(user_id, args["meal_id"])
-            recipe = _gsr(user_id, args["recipe_id"])
-            meal_name = meal["name"] if meal else f"#{args['meal_id']}"
-            recipe_title = recipe["title"] if recipe else f"#{args['recipe_id']}"
+            meal = _get_meal(user_id, decode_or_int(args["meal_id"]))
+            recipe = _gsr(user_id, decode_or_int(args["recipe_id"]))
+            meal_name = meal["name"] if meal else args['meal_id']
+            recipe_title = recipe["title"] if recipe else args['recipe_id']
             if user_lang == "zh":
                 preview = f"从餐食 \"{meal_name}\" 中移除菜谱 \"{recipe_title}\""
             else:
@@ -435,8 +442,8 @@ def build_write_preview(state: AgentState) -> dict:
 
         elif tool_name == "delete_meal":
             from services import get_meal as _get_meal
-            meal = _get_meal(user_id, args["meal_id"])
-            meal_name = meal["name"] if meal else f"#{args['meal_id']}"
+            meal = _get_meal(user_id, decode_or_int(args["meal_id"]))
+            meal_name = meal["name"] if meal else args['meal_id']
             if user_lang == "zh":
                 preview = f"删除餐食: \"{meal_name}\""
             else:
@@ -512,7 +519,7 @@ def _preview_consume(args: dict, user_id: str, lang: str) -> str:
         for batch in plan:
             brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
             lines.append(
-                f"   Batch #{batch['batch_id']}{brand_str}: "
+                f"   Batch {batch['batch_id']}{brand_str}: "
                 f"{batch['current_quantity']} -> {batch['new_quantity']}, "
                 f"过期: {batch.get('expiry_date', 'N/A')}"
             )
@@ -522,7 +529,7 @@ def _preview_consume(args: dict, user_id: str, lang: str) -> str:
         for batch in plan:
             brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
             lines.append(
-                f"   Batch #{batch['batch_id']}{brand_str}: "
+                f"   Batch {batch['batch_id']}{brand_str}: "
                 f"{batch['current_quantity']} -> {batch['new_quantity']}, "
                 f"expires: {batch.get('expiry_date', 'N/A')}"
             )
@@ -534,23 +541,24 @@ def _preview_discard(args: dict, user_id: str, lang: str) -> str:
     batch_id = args.get("batch_id", "?")
 
     supabase = get_supabase_client()
+    real_id = decode_or_int(batch_id) if batch_id != "?" else batch_id
     fetch = (
         supabase.table("inventory")
         .select("*")
-        .eq("id", batch_id)
+        .eq("id", real_id)
         .eq("user_id", user_id)
         .execute()
     )
 
     if not fetch.data:
         if lang == "zh":
-            return f"丢弃: Batch #{batch_id} - 未找到"
-        return f"Discard: Batch #{batch_id} - not found"
+            return f"丢弃: Batch {batch_id} - 未找到"
+        return f"Discard: Batch {batch_id} - not found"
 
     item = fetch.data[0]
     if lang == "zh":
-        return f"丢弃: Batch #{batch_id} - {item['item_name']} ({item['quantity']}{item['unit']})"
-    return f"Discard: Batch #{batch_id} - {item['item_name']} ({item['quantity']}{item['unit']})"
+        return f"丢弃: Batch {batch_id} - {item['item_name']} ({item['quantity']}{item['unit']})"
+    return f"Discard: Batch {batch_id} - {item['item_name']} ({item['quantity']}{item['unit']})"
 
 
 def _preview_update(args: dict, user_id: str, lang: str) -> str:
@@ -559,18 +567,19 @@ def _preview_update(args: dict, user_id: str, lang: str) -> str:
     updates = {k: v for k, v in args.items() if k != "batch_id" and v is not None}
 
     supabase = get_supabase_client()
+    real_id = decode_or_int(batch_id) if batch_id != "?" else batch_id
     fetch = (
         supabase.table("inventory")
         .select("*")
-        .eq("id", batch_id)
+        .eq("id", real_id)
         .eq("user_id", user_id)
         .execute()
     )
 
     if not fetch.data:
         if lang == "zh":
-            return f"更新: Batch #{batch_id} - 未找到"
-        return f"Update: Batch #{batch_id} - not found"
+            return f"更新: Batch {batch_id} - 未找到"
+        return f"Update: Batch {batch_id} - not found"
 
     item = fetch.data[0]
     changes = []
@@ -580,8 +589,8 @@ def _preview_update(args: dict, user_id: str, lang: str) -> str:
 
     changes_str = ", ".join(changes)
     if lang == "zh":
-        return f"更新: {item['item_name']} (Batch #{batch_id}) - {changes_str}"
-    return f"Update: {item['item_name']} (Batch #{batch_id}) - {changes_str}"
+        return f"更新: {item['item_name']} (Batch {batch_id}) - {changes_str}"
+    return f"Update: {item['item_name']} (Batch {batch_id}) - {changes_str}"
 
 
 def _calculate_fefo_plan(
@@ -684,6 +693,8 @@ def execute_write_tools(state: AgentState) -> dict:
                     categories=cats,
                     use_expiring=args.get("use_expiring", False),
                     prompt=args["prompt"],
+                    count=args.get("count"),
+                    as_meal_set=args.get("as_meal_set", False),
                 )
                 recipes_data = gen_result.get("recipes", [])
                 feasibility = gen_result.get("feasibility_notice")
@@ -730,7 +741,7 @@ def execute_write_tools(state: AgentState) -> dict:
                         source_prompt=title,
                         image_prompt=match.get("image_prompt"),
                     )
-                    result_text = f'Saved: "{saved["title"]}" (ID #{saved["id"]})' if user_lang == "en" else f'已保存: "{saved["title"]}" (ID #{saved["id"]})'
+                    result_text = f'Saved: "{saved["title"]}" (ID {saved["id"]})' if user_lang == "en" else f'已保存: "{saved["title"]}" (ID {saved["id"]})'
                     # Fix 6: Remove saved recipe from pending to prevent duplicate saves
                     remaining = [r for r in pending if r is not match]
                     new_pending_recipes = remaining if remaining else []
@@ -750,7 +761,7 @@ def execute_write_tools(state: AgentState) -> dict:
                             source_prompt=recipe.get("title", ""),
                             image_prompt=recipe.get("image_prompt"),
                         )
-                        saved_titles.append(f'"{saved["title"]}" (#{saved["id"]})')
+                        saved_titles.append(f'"{saved["title"]}" ({saved["id"]})')
                     titles_str = ", ".join(saved_titles)
                     result_text = f"Saved {len(saved_titles)} recipes: {titles_str}" if user_lang == "en" else f"已保存 {len(saved_titles)} 道菜谱: {titles_str}"
                     # Clear pending recipes after saving all
@@ -758,15 +769,15 @@ def execute_write_tools(state: AgentState) -> dict:
 
             elif tool_name == "delete_recipe":
                 from services import delete_saved_recipe as _delete_saved_recipe
-                _delete_saved_recipe(user_id, args["recipe_id"])
-                result_text = f"Deleted recipe #{args['recipe_id']}" if user_lang == "en" else f"已删除菜谱 #{args['recipe_id']}"
+                _delete_saved_recipe(user_id, decode_or_int(args["recipe_id"]))
+                result_text = f"Deleted recipe {args['recipe_id']}" if user_lang == "en" else f"已删除菜谱 {args['recipe_id']}"
 
             elif tool_name == "add_recipe_ingredients_to_shopping":
                 from services import get_saved_recipe as _get_saved_recipe, add_shopping_item
                 from schemas import ShoppingItemCreate
-                recipe = _get_saved_recipe(user_id, args["recipe_id"])
+                recipe = _get_saved_recipe(user_id, decode_or_int(args["recipe_id"]))
                 if not recipe:
-                    result_text = f"Recipe #{args['recipe_id']} not found" if user_lang == "en" else f"找不到菜谱 #{args['recipe_id']}"
+                    result_text = f"Recipe {args['recipe_id']} not found" if user_lang == "en" else f"找不到菜谱 {args['recipe_id']}"
                 else:
                     missing = [
                         ing for ing in recipe.get("ingredients", [])
@@ -791,7 +802,7 @@ def execute_write_tools(state: AgentState) -> dict:
                 from services import create_meal as _create_meal
                 from schemas import MealCreate
                 rid_str = args.get("recipe_ids", "")
-                rids = [int(x.strip()) for x in rid_str.split(",") if x.strip()] if rid_str else []
+                rids = [x.strip() for x in rid_str.split(",") if x.strip()] if rid_str else []
                 sd = None
                 if args.get("scheduled_date"):
                     try:
@@ -819,27 +830,27 @@ def execute_write_tools(state: AgentState) -> dict:
             elif tool_name == "add_recipes_to_meal":
                 from services import add_recipes_to_meal as _add_to_meal
                 rid_str = args.get("recipe_ids", "")
-                rids = [int(x.strip()) for x in rid_str.split(",") if x.strip()]
-                meal = _add_to_meal(user_id, args["meal_id"], rids)
+                rids = [decode_or_int(x.strip()) for x in rid_str.split(",") if x.strip()]
+                meal = _add_to_meal(user_id, decode_or_int(args["meal_id"]), rids)
                 if not meal:
-                    result_text = f"Meal #{args['meal_id']} not found" if user_lang == "en" else f"找不到餐食 #{args['meal_id']}"
+                    result_text = f"Meal {args['meal_id']} not found" if user_lang == "en" else f"找不到餐食 {args['meal_id']}"
                 else:
                     result_text = f"Added {len(rids)} recipe(s) to \"{meal['name']}\"" if user_lang == "en" else f"已将 {len(rids)} 道菜谱添加到 \"{meal['name']}\""
 
             elif tool_name == "remove_recipe_from_meal":
                 from services import remove_recipe_from_meal as _remove_from_meal
-                meal = _remove_from_meal(user_id, args["meal_id"], args["recipe_id"])
+                meal = _remove_from_meal(user_id, decode_or_int(args["meal_id"]), decode_or_int(args["recipe_id"]))
                 if not meal:
-                    result_text = f"Meal #{args['meal_id']} not found" if user_lang == "en" else f"找不到餐食 #{args['meal_id']}"
+                    result_text = f"Meal {args['meal_id']} not found" if user_lang == "en" else f"找不到餐食 {args['meal_id']}"
                 else:
                     result_text = f"Removed recipe from \"{meal['name']}\"" if user_lang == "en" else f"已从 \"{meal['name']}\" 中移除菜谱"
 
             elif tool_name == "delete_meal":
                 from services import delete_meal as _delete_meal
-                if _delete_meal(user_id, args["meal_id"]):
-                    result_text = f"Deleted meal #{args['meal_id']}" if user_lang == "en" else f"已删除餐食 #{args['meal_id']}"
+                if _delete_meal(user_id, decode_or_int(args["meal_id"])):
+                    result_text = f"Deleted meal {args['meal_id']}" if user_lang == "en" else f"已删除餐食 {args['meal_id']}"
                 else:
-                    result_text = f"Meal #{args['meal_id']} not found" if user_lang == "en" else f"找不到餐食 #{args['meal_id']}"
+                    result_text = f"Meal {args['meal_id']} not found" if user_lang == "en" else f"找不到餐食 {args['meal_id']}"
 
             else:
                 result_text = f"Unknown tool: {tool_name}"
@@ -897,13 +908,13 @@ def _execute_add(user_id: str, args: dict, lang: str, raw_input: str = "") -> st
         location=args.get("location", "Fridge"),
     )
 
-    row = add_inventory_item(user_id, item_data, raw_input=raw_input or None)
+    row = add_inventory_item(user_id, item_data, raw_input=raw_input or None, source="agent")
 
     if lang == "zh":
         msg = f"已添加: {row['quantity']}{row['unit']} {row['item_name']}"
         if row.get("brand"):
             msg += f" ({row['brand']})"
-        msg += f"\n   Batch #{row['id']}, 位置: {row['location']}"
+        msg += f"\n   Batch {row['id']}, 位置: {row['location']}"
         if row.get("expiry_date"):
             msg += f", 过期日: {row['expiry_date']}"
         return msg
@@ -911,7 +922,7 @@ def _execute_add(user_id: str, args: dict, lang: str, raw_input: str = "") -> st
         msg = f"Added: {row['quantity']}{row['unit']} {row['item_name']}"
         if row.get("brand"):
             msg += f" ({row['brand']})"
-        msg += f"\n   Batch #{row['id']}, Location: {row['location']}"
+        msg += f"\n   Batch {row['id']}, Location: {row['location']}"
         if row.get("expiry_date"):
             msg += f", Expires: {row['expiry_date']}"
         return msg
@@ -925,6 +936,7 @@ def _execute_consume(user_id: str, args: dict, lang: str, raw_input: str = "") -
         amount=args.get("amount", 0),
         brand=args.get("brand"),
         raw_input=raw_input or None,
+        source="agent",
     )
 
     if not result.success:
@@ -935,14 +947,14 @@ def _execute_consume(user_id: str, args: dict, lang: str, raw_input: str = "") -
         msg += "扣除明细:\n"
         for batch in result.affected_batches:
             brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
-            msg += f"   - Batch #{batch['batch_id']}{brand_str}: {batch['old_quantity']} -> {batch['new_quantity']}\n"
+            msg += f"   - Batch {batch['batch_id']}{brand_str}: {batch['old_quantity']} -> {batch['new_quantity']}\n"
         return msg
     else:
         msg = f"Consumed {result.consumed_amount} {args.get('item_name')}\n"
         msg += "Deduction details:\n"
         for batch in result.affected_batches:
             brand_str = f" ({batch.get('brand')})" if batch.get("brand") else ""
-            msg += f"   - Batch #{batch['batch_id']}{brand_str}: {batch['old_quantity']} -> {batch['new_quantity']}\n"
+            msg += f"   - Batch {batch['batch_id']}{brand_str}: {batch['old_quantity']} -> {batch['new_quantity']}\n"
         return msg
 
 
@@ -952,14 +964,15 @@ def _execute_discard(user_id: str, args: dict, lang: str, raw_input: str = "") -
     if not batch_id:
         return "Batch ID required for discard" if lang == "en" else "需要批次ID才能丢弃"
 
-    item = svc_discard_batch(user_id, batch_id, raw_input=raw_input or None)
+    real_id = decode_or_int(batch_id)
+    item = svc_discard_batch(user_id, real_id, raw_input=raw_input or None, source="agent")
 
     if not item:
-        return f"Batch #{batch_id} not found" if lang == "en" else f"找不到批次 #{batch_id}"
+        return f"Batch {batch_id} not found" if lang == "en" else f"找不到批次 {batch_id}"
 
     if lang == "zh":
-        return f"已丢弃批次 #{batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
-    return f"Discarded batch #{batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
+        return f"已丢弃批次 {batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
+    return f"Discarded batch {batch_id}: {item['item_name']} ({item['quantity']}{item['unit']})"
 
 
 def _execute_add_to_shopping(user_id: str, args: dict[str, Any], lang: str) -> str:
@@ -985,22 +998,23 @@ def _execute_update(user_id: str, args: dict, lang: str, raw_input: str = "") ->
     if not batch_id:
         return "Batch ID required for update" if lang == "en" else "需要批次ID才能更新"
 
+    real_id = decode_or_int(batch_id)
     updates = {k: v for k, v in args.items() if k != "batch_id" and v is not None}
 
     row = update_batch(
         user_id=user_id,
-        batch_id=batch_id,
+        batch_id=real_id,
         updates=updates,
         raw_input=raw_input or None,
     )
 
     if not row:
-        return f"Batch #{batch_id} not found" if lang == "en" else f"找不到批次 #{batch_id}"
+        return f"Batch {batch_id} not found" if lang == "en" else f"找不到批次 {batch_id}"
 
     changes_str = ", ".join(f"{k}: {v}" for k, v in updates.items())
     if lang == "zh":
-        return f"已更新 {row['item_name']} (Batch #{batch_id}): {changes_str}"
-    return f"Updated {row['item_name']} (Batch #{batch_id}): {changes_str}"
+        return f"已更新 {row['item_name']} (Batch {batch_id}): {changes_str}"
+    return f"Updated {row['item_name']} (Batch {batch_id}): {changes_str}"
 
 
 # ============ Node: respond ============

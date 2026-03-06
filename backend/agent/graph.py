@@ -215,24 +215,22 @@ def run_agent(
     # Serialize messages for checkpoint
     messages_to_save = _serialize_messages(result.get("messages", []))
 
-    # Save checkpoint — always preserve pending_recipes for follow-up turns
+    # Save checkpoint — keep thread active for multi-turn continuity.
+    # Threads stay active so consecutive interactions share conversation context.
+    # Only explicit frontend reset (new thread_id=None) starts a fresh thread.
     pending_recipes = result.get("pending_recipes")
-    if status == "completed" and not pending_recipes:
-        checkpointer.complete(thread_id, messages_to_save)
-        print(f"[CLEANUP] Thread {thread_id} completed")
-    else:
-        # Keep thread active if there are pending_recipes (user may want to save them)
-        # Use "agent_status" to avoid collision with DB "status" column (Fix 3)
-        checkpoint = {
-            "messages": messages_to_save,
-            "pending_writes": pending_writes,
-            "pending_recipes": pending_recipes,
-            "agent_status": status,
-            "user_id": user_id,
-        }
-        checkpointer.put(thread_id, user_id, checkpoint)
-        if pending_recipes:
-            print(f"[CHECKPOINT] Thread {thread_id} kept active with {len(pending_recipes)} pending recipes")
+    checkpoint = {
+        "messages": messages_to_save,
+        "pending_writes": pending_writes,
+        "pending_recipes": pending_recipes,
+        "agent_status": status,
+        "user_id": user_id,
+    }
+    checkpointer.put(thread_id, user_id, checkpoint)
+    if pending_recipes:
+        print(f"[CHECKPOINT] Thread {thread_id} active with {len(pending_recipes)} pending recipes")
+    elif status == "completed":
+        print(f"[CHECKPOINT] Thread {thread_id} turn completed, thread stays active")
 
     # Build pending_action for API response (matches frontend schema)
     pending_dict = None

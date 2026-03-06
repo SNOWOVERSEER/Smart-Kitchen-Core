@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from auth import get_current_user
 from database import get_supabase_client, get_supabase_anon_client
+from id_codec import decode_id, decode_or_int
 from schemas import (
     # Auth
     SignUpRequest, LoginRequest, AuthResponse, SignUpResponse, ProfileResponse, ProfileUpdate,
@@ -367,16 +368,16 @@ def create_inventory_item(item: InventoryItemCreate, user_id: str = Depends(get_
 
 
 @app.patch("/api/v1/inventory/{batch_id}", response_model=InventoryItemResponse)
-def edit_inventory_batch(batch_id: int, update: InventoryItemUpdate, user_id: str = Depends(get_current_user)):
-    item = update_inventory_item(user_id, batch_id, update)
+def edit_inventory_batch(batch_id: str, update: InventoryItemUpdate, user_id: str = Depends(get_current_user)):
+    item = update_inventory_item(user_id, decode_id(batch_id), update)
     if not item:
         raise HTTPException(status_code=404, detail="Batch not found")
     return item
 
 
 @app.delete("/api/v1/inventory/{batch_id}")
-def delete_inventory_batch(batch_id: int, user_id: str = Depends(get_current_user)):
-    item = discard_batch(user_id, batch_id)
+def delete_inventory_batch(batch_id: str, user_id: str = Depends(get_current_user)):
+    item = discard_batch(user_id, decode_id(batch_id))
     if not item:
         raise HTTPException(status_code=404, detail="Batch not found")
     return {"message": f"Batch {batch_id} discarded", "item_name": item["item_name"]}
@@ -384,7 +385,7 @@ def delete_inventory_batch(batch_id: int, user_id: str = Depends(get_current_use
 
 @app.post("/api/v1/inventory/consume", response_model=ConsumeResult)
 def consume_inventory(request: ConsumeRequest, user_id: str = Depends(get_current_user)):
-    result = consume_item(user_id, request.item_name, request.amount, request.brand)
+    result = consume_item(user_id, request.item_name, request.amount, request.brand, source=request.source)
     if not result.success:
         raise HTTPException(status_code=400, detail=result.message)
     return result
@@ -448,6 +449,8 @@ def generate_recipes_endpoint(
             categories=request.categories,
             use_expiring=request.use_expiring or (request.mode == 'expiring'),
             prompt=request.prompt,
+            count=request.count,
+            as_meal_set=request.as_meal_set,
         )
         return result
     except ValueError as e:
@@ -480,10 +483,10 @@ def list_recipes_endpoint(
 
 @app.get("/api/v1/recipes/{recipe_id}", response_model=SavedRecipeResponse)
 def get_recipe_endpoint(
-    recipe_id: int,
+    recipe_id: str,
     user_id: str = Depends(get_current_user),
 ) -> SavedRecipeResponse:
-    recipe = get_saved_recipe(user_id, recipe_id)
+    recipe = get_saved_recipe(user_id, decode_id(recipe_id))
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
     return recipe
@@ -491,10 +494,10 @@ def get_recipe_endpoint(
 
 @app.delete("/api/v1/recipes/{recipe_id}")
 def delete_recipe_endpoint(
-    recipe_id: int,
+    recipe_id: str,
     user_id: str = Depends(get_current_user),
 ) -> dict:
-    if not delete_saved_recipe(user_id, recipe_id):
+    if not delete_saved_recipe(user_id, decode_id(recipe_id)):
         raise HTTPException(status_code=404, detail="Recipe not found")
     return {"message": "Recipe deleted"}
 
@@ -529,18 +532,18 @@ def complete_shopping_endpoint(
 ) -> CompleteShoppingResult:
     return complete_shopping(
         user_id=user_id,
-        item_ids=request.item_ids,
+        item_ids=[decode_or_int(i) for i in request.item_ids],
         default_location=request.default_location,
     )
 
 
 @app.patch("/api/v1/shopping/{item_id}", response_model=ShoppingItemResponse)
 def update_shopping_item_endpoint(
-    item_id: int,
+    item_id: str,
     update: ShoppingItemUpdate,
     user_id: str = Depends(get_current_user),
 ) -> ShoppingItemResponse:
-    result = update_shopping_item(user_id, item_id, update)
+    result = update_shopping_item(user_id, decode_id(item_id), update)
     if not result:
         raise HTTPException(status_code=404, detail="Item not found")
     return result
@@ -560,10 +563,10 @@ def delete_all_shopping_items_endpoint(user_id: str = Depends(get_current_user))
 
 @app.delete("/api/v1/shopping/{item_id}")
 def delete_shopping_item_endpoint(
-    item_id: int,
+    item_id: str,
     user_id: str = Depends(get_current_user),
 ) -> dict:
-    if not delete_shopping_item(user_id, item_id):
+    if not delete_shopping_item(user_id, decode_id(item_id)):
         raise HTTPException(status_code=404, detail="Item not found")
     return {"message": "Item deleted"}
 
@@ -579,29 +582,29 @@ def list_meals_endpoint(date_from: str | None = None, date_to: str | None = None
     return get_meals(user_id, date_from=date_from, date_to=date_to, is_template=is_template)
 
 @app.get("/api/v1/meals/{meal_id}", response_model=MealResponse)
-def get_meal_endpoint(meal_id: int, user_id: str = Depends(get_current_user)) -> MealResponse:
-    meal = get_meal(user_id, meal_id)
+def get_meal_endpoint(meal_id: str, user_id: str = Depends(get_current_user)) -> MealResponse:
+    meal = get_meal(user_id, decode_id(meal_id))
     if not meal:
         raise HTTPException(status_code=404, detail="Meal not found")
     return meal
 
 @app.patch("/api/v1/meals/{meal_id}", response_model=MealResponse)
-def update_meal_endpoint(meal_id: int, request: MealUpdate, user_id: str = Depends(get_current_user)) -> MealResponse:
-    meal = update_meal(user_id, meal_id, request)
+def update_meal_endpoint(meal_id: str, request: MealUpdate, user_id: str = Depends(get_current_user)) -> MealResponse:
+    meal = update_meal(user_id, decode_id(meal_id), request)
     if not meal:
         raise HTTPException(status_code=404, detail="Meal not found")
     return meal
 
 @app.delete("/api/v1/meals/{meal_id}")
-def delete_meal_endpoint(meal_id: int, user_id: str = Depends(get_current_user)) -> dict:
-    if not delete_meal(user_id, meal_id):
+def delete_meal_endpoint(meal_id: str, user_id: str = Depends(get_current_user)) -> dict:
+    if not delete_meal(user_id, decode_id(meal_id)):
         raise HTTPException(status_code=404, detail="Meal not found")
     return {"message": "Meal deleted"}
 
 @app.post("/api/v1/meals/{meal_id}/instantiate", response_model=MealResponse, status_code=201)
-def instantiate_meal_endpoint(meal_id: int, request: InstantiateMealRequest, user_id: str = Depends(get_current_user)) -> MealResponse:
+def instantiate_meal_endpoint(meal_id: str, request: InstantiateMealRequest, user_id: str = Depends(get_current_user)) -> MealResponse:
     meal = instantiate_meal(
-        user_id, meal_id,
+        user_id, decode_id(meal_id),
         scheduled_date=request.scheduled_date.isoformat(),
         meal_type=request.meal_type,
         name=request.name,
@@ -611,15 +614,15 @@ def instantiate_meal_endpoint(meal_id: int, request: InstantiateMealRequest, use
     return meal
 
 @app.post("/api/v1/meals/{meal_id}/recipes", response_model=MealResponse)
-def add_recipes_to_meal_endpoint(meal_id: int, request: AddRecipesToMealRequest, user_id: str = Depends(get_current_user)) -> MealResponse:
-    meal = add_recipes_to_meal(user_id, meal_id, request.recipe_ids)
+def add_recipes_to_meal_endpoint(meal_id: str, request: AddRecipesToMealRequest, user_id: str = Depends(get_current_user)) -> MealResponse:
+    meal = add_recipes_to_meal(user_id, decode_id(meal_id), [decode_or_int(r) for r in request.recipe_ids])
     if not meal:
         raise HTTPException(status_code=404, detail="Meal not found")
     return meal
 
 @app.delete("/api/v1/meals/{meal_id}/recipes/{recipe_id}", response_model=MealResponse)
-def remove_recipe_from_meal_endpoint(meal_id: int, recipe_id: int, user_id: str = Depends(get_current_user)) -> MealResponse:
-    meal = remove_recipe_from_meal(user_id, meal_id, recipe_id)
+def remove_recipe_from_meal_endpoint(meal_id: str, recipe_id: str, user_id: str = Depends(get_current_user)) -> MealResponse:
+    meal = remove_recipe_from_meal(user_id, decode_id(meal_id), decode_id(recipe_id))
     if not meal:
         raise HTTPException(status_code=404, detail="Meal not found")
     return meal
