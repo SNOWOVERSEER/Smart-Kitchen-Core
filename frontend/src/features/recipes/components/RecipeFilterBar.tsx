@@ -9,6 +9,9 @@ const CATEGORIES = [
   'Budget Friendly', 'Meal Prep', 'Gluten Free', 'Low Carb',
 ]
 
+const COUNT_MIN = 1
+const COUNT_MAX = 10
+
 interface Props {
   selectedCategories: string[]
   onToggleCategory: (cat: string) => void
@@ -16,6 +19,10 @@ interface Props {
   onToggleExpiring: () => void
   prompt: string
   onPromptChange: (v: string) => void
+  recipeCount: number
+  onRecipeCountChange: (n: number) => void
+  asMealSet: boolean
+  onToggleMealSet: () => void
   onGenerate: () => void
   isGenerating: boolean
   className?: string
@@ -28,6 +35,10 @@ export function RecipeFilterBar({
   onToggleExpiring,
   prompt,
   onPromptChange,
+  recipeCount,
+  onRecipeCountChange,
+  asMealSet,
+  onToggleMealSet,
   onGenerate,
   isGenerating,
   className,
@@ -78,6 +89,20 @@ export function RecipeFilterBar({
         </div>
       </div>
 
+      {/* Recipe count slider */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-stone-600 shrink-0">{t('recipes.recipeCount')}</span>
+        <input
+          type="range"
+          min={COUNT_MIN}
+          max={COUNT_MAX}
+          value={recipeCount}
+          onChange={(e) => onRecipeCountChange(Number(e.target.value))}
+          className="flex-1 h-1.5 rounded-full appearance-none bg-[#F5EFE6] accent-primary cursor-pointer [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:shadow-primary/20"
+        />
+        <span className="w-7 text-center text-sm font-semibold text-primary tabular-nums">{recipeCount}</span>
+      </div>
+
       {/* Use expiring checkbox */}
       <label className="flex items-center gap-2.5 cursor-pointer select-none">
         <input
@@ -87,6 +112,17 @@ export function RecipeFilterBar({
           className="h-4 w-4 rounded border-stone-300 accent-primary cursor-pointer"
         />
         <span className="text-sm text-stone-600">{t('recipes.useExpiring')}</span>
+      </label>
+
+      {/* Meal set toggle */}
+      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={asMealSet}
+          onChange={onToggleMealSet}
+          className="h-4 w-4 rounded border-stone-300 accent-primary cursor-pointer"
+        />
+        <span className="text-sm text-stone-600">{t('recipes.asMealSet')}</span>
       </label>
 
       {/* Generate button */}

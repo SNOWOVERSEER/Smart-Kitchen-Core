@@ -23,6 +23,8 @@ export function RecipesPage() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [useExpiring, setUseExpiring] = useState(false)
   const [prompt, setPrompt] = useState('')
+  const [recipeCount, setRecipeCount] = useState(4)
+  const [asMealSet, setAsMealSet] = useState(false)
   const [recipes, setRecipes] = useState<RecipeCard[]>([])
   const [feasibilityNotice, setFeasibilityNotice] = useState<string | null>(null)
 
@@ -41,7 +43,7 @@ export function RecipesPage() {
   function handleGenerate() {
     setFeasibilityNotice(null)
     generateMutation.mutate(
-      { categories: selectedCategories, use_expiring: useExpiring, prompt: prompt || undefined },
+      { categories: selectedCategories, use_expiring: useExpiring, prompt: prompt || undefined, count: recipeCount, as_meal_set: asMealSet },
       {
         onSuccess: data => {
           setRecipes(data.recipes)
@@ -119,7 +121,7 @@ export function RecipesPage() {
       {/* Main content — vertical on mobile, two-column on desktop */}
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
         {/* LEFT column: artistic heading + filter bar */}
-        <div className="hidden lg:flex lg:w-[360px] xl:w-[400px] lg:shrink-0 flex-col gap-5 lg:overflow-y-auto p-4 lg:p-6">
+        <div className="hidden lg:flex lg:w-[420px] xl:w-[480px] lg:shrink-0 flex-col gap-5 lg:overflow-y-auto p-4 lg:p-6">
           {/* Artistic heading — desktop only */}
           <div>
             <h1
@@ -141,6 +143,10 @@ export function RecipesPage() {
             onToggleExpiring={() => setUseExpiring(v => !v)}
             prompt={prompt}
             onPromptChange={setPrompt}
+            recipeCount={recipeCount}
+            onRecipeCountChange={setRecipeCount}
+            asMealSet={asMealSet}
+            onToggleMealSet={() => setAsMealSet(v => !v)}
             onGenerate={handleGenerate}
             isGenerating={generateMutation.isPending}
           />
@@ -305,7 +311,7 @@ export function RecipesPage() {
 
       {/* Filters sheet for sm/md */}
       <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
-        <SheetContent side="bottom" className="lg:hidden rounded-t-2xl max-h-[88dvh] flex flex-col p-0 pb-safe">
+        <SheetContent aria-describedby={undefined} side="bottom" className="lg:hidden rounded-t-2xl max-h-[88dvh] flex flex-col p-0 pb-safe">
           <SheetHeader className="px-5 pt-5 pb-3 border-b border-border">
             <SheetTitle className="flex items-center gap-2 text-base">
               <SlidersHorizontal size={16} className="text-primary" />
@@ -322,6 +328,10 @@ export function RecipesPage() {
               onToggleExpiring={() => setUseExpiring(v => !v)}
               prompt={prompt}
               onPromptChange={setPrompt}
+              recipeCount={recipeCount}
+              onRecipeCountChange={setRecipeCount}
+              asMealSet={asMealSet}
+              onToggleMealSet={() => setAsMealSet(v => !v)}
               onGenerate={handleGenerateAndCloseFilters}
               isGenerating={generateMutation.isPending}
               className="border-stone-200 shadow-none"

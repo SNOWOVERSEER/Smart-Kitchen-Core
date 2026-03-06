@@ -14,7 +14,7 @@ interface Props {
   onClose: () => void
   onSave?: () => void
   onSkip?: () => void
-  savedRecipeId?: number
+  savedRecipeId?: string
 }
 
 const TAG_GRADIENT_MAP: Record<string, string> = {

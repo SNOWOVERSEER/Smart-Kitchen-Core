@@ -43,7 +43,7 @@ export function HeartCollectionPanel({ open, onClose }: Props) {
   return (
     <>
       <Sheet open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-        <SheetContent side="right" showCloseButton={false} className="sm:max-w-[420px] flex flex-col p-0">
+        <SheetContent aria-describedby={undefined} side="right" showCloseButton={false} className="sm:max-w-[420px] flex flex-col p-0">
           <SheetHeader className="px-5 pt-5 pb-2 shrink-0">
             <div className="flex items-center justify-between gap-2">
               <SheetTitle>{t('recipes.savedRecipesPanel')}</SheetTitle>

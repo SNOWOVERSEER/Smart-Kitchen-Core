@@ -27,7 +27,7 @@ interface ReviewItem {
 interface Props {
   ingredients: RecipeIngredient[]
   recipeName: string
-  recipeId?: number
+  recipeId?: string
   open: boolean
   onClose: () => void
 }
@@ -119,6 +119,7 @@ export function AddFromRecipeSheet({ ingredients, recipeName, recipeId, open, on
   return (
     <Sheet open={open} onOpenChange={(v) => { if (!v) onClose() }}>
       <SheetContent
+        aria-describedby={undefined}
         side="bottom"
         className="rounded-t-3xl max-h-[88dvh] flex flex-col p-0 bg-[#FFFEF9]"
       >

@@ -45,9 +45,9 @@ export function ChatRecipeCards({ recipes }: Props) {
 
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [savedTitles, setSavedTitles] = useState<Set<string>>(() => new Set())
-  const [savedIds, setSavedIds] = useState<Map<string, number>>(() => new Map())
+  const [savedIds, setSavedIds] = useState<Map<string, string>>(() => new Map())
   const [addedToShopping, setAddedToShopping] = useState<Set<string>>(() => new Set())
-  const [mealSheetRecipeIds, setMealSheetRecipeIds] = useState<number[] | null>(null)
+  const [mealSheetRecipeIds, setMealSheetRecipeIds] = useState<string[] | null>(null)
 
   function toggleExpand(title: string) {
     setExpanded((prev) => {
