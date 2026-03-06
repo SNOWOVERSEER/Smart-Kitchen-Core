@@ -21,11 +21,11 @@ export async function getSavedRecipes(): Promise<SavedRecipe[]> {
   return response.data
 }
 
-export async function getSavedRecipe(id: number): Promise<SavedRecipe> {
+export async function getSavedRecipe(id: string): Promise<SavedRecipe> {
   const response = await apiClient.get<SavedRecipe>(`/api/v1/recipes/${id}`)
   return response.data
 }
 
-export async function deleteRecipe(id: number): Promise<void> {
+export async function deleteRecipe(id: string): Promise<void> {
   await apiClient.delete(`/api/v1/recipes/${id}`)
 }

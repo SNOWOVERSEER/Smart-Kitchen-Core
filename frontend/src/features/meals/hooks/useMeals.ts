@@ -19,8 +19,8 @@ export function useMealTemplates() {
   return useQuery({ queryKey: TEMPLATES_KEY, queryFn: () => getMealTemplates() })
 }
 
-export function useMeal(id: number) {
-  return useQuery({ queryKey: [...MEALS_KEY, id], queryFn: () => getMeal(id), enabled: id > 0 })
+export function useMeal(id: string) {
+  return useQuery({ queryKey: [...MEALS_KEY, id], queryFn: () => getMeal(id), enabled: !!id })
 }
 
 export function useCreateMeal() {
@@ -38,7 +38,7 @@ export function useCreateMeal() {
 export function useUpdateMeal() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: MealUpdate }) => updateMeal(id, data),
+    mutationFn: ({ id, data }: { id: string; data: MealUpdate }) => updateMeal(id, data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: MEALS_KEY })
       toast.success(i18next.t('meals.updated'), { id: 'meal-action' })
@@ -50,7 +50,7 @@ export function useUpdateMeal() {
 export function useDeleteMeal() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) => deleteMeal(id),
+    mutationFn: (id: string) => deleteMeal(id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: MEALS_KEY })
       toast.success(i18next.t('meals.deleted'), { id: 'meal-action' })
@@ -62,7 +62,7 @@ export function useDeleteMeal() {
 export function useAddRecipesToMeal() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ mealId, data }: { mealId: number; data: AddRecipesToMealRequest }) =>
+    mutationFn: ({ mealId, data }: { mealId: string; data: AddRecipesToMealRequest }) =>
       addRecipesToMeal(mealId, data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: MEALS_KEY })
@@ -75,7 +75,7 @@ export function useAddRecipesToMeal() {
 export function useRemoveRecipeFromMeal() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ mealId, recipeId }: { mealId: number; recipeId: number }) =>
+    mutationFn: ({ mealId, recipeId }: { mealId: string; recipeId: string }) =>
       removeRecipeFromMeal(mealId, recipeId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: MEALS_KEY })
@@ -88,7 +88,7 @@ export function useRemoveRecipeFromMeal() {
 export function useInstantiateMeal() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ templateId, data }: { templateId: number; data: InstantiateMealRequest }) =>
+    mutationFn: ({ templateId, data }: { templateId: string; data: InstantiateMealRequest }) =>
       instantiateMeal(templateId, data),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: MEALS_KEY })

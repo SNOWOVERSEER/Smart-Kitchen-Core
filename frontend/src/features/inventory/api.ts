@@ -18,12 +18,12 @@ export async function addInventoryItem(data: AddInventoryRequest): Promise<Inven
   return response.data
 }
 
-export async function updateBatch(batchId: number, data: UpdateInventoryRequest): Promise<InventoryItemResponse> {
+export async function updateBatch(batchId: string, data: UpdateInventoryRequest): Promise<InventoryItemResponse> {
   const response = await apiClient.patch<InventoryItemResponse>(`/api/v1/inventory/${batchId}`, data)
   return response.data
 }
 
-export async function deleteBatch(batchId: number): Promise<void> {
+export async function deleteBatch(batchId: string): Promise<void> {
   await apiClient.delete(`/api/v1/inventory/${batchId}`)
 }
 

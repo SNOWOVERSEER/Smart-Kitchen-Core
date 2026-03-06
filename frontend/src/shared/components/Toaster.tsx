@@ -51,7 +51,7 @@ const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const
 function ToastItem({ t: td, onDismiss }: { t: Toast; onDismiss: (id: string) => void }) {
   const Icon = ICONS[td.type] ?? Info
   const accent = ACCENT[td.type] ?? ACCENT.blank
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const pausedRef = useRef(false)
 
   // Auto-dismiss with pause support

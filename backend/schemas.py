@@ -105,7 +105,7 @@ class InventoryItemCreate(BaseModel):
     location: str = Field(..., min_length=1, description="Fridge, Freezer, or Pantry")
 
 class InventoryItemResponse(BaseModel):
-    id: int
+    id: str
     item_name: str
     brand: str | None
     quantity: float
@@ -140,6 +140,7 @@ class ConsumeRequest(BaseModel):
     item_name: str = Field(..., description="Item to consume")
     amount: float = Field(..., gt=0, description="Amount to consume")
     brand: str | None = Field(None, description="Optional: specific brand")
+    source: str = Field("manual", description="Source: manual, agent, meal, shopping")
 
 class ConsumeResult(BaseModel):
     success: bool
@@ -152,7 +153,7 @@ class ConsumeResult(BaseModel):
 # ── Transaction Log Schemas ──
 
 class TransactionLogResponse(BaseModel):
-    id: int
+    id: str
     intent: str
     raw_input: str | None
     ai_reasoning: str | None
@@ -201,7 +202,7 @@ class RecipeIngredient(BaseModel):
     quantity: float | None = None
     unit: str | None = None
     have_in_stock: bool = False
-    batch_ids: list[int] = Field(default_factory=list)
+    batch_ids: list[str] = Field(default_factory=list)
     # Coverage ratio: available / required (only set when have_in_stock=False and quantity is comparable)
     coverage_ratio: float | None = None
 
@@ -220,6 +221,8 @@ class GenerateRecipesRequest(BaseModel):
     categories: list[str] = Field(default_factory=list)
     use_expiring: bool = False
     prompt: str | None = None
+    count: int | None = Field(None, ge=1, le=12, description="Number of recipes (default 4)")
+    as_meal_set: bool = False
     # Legacy — kept for backward compat until frontend migrates
     mode: str | None = None
 
@@ -234,7 +237,7 @@ class SaveRecipeRequest(BaseModel):
     image_prompt: str | None = None
 
 class SavedRecipeResponse(BaseModel):
-    id: int
+    id: str
     title: str
     description: str | None
     cook_time_min: int | None
@@ -258,7 +261,7 @@ class ShoppingItemCreate(BaseModel):
     unit: str | None = None
     category: str | None = None
     source: Literal['manual', 'recipe', 'agent'] = 'manual'
-    source_recipe_id: int | None = None
+    source_recipe_id: str | None = None
     source_recipe_title: str | None = None
     note: str | None = None
 
@@ -272,7 +275,7 @@ class ShoppingItemUpdate(BaseModel):
     note: str | None = None
 
 class ShoppingItemResponse(BaseModel):
-    id: int
+    id: str
     item_name: str
     brand: str | None
     quantity: float | None
@@ -280,20 +283,20 @@ class ShoppingItemResponse(BaseModel):
     category: str | None
     is_checked: bool
     source: str
-    source_recipe_id: int | None
+    source_recipe_id: str | None
     source_recipe_title: str | None
     note: str | None
     created_at: datetime
     updated_at: datetime
 
 class CompleteShoppingRequest(BaseModel):
-    item_ids: list[int]
+    item_ids: list[str]
     default_location: str = "Fridge"
 
 class CompleteShoppingResult(BaseModel):
     added_count: int
     failed_items: list[str]
-    inventory_ids: list[int]
+    inventory_ids: list[str]
 
 
 # ── Meal schemas ──
@@ -303,7 +306,7 @@ class MealCreate(BaseModel):
     scheduled_date: date | None = None
     meal_type: Literal['breakfast', 'lunch', 'dinner', 'snack'] | None = None
     notes: str | None = None
-    recipe_ids: list[int] = Field(default_factory=list)
+    recipe_ids: list[str] = Field(default_factory=list)
     is_template: bool = False
 
 class MealUpdate(BaseModel):
@@ -319,7 +322,7 @@ class InstantiateMealRequest(BaseModel):
     name: str | None = None
 
 class MealRecipeResponse(BaseModel):
-    recipe_id: int
+    recipe_id: str
     title: str
     description: str | None = None
     cook_time_min: int | None = None
@@ -329,17 +332,17 @@ class MealRecipeResponse(BaseModel):
     sort_order: int = 0
 
 class MealResponse(BaseModel):
-    id: int
+    id: str
     name: str
     scheduled_date: date | None = None
     meal_type: str | None = None
     notes: str | None = None
     is_template: bool = False
-    template_id: int | None = None
+    template_id: str | None = None
     instance_count: int | None = None
     recipes: list[MealRecipeResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
 class AddRecipesToMealRequest(BaseModel):
-    recipe_ids: list[int] = Field(..., min_length=1)
+    recipe_ids: list[str] = Field(..., min_length=1)

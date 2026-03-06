@@ -31,7 +31,7 @@ export interface ProfileUpdateRequest {
 
 // Inventory
 export interface InventoryItemResponse {
-  id: number
+  id: string
   item_name: string
   brand: string | null
   quantity: number
@@ -79,10 +79,11 @@ export interface ConsumeRequest {
   amount: number
   unit?: string
   brand?: string
+  source?: 'manual' | 'agent' | 'meal' | 'shopping'
 }
 
 export interface AffectedBatch {
-  id: number
+  id: string
   item_name: string
   brand: string | null
   consumed: number
@@ -127,10 +128,14 @@ export interface AgentActionResponse {
 }
 
 // Logs
-export type TransactionIntent = 'INBOUND' | 'CONSUME' | 'DISCARD' | 'UPDATE'
+export type TransactionIntent =
+  | 'INBOUND' | 'CONSUME' | 'DISCARD' | 'UPDATE'
+  | 'RECIPE_SAVE' | 'RECIPE_DELETE'
+  | 'SHOPPING_ADD' | 'SHOPPING_UPDATE' | 'SHOPPING_DELETE' | 'SHOPPING_COMPLETE'
+  | 'MEAL_CREATE' | 'MEAL_UPDATE' | 'MEAL_DELETE' | 'MEAL_SCHEDULE'
 
 export interface TransactionLogResponse {
-  id: number
+  id: string
   intent: TransactionIntent
   raw_input: string | null
   ai_reasoning: string | null
@@ -196,7 +201,7 @@ export interface RecipeIngredient {
   quantity: number | null
   unit: string | null
   have_in_stock: boolean
-  batch_ids: number[]
+  batch_ids: string[]
   /** Available / required ratio. Only set when have_in_stock=false and qty was comparable. */
   coverage_ratio: number | null
 }
@@ -217,6 +222,8 @@ export interface GenerateRecipesRequest {
   categories: string[]
   use_expiring: boolean
   prompt?: string
+  count?: number
+  as_meal_set?: boolean
 }
 
 export interface GenerateRecipesResponse {
@@ -232,7 +239,7 @@ export interface SaveRecipeRequest {
 }
 
 export interface SavedRecipe {
-  id: number
+  id: string
   title: string
   description: string | null
   cook_time_min: number | null
@@ -249,7 +256,7 @@ export interface SavedRecipe {
 
 // Shopping
 export interface ShoppingItem {
-  id: number
+  id: string
   item_name: string
   brand: string | null
   quantity: number | null
@@ -257,7 +264,7 @@ export interface ShoppingItem {
   category: string | null
   is_checked: boolean
   source: 'manual' | 'recipe' | 'agent'
-  source_recipe_id: number | null
+  source_recipe_id: string | null
   source_recipe_title: string | null
   note: string | null
   created_at: string
@@ -271,7 +278,7 @@ export interface ShoppingItemCreate {
   unit?: string
   category?: string
   source?: 'manual' | 'recipe' | 'agent'
-  source_recipe_id?: number
+  source_recipe_id?: string
   source_recipe_title?: string
   note?: string
 }
@@ -284,24 +291,24 @@ export interface ShoppingItemUpdate {
   category?: string
   is_checked?: boolean
   note?: string
-  source_recipe_id?: number
+  source_recipe_id?: string
   source_recipe_title?: string
 }
 
 export interface CompleteShoppingRequest {
-  item_ids: number[]
+  item_ids: string[]
   default_location?: string
 }
 
 export interface CompleteShoppingResult {
   added_count: number
   failed_items: string[]
-  inventory_ids: number[]
+  inventory_ids: string[]
 }
 
 // Meals
 export interface MealRecipeResponse {
-  recipe_id: number
+  recipe_id: string
   title: string
   description: string | null
   cook_time_min: number | null
@@ -312,13 +319,13 @@ export interface MealRecipeResponse {
 }
 
 export interface MealResponse {
-  id: number
+  id: string
   name: string
   scheduled_date: string | null
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | null
   notes: string | null
   is_template: boolean
-  template_id: number | null
+  template_id: string | null
   instance_count?: number | null
   recipes: MealRecipeResponse[]
   created_at: string
@@ -330,7 +337,7 @@ export interface MealCreate {
   scheduled_date?: string
   meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
   notes?: string
-  recipe_ids?: number[]
+  recipe_ids?: string[]
   is_template?: boolean
 }
 
@@ -349,5 +356,5 @@ export interface InstantiateMealRequest {
 }
 
 export interface AddRecipesToMealRequest {
-  recipe_ids: number[]
+  recipe_ids: string[]
 }

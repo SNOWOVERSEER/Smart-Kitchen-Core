@@ -58,7 +58,7 @@ export function useToggleShoppingItem() {
   }
 
   return useMutation({
-    mutationFn: ({ id, is_checked }: { id: number; is_checked: boolean }) =>
+    mutationFn: ({ id, is_checked }: { id: string; is_checked: boolean }) =>
       updateShoppingItem(id, { is_checked }),
     onMutate: async ({ id, is_checked }) => {
       await qc.cancelQueries({ queryKey: SHOPPING_KEY })
@@ -87,7 +87,7 @@ export function useToggleShoppingItem() {
 export function useUpdateShoppingItem() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, update }: { id: number; update: ShoppingItemUpdate }) =>
+    mutationFn: ({ id, update }: { id: string; update: ShoppingItemUpdate }) =>
       updateShoppingItem(id, update),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
@@ -98,7 +98,7 @@ export function useUpdateShoppingItem() {
 export function useDeleteShoppingItem() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) => deleteShoppingItem(id),
+    mutationFn: (id: string) => deleteShoppingItem(id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: SHOPPING_KEY })
     },

@@ -10,11 +10,11 @@ export function useSavedRecipes() {
   return useQuery({ queryKey: RECIPES_KEY, queryFn: getSavedRecipes })
 }
 
-export function useRecipe(id: number) {
+export function useRecipe(id: string) {
   return useQuery({
     queryKey: [...RECIPES_KEY, id],
     queryFn: () => getSavedRecipe(id),
-    enabled: id > 0,
+    enabled: !!id,
   })
 }
 
@@ -40,7 +40,7 @@ export function useSaveRecipe() {
 export function useDeleteRecipe() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) => deleteRecipe(id),
+    mutationFn: (id: string) => deleteRecipe(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: RECIPES_KEY }),
     onError: () => toast.error(i18next.t('recipes.deleteFailed'), { id: 'recipe-action' }),
   })

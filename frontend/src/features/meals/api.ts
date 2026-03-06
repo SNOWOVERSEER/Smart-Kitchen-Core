@@ -20,12 +20,12 @@ export async function getMealTemplates(): Promise<MealResponse[]> {
   return response.data
 }
 
-export async function instantiateMeal(templateId: number, data: InstantiateMealRequest): Promise<MealResponse> {
+export async function instantiateMeal(templateId: string, data: InstantiateMealRequest): Promise<MealResponse> {
   const response = await apiClient.post<MealResponse>(`/api/v1/meals/${templateId}/instantiate`, data)
   return response.data
 }
 
-export async function getMeal(id: number): Promise<MealResponse> {
+export async function getMeal(id: string): Promise<MealResponse> {
   const response = await apiClient.get<MealResponse>(`/api/v1/meals/${id}`)
   return response.data
 }
@@ -35,21 +35,21 @@ export async function createMeal(data: MealCreate): Promise<MealResponse> {
   return response.data
 }
 
-export async function updateMeal(id: number, data: MealUpdate): Promise<MealResponse> {
+export async function updateMeal(id: string, data: MealUpdate): Promise<MealResponse> {
   const response = await apiClient.patch<MealResponse>(`/api/v1/meals/${id}`, data)
   return response.data
 }
 
-export async function deleteMeal(id: number): Promise<void> {
+export async function deleteMeal(id: string): Promise<void> {
   await apiClient.delete(`/api/v1/meals/${id}`)
 }
 
-export async function addRecipesToMeal(mealId: number, data: AddRecipesToMealRequest): Promise<MealResponse> {
+export async function addRecipesToMeal(mealId: string, data: AddRecipesToMealRequest): Promise<MealResponse> {
   const response = await apiClient.post<MealResponse>(`/api/v1/meals/${mealId}/recipes`, data)
   return response.data
 }
 
-export async function removeRecipeFromMeal(mealId: number, recipeId: number): Promise<MealResponse> {
+export async function removeRecipeFromMeal(mealId: string, recipeId: string): Promise<MealResponse> {
   const response = await apiClient.delete<MealResponse>(`/api/v1/meals/${mealId}/recipes/${recipeId}`)
   return response.data
 }

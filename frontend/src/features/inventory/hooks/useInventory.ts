@@ -26,7 +26,7 @@ export function useAddItem() {
 
 export function useUpdateBatch() {
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: UpdateInventoryRequest }) => updateBatch(id, data),
+    mutationFn: ({ id, data }: { id: string; data: UpdateInventoryRequest }) => updateBatch(id, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: INVENTORY_KEY })
       toast.success('Batch updated', { id: 'inventory-action' })
@@ -37,7 +37,7 @@ export function useUpdateBatch() {
 
 export function useDeleteBatch() {
   return useMutation({
-    mutationFn: (id: number) => deleteBatch(id),
+    mutationFn: (id: string) => deleteBatch(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: INVENTORY_KEY })
       toast.success('Batch removed', { id: 'inventory-action' })
