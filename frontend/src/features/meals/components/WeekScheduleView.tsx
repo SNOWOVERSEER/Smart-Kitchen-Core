@@ -17,8 +17,8 @@ interface WeekScheduleViewProps {
   selectedDate: Date
   onSelectDate: (date: Date) => void
   meals: MealResponse[]
-  onSelectMeal: (id: number) => void
-  onUnschedule?: (mealId: number) => void
+  onSelectMeal: (id: string) => void
+  onUnschedule?: (mealId: string) => void
   className?: string
 }
 

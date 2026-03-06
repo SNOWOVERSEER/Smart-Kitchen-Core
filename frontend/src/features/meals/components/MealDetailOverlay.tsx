@@ -10,6 +10,7 @@ import {
   CalendarDays,
   CookingPot,
   BookOpen,
+  UtensilsCrossed,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -31,6 +32,7 @@ import { MealTypeSelector } from './MealTypeSelector'
 import { RecipePicker } from './RecipePicker'
 import { RecipeIngredientsList } from './RecipeIngredientsList'
 import { MealCookingGuide } from './MealCookingGuide'
+import { ConsumeIngredientsSheet } from './ConsumeIngredientsSheet'
 import {
   MEAL_FORM_INPUT,
   MEAL_FORM_LABEL,
@@ -39,14 +41,14 @@ import {
 } from './mealFormStyles'
 
 interface MealDetailOverlayProps {
-  mealId: number | null
+  mealId: string | null
   open: boolean
   onClose: () => void
 }
 
 export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayProps) {
   const { t } = useTranslation()
-  const { data: meal, isLoading } = useMeal(mealId != null && mealId > 0 ? mealId : 0)
+  const { data: meal, isLoading } = useMeal(mealId ?? '')
   const updateMeal = useUpdateMeal()
   const deleteMeal = useDeleteMeal()
   const createMeal = useCreateMeal()
@@ -57,12 +59,14 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
   const [nameValue, setNameValue] = useState('')
   const [notesValue, setNotesValue] = useState('')
   const [showRecipePicker, setShowRecipePicker] = useState(false)
-  const [pickerSelectedIds, setPickerSelectedIds] = useState<number[]>([])
+  const [pickerSelectedIds, setPickerSelectedIds] = useState<string[]>([])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [expandedRecipeIds, setExpandedRecipeIds] = useState<Set<number>>(new Set())
+  const [expandedRecipeIds, setExpandedRecipeIds] = useState<Set<string>>(new Set())
+  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null)
   const [showCookingGuide, setShowCookingGuide] = useState(false)
+  const [showConsumeSheet, setShowConsumeSheet] = useState(false)
 
-  const toggleRecipeExpand = useCallback((id: number) => {
+  const toggleRecipeExpand = useCallback((id: string) => {
     setExpandedRecipeIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -72,7 +76,7 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
   }, [])
 
   // Sync local state when meal data changes
-  const [lastMealId, setLastMealId] = useState<number | null>(null)
+  const [lastMealId, setLastMealId] = useState<string | null>(null)
   if (meal && lastMealId !== meal.id) {
     setLastMealId(meal.id)
     setNameValue(meal.name)
@@ -81,7 +85,8 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
     setShowRecipePicker(false)
     setPickerSelectedIds([])
     setShowDeleteConfirm(false)
-    setExpandedRecipeIds(new Set())
+    setExpandedRecipeIds(new Set<string>())
+    setConfirmingRemoveId(null)
     setShowCookingGuide(false)
   }
 
@@ -92,7 +97,8 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
       setShowRecipePicker(false)
       setPickerSelectedIds([])
       setShowDeleteConfirm(false)
-      setExpandedRecipeIds(new Set())
+      setExpandedRecipeIds(new Set<string>())
+      setConfirmingRemoveId(null)
       setShowCookingGuide(false)
     }
   }, [open])
@@ -125,13 +131,13 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
     }
   }
 
-  const handleRemoveRecipe = (recipeId: number) => {
+  const handleRemoveRecipe = (recipeId: string) => {
     if (meal) {
       removeRecipe.mutate({ mealId: meal.id, recipeId })
     }
   }
 
-  const togglePickerRecipe = useCallback((id: number) => {
+  const togglePickerRecipe = useCallback((id: string) => {
     setPickerSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     )
@@ -348,48 +354,100 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0 }}
                                 transition={{ duration: 0.2, ease: EASE_OUT_EXPO }}
-                                className="rounded-xl border border-stone-200/80 bg-white overflow-hidden"
+                                className={cn(
+                                  'rounded-xl border bg-white overflow-hidden transition-colors',
+                                  isExpanded ? 'border-primary/30' : 'border-stone-200/80',
+                                )}
                               >
                                 {/* Recipe header row */}
                                 <div className="flex items-center gap-3 p-2.5">
-                                  {/* Thumbnail */}
-                                  {r.image_url ? (
-                                    <img
-                                      src={r.image_url}
-                                      alt={r.title}
-                                      className="w-10 h-10 rounded-lg object-cover shrink-0"
-                                    />
-                                  ) : (
-                                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-stone-200 to-stone-300 shrink-0" />
-                                  )}
-
-                                  {/* Title */}
-                                  <span className="flex-1 text-sm font-medium text-stone-700 truncate">
-                                    {r.title}
-                                  </span>
-
-                                  {/* Expand ingredients button */}
+                                  {/* Clickable expand area */}
                                   <button
                                     type="button"
-                                    onClick={() => toggleRecipeExpand(r.recipe_id)}
-                                    className="shrink-0 p-1.5 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors"
-                                    title={t('meals.ingredients')}
+                                    onClick={() => {
+                                      if (confirmingRemoveId === r.recipe_id) {
+                                        setConfirmingRemoveId(null)
+                                      } else {
+                                        toggleRecipeExpand(r.recipe_id)
+                                      }
+                                    }}
+                                    className="flex-1 min-w-0 flex items-center gap-3 text-left hover:opacity-80 active:opacity-60 transition-opacity cursor-pointer"
                                   >
+                                    {/* Thumbnail */}
+                                    {r.image_url ? (
+                                      <img
+                                        src={r.image_url}
+                                        alt={r.title}
+                                        className="w-10 h-10 rounded-lg object-cover shrink-0"
+                                      />
+                                    ) : (
+                                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-stone-200 to-stone-300 shrink-0" />
+                                    )}
+
+                                    {/* Title + hint */}
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-sm font-medium text-stone-700 truncate block">
+                                        {r.title}
+                                      </span>
+                                      {!isExpanded && (
+                                        <span className="text-[10px] text-stone-400">
+                                          {t('meals.tapToViewIngredients')}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Chevron indicator */}
                                     <ChevronDown className={cn(
-                                      'h-3.5 w-3.5 transition-transform',
+                                      'h-3.5 w-3.5 text-stone-400 shrink-0 transition-transform',
                                       isExpanded && 'rotate-180',
                                     )} />
                                   </button>
 
-                                  {/* Remove button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveRecipe(r.recipe_id)}
-                                    className="shrink-0 p-1.5 rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                                    title={t('meals.removeRecipe', 'Remove from meal')}
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </button>
+                                  {/* Remove button — animated two-tap confirm */}
+                                  <div className="relative shrink-0 w-7 h-7 overflow-visible">
+                                    {/* Normal X button */}
+                                    <motion.div
+                                      className={cn(
+                                        'absolute inset-0 flex items-center justify-center',
+                                        confirmingRemoveId === r.recipe_id ? 'pointer-events-none' : 'pointer-events-auto',
+                                      )}
+                                      animate={{
+                                        x: confirmingRemoveId === r.recipe_id ? -6 : 0,
+                                        opacity: confirmingRemoveId === r.recipe_id ? 0 : 1,
+                                      }}
+                                      transition={{ type: 'spring', stiffness: 440, damping: 34 }}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => setConfirmingRemoveId(r.recipe_id)}
+                                        className="p-1.5 rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                                        title={t('meals.removeRecipe')}
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                      </button>
+                                    </motion.div>
+
+                                    {/* Sliding confirm button */}
+                                    <motion.button
+                                      type="button"
+                                      className={cn(
+                                        'absolute top-0 right-0 h-7 flex items-center gap-1 px-2 rounded-lg bg-red-500 text-white text-[11px] font-semibold whitespace-nowrap',
+                                        confirmingRemoveId === r.recipe_id ? 'pointer-events-auto' : 'pointer-events-none',
+                                      )}
+                                      animate={{
+                                        x: confirmingRemoveId === r.recipe_id ? 0 : 80,
+                                        opacity: confirmingRemoveId === r.recipe_id ? 1 : 0,
+                                      }}
+                                      transition={{ type: 'spring', stiffness: 440, damping: 34 }}
+                                      onClick={() => {
+                                        handleRemoveRecipe(r.recipe_id)
+                                        setConfirmingRemoveId(null)
+                                      }}
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                      {t('meals.removeRecipe')}
+                                    </motion.button>
+                                  </div>
                                 </div>
 
                                 {/* Expandable ingredients */}
@@ -484,6 +542,16 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                             {t('meals.cookingGuide', 'Start Cooking')}
                           </button>
                         )}
+                        {meal.recipes.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowConsumeSheet(true)}
+                            className="flex-1 py-2.5 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200/60 text-emerald-800 rounded-2xl font-semibold text-sm hover:from-emerald-100 hover:to-green-100 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <UtensilsCrossed className="w-4 h-4" />
+                            {t('meals.markAsCooked', 'Mark as Cooked')}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setShowDeleteConfirm(true)}
@@ -565,6 +633,15 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
             <MealCookingGuide
               open={showCookingGuide}
               onClose={() => setShowCookingGuide(false)}
+              meal={meal}
+            />
+          )}
+
+          {/* Consume ingredients sheet */}
+          {meal && (
+            <ConsumeIngredientsSheet
+              open={showConsumeSheet}
+              onClose={() => setShowConsumeSheet(false)}
               meal={meal}
             />
           )}

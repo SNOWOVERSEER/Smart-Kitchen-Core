@@ -274,7 +274,7 @@ export function MealCookingGuide({ open, onClose, meal }: MealCookingGuideProps)
     queries: meal.recipes.map((r) => ({
       queryKey: ['recipes', r.recipe_id] as const,
       queryFn: () => getSavedRecipe(r.recipe_id),
-      enabled: open && r.recipe_id > 0,
+      enabled: open && !!r.recipe_id,
     })),
   })
 

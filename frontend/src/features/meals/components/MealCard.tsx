@@ -10,11 +10,11 @@ import type { MealResponse } from '@/shared/lib/api.types'
 
 export interface MealCardProps {
   meal: MealResponse
-  onSelect: (id: number) => void
+  onSelect: (id: string) => void
   index: number
   enableDrag?: boolean
-  onReschedule?: (mealId: number, newDate: string) => void
-  onUnschedule?: (mealId: number) => void
+  onReschedule?: (mealId: string, newDate: string) => void
+  onUnschedule?: (mealId: string) => void
 }
 
 export function MealCard({ meal, onSelect, index, enableDrag, onReschedule, onUnschedule }: MealCardProps) {
@@ -124,16 +124,24 @@ export function MealCard({ meal, onSelect, index, enableDrag, onReschedule, onUn
               <CalendarDays className="w-3 h-3" />
               {format(parseISO(meal.scheduled_date), 'MMM d')}
               {onUnschedule && (
-                <button
-                  type="button"
+                <span
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => {
                     e.stopPropagation()
                     onUnschedule(meal.id)
                   }}
-                  className="ml-0.5 p-0.5 rounded-full text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onUnschedule(meal.id)
+                    }
+                  }}
+                  className="ml-0.5 p-0.5 rounded-full text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
                 >
                   <CalendarX2 className="w-3 h-3" />
-                </button>
+                </span>
               )}
             </span>
           ) : (

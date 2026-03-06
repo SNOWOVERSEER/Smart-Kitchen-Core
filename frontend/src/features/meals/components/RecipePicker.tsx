@@ -7,8 +7,8 @@ import { Input } from '@/components/ui/input'
 import { MEAL_FORM_INPUT } from './mealFormStyles'
 
 export interface RecipePickerProps {
-  selectedIds: number[]
-  onToggle: (id: number) => void
+  selectedIds: string[]
+  onToggle: (id: string) => void
 }
 
 export function RecipePicker({ selectedIds, onToggle }: RecipePickerProps) {

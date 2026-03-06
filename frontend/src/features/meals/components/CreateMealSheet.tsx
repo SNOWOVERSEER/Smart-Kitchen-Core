@@ -59,7 +59,7 @@ export function CreateMealSheet({ open, onClose, meals }: CreateMealSheetProps) 
   const [name, setName] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
   const [mealType, setMealType] = useState<string | null>(null)
-  const [selectedRecipeIds, setSelectedRecipeIds] = useState<number[]>([])
+  const [selectedRecipeIds, setSelectedRecipeIds] = useState<string[]>([])
   const [isTemplate, setIsTemplate] = useState(true)
   const [conflictMeal, setConflictMeal] = useState<MealResponse | null>(null)
 
@@ -82,7 +82,7 @@ export function CreateMealSheet({ open, onClose, meals }: CreateMealSheetProps) 
     [resetForm, onClose],
   )
 
-  const toggleRecipe = useCallback((id: number) => {
+  const toggleRecipe = useCallback((id: string) => {
     setSelectedRecipeIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     )

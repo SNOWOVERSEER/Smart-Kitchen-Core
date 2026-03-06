@@ -25,7 +25,7 @@ import {
 import { MealTypeSelector } from './MealTypeSelector'
 
 interface AddToMealSheetProps {
-  recipeIds: number[]
+  recipeIds: string[]
   open: boolean
   onClose: () => void
 }
@@ -38,7 +38,7 @@ export function AddToMealSheet({ recipeIds, open, onClose }: AddToMealSheetProps
 
   const hasMeals = !!meals?.length
   const [mode, setMode] = useState<'existing' | 'new'>(hasMeals ? 'existing' : 'new')
-  const [selectedMealId, setSelectedMealId] = useState<number | null>(null)
+  const [selectedMealId, setSelectedMealId] = useState<string | null>(null)
   const [newMealName, setNewMealName] = useState('')
   const [newIsTemplate, setNewIsTemplate] = useState(true)
   const [newScheduledDate, setNewScheduledDate] = useState('')

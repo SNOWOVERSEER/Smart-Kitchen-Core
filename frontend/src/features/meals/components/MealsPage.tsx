@@ -44,15 +44,15 @@ const UNIQUE_MEAL_TYPES = new Set(['breakfast', 'lunch', 'dinner'])
 interface ReplaceConflict {
   existingMeal: MealResponse
   action:
-    | { type: 'instantiate'; templateId: number; data: InstantiateMealRequest }
-    | { type: 'move'; mealId: number; data: MealUpdate }
+    | { type: 'instantiate'; templateId: string; data: InstantiateMealRequest }
+    | { type: 'move'; mealId: string; data: MealUpdate }
 }
 
 function findMealTypeConflict(
   meals: MealResponse[],
   targetDate: string,
   mealType: string | null | undefined,
-  excludeId?: number,
+  excludeId?: string,
 ): MealResponse | undefined {
   if (!mealType || !UNIQUE_MEAL_TYPES.has(mealType)) return undefined
   return meals.find(
@@ -119,8 +119,8 @@ function DateFilterChips({
 interface SectionProps {
   label: string
   meals: MealResponse[]
-  onSelect: (id: number) => void
-  onUnschedule?: (id: number) => void
+  onSelect: (id: string) => void
+  onUnschedule?: (id: string) => void
 }
 
 function Section({ label, meals, onSelect, onUnschedule }: SectionProps) {
@@ -148,7 +148,7 @@ export function MealsPage() {
   const { data: meals, isLoading } = useMeals()
   const { data: templates } = useMealTemplates()
   const [createOpen, setCreateOpen] = useState(false)
-  const [selectedMealId, setSelectedMealId] = useState<number | null>(null)
+  const [selectedMealId, setSelectedMealId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [dateFilter, setDateFilter] = useState<DateFilterKey>('all')
@@ -233,17 +233,17 @@ export function MealsPage() {
   const instantiateMealMut = useInstantiateMeal()
 
   const handleUnscheduleDelete = useCallback(
-    (mealId: number) => deleteMeal.mutate(mealId),
+    (mealId: string) => deleteMeal.mutate(mealId),
     [deleteMeal],
   )
 
   const handleUnscheduleClear = useCallback(
-    (mealId: number) => updateMeal.mutate({ id: mealId, data: { scheduled_date: null } }),
+    (mealId: string) => updateMeal.mutate({ id: mealId, data: { scheduled_date: null } }),
     [updateMeal],
   )
 
   const handleReschedule = useCallback(
-    (mealId: number, newDate: string) => {
+    (mealId: string, newDate: string) => {
       // Look up source in both instances and templates
       const source =
         instances.find((m) => m.id === mealId) ??

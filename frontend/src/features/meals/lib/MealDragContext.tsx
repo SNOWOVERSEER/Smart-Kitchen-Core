@@ -6,9 +6,9 @@ interface DayRect {
 }
 
 interface MealDragContextValue {
-  draggedMealId: number | null
+  draggedMealId: string | null
   hoveredDate: string | null
-  startDrag: (mealId: number) => void
+  startDrag: (mealId: string) => void
   endDrag: () => void
   /** Called by WeekCalendarStrip to register day cell positions */
   registerDayRects: (rects: DayRect[]) => void
@@ -24,13 +24,13 @@ interface MealDragProviderProps {
 }
 
 export function MealDragProvider({ children, onDragActiveChange }: MealDragProviderProps) {
-  const [draggedMealId, setDraggedMealId] = useState<number | null>(null)
+  const [draggedMealId, setDraggedMealId] = useState<string | null>(null)
   const [hoveredDate, setHoveredDate] = useState<string | null>(null)
   const dayRectsRef = useRef<DayRect[]>([])
   const onDragActiveChangeRef = useRef(onDragActiveChange)
   onDragActiveChangeRef.current = onDragActiveChange
 
-  const startDrag = useCallback((mealId: number) => {
+  const startDrag = useCallback((mealId: string) => {
     setDraggedMealId(mealId)
     onDragActiveChangeRef.current?.(true)
   }, [])

@@ -1,16 +1,19 @@
-import { Loader2, Check, AlertCircle } from 'lucide-react'
+import { useState } from 'react'
+import { Loader2, Check, AlertCircle, ShoppingCart } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useRecipe } from '@/features/recipes/hooks/useRecipes'
 import { cn } from '@/lib/utils'
+import { AddFromRecipeSheet } from '@/features/recipes/components/AddFromRecipeSheet'
 
 interface RecipeIngredientsListProps {
-  recipeId: number
+  recipeId: string
   compact?: boolean
 }
 
 export function RecipeIngredientsList({ recipeId, compact }: RecipeIngredientsListProps) {
   const { t } = useTranslation()
   const { data: recipe, isLoading } = useRecipe(recipeId)
+  const [addSheetOpen, setAddSheetOpen] = useState(false)
 
   if (isLoading) {
     return (
@@ -28,42 +31,66 @@ export function RecipeIngredientsList({ recipeId, compact }: RecipeIngredientsLi
     )
   }
 
+  const missingIngredients = recipe.ingredients.filter((i) => !i.have_in_stock)
+
   return (
-    <div className={cn('flex flex-col gap-1', compact ? 'text-xs' : 'text-sm')}>
-      {recipe.ingredients.map((ing, i) => (
-        <div
-          key={`${ing.name}-${i}`}
-          className="flex items-center gap-2 py-1 px-1"
-        >
-          {/* Stock status icon */}
-          {ing.have_in_stock ? (
-            <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-          ) : (
-            <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-          )}
+    <>
+      <div className={cn('flex flex-col gap-1', compact ? 'text-xs' : 'text-sm')}>
+        {recipe.ingredients.map((ing, i) => (
+          <div
+            key={`${ing.name}-${i}`}
+            className="flex items-center gap-2 py-1 px-1"
+          >
+            {/* Stock status icon */}
+            {ing.have_in_stock ? (
+              <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            ) : (
+              <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            )}
 
-          {/* Ingredient name + quantity */}
-          <span className={cn(
-            'flex-1',
-            ing.have_in_stock ? 'text-stone-600' : 'text-stone-800 font-medium',
-          )}>
-            {ing.quantity != null && `${ing.quantity}`}
-            {ing.unit && ` ${ing.unit}`}
-            {(ing.quantity != null || ing.unit) && ' '}
-            {ing.name}
-          </span>
+            {/* Ingredient name + quantity */}
+            <span className={cn(
+              'flex-1',
+              ing.have_in_stock ? 'text-stone-600' : 'text-stone-800 font-medium',
+            )}>
+              {ing.quantity != null && `${ing.quantity}`}
+              {ing.unit && ` ${ing.unit}`}
+              {(ing.quantity != null || ing.unit) && ' '}
+              {ing.name}
+            </span>
 
-          {/* Stock label */}
-          <span className={cn(
-            'shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full',
-            ing.have_in_stock
-              ? 'bg-emerald-50 text-emerald-600'
-              : 'bg-amber-50 text-amber-600',
-          )}>
-            {ing.have_in_stock ? t('meals.inStock') : t('meals.missing')}
-          </span>
-        </div>
-      ))}
-    </div>
+            {/* Stock label */}
+            <span className={cn(
+              'shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full',
+              ing.have_in_stock
+                ? 'bg-emerald-50 text-emerald-600'
+                : 'bg-amber-50 text-amber-600',
+            )}>
+              {ing.have_in_stock ? t('meals.inStock') : t('meals.missing')}
+            </span>
+          </div>
+        ))}
+
+        {/* Add missing to shopping button */}
+        {missingIngredients.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setAddSheetOpen(true)}
+            className="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors self-start"
+          >
+            <ShoppingCart className="w-3 h-3" />
+            {t('meals.addMissingToShopping', { count: missingIngredients.length })}
+          </button>
+        )}
+      </div>
+
+      <AddFromRecipeSheet
+        ingredients={missingIngredients}
+        recipeName={recipe.title}
+        recipeId={recipeId}
+        open={addSheetOpen}
+        onClose={() => setAddSheetOpen(false)}
+      />
+    </>
   )
 }
