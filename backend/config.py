@@ -12,3 +12,5 @@ SUPABASE_SECRET_KEY: str | None = os.getenv("SUPABASE_SECRET_KEY") or os.getenv(
 
 # Fallback LLM for users without their own key
 DEFAULT_OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
+
+FRONTEND_URL: str | None = os.getenv("FRONTEND_URL")

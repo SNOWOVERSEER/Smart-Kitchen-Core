@@ -9,6 +9,21 @@ from langchain_core.messages import AIMessage, ToolMessage
 from agent.state import AgentState, READ_TOOLS, WRITE_TOOLS
 from agent.tools import ALL_TOOLS
 from agent.llm_factory import get_user_llm
+
+
+def _extract_text(content: Any) -> str:
+    """Extract text from AIMessage content (may be str or list of blocks)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+            elif isinstance(block, str):
+                parts.append(block)
+        return "\n".join(parts)
+    return str(content)
 from id_codec import decode_or_int
 from services import (
     search_inventory,
@@ -80,7 +95,8 @@ def handle_input(state: AgentState) -> dict:
     pending_writes = state.get("pending_writes")
     if pending_writes and messages:
         last_msg = messages[-1]
-        last_content = (last_msg.content if hasattr(last_msg, "content") else str(last_msg)).lower().strip()
+        raw_content = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+        last_content = _extract_text(raw_content).lower().strip()
 
         # Check for explicit confirmation
         confirm_words = {"confirm", "yes", "y", "ok", "是", "好", "可以", "行", "嗯", "对", "确认", "确定", "执行"}
@@ -658,7 +674,7 @@ def execute_write_tools(state: AgentState) -> dict:
         "是", "好", "确认", "确定", "执行", "否", "不", "取消", "算了",
     }
     for msg in reversed(messages):
-        content = msg.content if hasattr(msg, "content") else str(msg)
+        content = _extract_text(msg.content if hasattr(msg, "content") else str(msg))
         msg_type = getattr(msg, "type", None) or (msg.get("role") if isinstance(msg, dict) else None)
         if msg_type in ("human", "user") and content.strip().lower() not in skip_words:
             raw_input = content
@@ -1037,7 +1053,7 @@ def respond(state: AgentState) -> dict:
     # If the last message is an AIMessage with text content (no tool calls)
     if isinstance(last_message, AIMessage) and last_message.content:
         return {
-            "response": last_message.content,
+            "response": _extract_text(last_message.content),
             "status": state.get("status", "completed"),
         }
 

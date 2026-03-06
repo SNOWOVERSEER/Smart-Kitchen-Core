@@ -6,6 +6,7 @@ import { useIsDesktop } from '@/shared/hooks/useMediaQuery'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
 import { useAgentAction, usePhotoRecognize } from '../hooks/useAgentAction'
+import { useSupportsVision } from '../hooks/useActiveProvider'
 
 export function ChatDrawer() {
   const { t } = useTranslation()
@@ -13,6 +14,7 @@ export function ChatDrawer() {
   const { isOpen, close, messages, addMessage, updateMessage, reset, thread_id } = useChatStore()
   const agentMutation = useAgentAction()
   const photoMutation = usePhotoRecognize()
+  const supportsVision = useSupportsVision()
 
   if (!isDesktop) return null
 
@@ -105,8 +107,9 @@ export function ChatDrawer() {
             {/* Input */}
             <ChatInput
               onSend={handleSend}
-              onPhoto={handlePhoto}
+              onPhoto={supportsVision ? handlePhoto : undefined}
               disabled={isBusy}
+              noVisionReason={!supportsVision}
             />
           </motion.div>
         </>

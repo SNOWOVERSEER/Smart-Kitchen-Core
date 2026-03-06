@@ -49,9 +49,16 @@ def get_user_llm(user_id: str) -> BaseChatModel:
                 temperature=0,
             )
         elif config["provider"] == "minimax":
-            return ChatOpenAI(
+            return ChatAnthropic(
                 api_key=api_key,
-                base_url="https://api.minimax.io/v1",
+                anthropic_api_url="https://api.minimax.io/anthropic",
+                model=config["model_id"],
+                temperature=0,
+            )
+        elif config["provider"] == "minimax_cn":
+            return ChatAnthropic(
+                api_key=api_key,
+                anthropic_api_url="https://api.minimaxi.com/anthropic",
                 model=config["model_id"],
                 temperature=0,
             )

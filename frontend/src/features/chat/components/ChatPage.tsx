@@ -5,6 +5,7 @@ import { useChatStore } from '../store'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
 import { useAgentAction, usePhotoRecognize } from '../hooks/useAgentAction'
+import { useSupportsVision } from '../hooks/useActiveProvider'
 import { useIsDesktop } from '@/shared/hooks/useMediaQuery'
 import { useEffect } from 'react'
 
@@ -15,6 +16,7 @@ export function ChatPage() {
   const { messages, addMessage, updateMessage, reset, thread_id, open } = useChatStore()
   const agentMutation = useAgentAction()
   const photoMutation = usePhotoRecognize()
+  const supportsVision = useSupportsVision()
 
   // On desktop, redirect to home and open chat drawer
   useEffect(() => {
@@ -88,7 +90,7 @@ export function ChatPage() {
       <MessageList onConfirm={handleConfirm} onQuickAction={handleSend} />
 
       {/* Input */}
-      <ChatInput onSend={handleSend} onPhoto={handlePhoto} disabled={isBusy} />
+      <ChatInput onSend={handleSend} onPhoto={supportsVision ? handlePhoto : undefined} disabled={isBusy} noVisionReason={!supportsVision} />
     </div>
   )
 }

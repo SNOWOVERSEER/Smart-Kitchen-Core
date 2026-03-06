@@ -17,6 +17,9 @@ export function MessageBubble({ message, onConfirm }: MessageBubbleProps) {
   const hasRecipes = message.pendingRecipes && message.pendingRecipes.length > 0
   const hasConfirm = message.status === 'awaiting_confirm' && message.pendingAction
 
+  // Typing placeholder is rendered by TypingIndicator — skip here to avoid duplicate avatar
+  if (message.isTyping && !message.content) return null
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}

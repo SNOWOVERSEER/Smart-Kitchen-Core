@@ -10,9 +10,11 @@ interface ChatInputProps {
   disabled?: boolean
   value?: string
   onChange?: (v: string) => void
+  /** When true, shows a disabled camera icon with an explanation tooltip */
+  noVisionReason?: boolean
 }
 
-export function ChatInput({ onSend, onPhoto, disabled, value, onChange }: ChatInputProps) {
+export function ChatInput({ onSend, onPhoto, disabled, value, onChange, noVisionReason }: ChatInputProps) {
   const { t } = useTranslation()
   const [internal, setInternal] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -67,6 +69,15 @@ export function ChatInput({ onSend, onPhoto, disabled, value, onChange }: ChatIn
               <Camera className="w-[18px] h-[18px]" />
             </button>
           </>
+        )}
+        {!onPhoto && noVisionReason && (
+          <button
+            disabled
+            title={t('chat.noVisionSupport')}
+            className="w-9 h-9 flex items-center justify-center rounded-xl text-stone-300 shrink-0 cursor-not-allowed"
+          >
+            <Camera className="w-[18px] h-[18px]" />
+          </button>
         )}
 
         <div className="flex-1 flex items-end bg-stone-100/70 rounded-2xl px-3.5 py-2.5">

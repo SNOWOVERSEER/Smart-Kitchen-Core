@@ -7,7 +7,7 @@ import type {
   SignupResponse,
 } from '../../shared/lib/api.types'
 
-const baseURL = import.meta.env.VITE_API_URL ?? 'http://localhost:8001'
+const baseURL = import.meta.env.VITE_API_URL?.trim() || ''
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
   const response = await axios.post<AuthResponse>(`${baseURL}/auth/login`, { email, password })

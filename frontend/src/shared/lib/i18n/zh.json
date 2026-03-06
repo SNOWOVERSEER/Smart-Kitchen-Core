@@ -124,6 +124,7 @@
     "suggestion4": "生成 3 个快手晚餐食谱",
     "placeholder": "给助手发消息...",
     "disclaimer": "AI 可能出错，请核实重要信息。",
+    "noVisionSupport": "当前 AI 厂商不支持图片识别",
     "drawerTitle": "厨房助手",
     "drawerReady": "准备就绪",
     "drawerMessages_one": "{{count}} 条消息",

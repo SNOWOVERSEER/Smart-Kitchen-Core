@@ -35,6 +35,7 @@ from schemas import (
 from barcode import lookup_barcode
 from photo_recognize import recognize_image, build_agent_text_from_items
 from agent import run_agent
+from config import FRONTEND_URL
 from services import (
     add_inventory_item,
     get_inventory_grouped,
@@ -69,10 +70,17 @@ from services import (
 
 app = FastAPI(title="Kitchen Loop Core")
 
+allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+if FRONTEND_URL and FRONTEND_URL not in allowed_origins:
+    allowed_origins.append(FRONTEND_URL)
+
 # CORS for cross-platform frontends
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict in production
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -124,6 +124,7 @@
     "suggestion4": "Generate 3 quick dinner recipes",
     "placeholder": "Message the agent...",
     "disclaimer": "AI can make mistakes. Verify important information.",
+    "noVisionSupport": "Current AI provider does not support image recognition",
     "drawerTitle": "Kitchen Agent",
     "drawerReady": "Ready to help",
     "drawerMessages_one": "{{count}} message",
