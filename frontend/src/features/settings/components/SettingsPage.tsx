@@ -30,14 +30,16 @@ const TABS: { id: Tab; icon: typeof User }[] = [
   { id: 'notifications', icon: Bell },
 ]
 
-const PROVIDERS = ['openai', 'anthropic']
+const PROVIDERS = ['openai', 'anthropic', 'minimax']
 const MODELS: Record<string, string[]> = {
   openai:    ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
   anthropic: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001'],
+  minimax:   ['MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-M2.1', 'MiniMax-M2.1-highspeed', 'MiniMax-M2'],
 }
 const PROVIDER_META: Record<string, { name: string; dotColor: string }> = {
   openai:    { name: 'OpenAI',    dotColor: 'bg-emerald-500' },
   anthropic: { name: 'Anthropic', dotColor: 'bg-amber-500'  },
+  minimax:   { name: 'MiniMax',   dotColor: 'bg-blue-500'   },
 }
 
 function getInitials(name: string | null | undefined, email: string | null | undefined) {

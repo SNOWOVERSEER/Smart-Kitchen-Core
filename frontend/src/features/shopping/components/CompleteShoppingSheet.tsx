@@ -41,7 +41,7 @@ export function CompleteShoppingSheet({ open, onClose, checkedItems }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Per-item state: location + optional qty/unit overrides for items without them
-  const [itemStates, setItemStates] = useState<Record<number, ItemState>>({})
+  const [itemStates, setItemStates] = useState<Record<string, ItemState>>({})
   const checkedItemsSignature = checkedItems
     .map((i) => `${i.id}:${i.quantity ?? ''}:${i.unit ?? ''}:${i.note ?? ''}`)
     .join('|')
@@ -49,7 +49,7 @@ export function CompleteShoppingSheet({ open, onClose, checkedItems }: Props) {
   // Reset state when checkedItems change (sheet opens with new set of items)
   useEffect(() => {
     if (!open) return
-    const initial: Record<number, ItemState> = {}
+    const initial: Record<string, ItemState> = {}
     for (const item of checkedItems) {
       const parsed = parseShoppingNote(item.note)
       const count = parsed.meta.count ?? 1
@@ -68,23 +68,23 @@ export function CompleteShoppingSheet({ open, onClose, checkedItems }: Props) {
 
   const missingQtyCount = checkedItems.filter((item) => item.quantity == null).length
 
-  function setLocation(itemId: number, loc: typeof LOCATIONS[number]) {
+  function setLocation(itemId: string, loc: typeof LOCATIONS[number]) {
     setItemStates((prev) => ({ ...prev, [itemId]: { ...prev[itemId], location: loc } }))
   }
 
-  function setPkgSize(itemId: number, val: string) {
+  function setPkgSize(itemId: string, val: string) {
     setItemStates((prev) => ({ ...prev, [itemId]: { ...prev[itemId], pkgSize: val } }))
   }
 
-  function setUnitOverride(itemId: number, val: string) {
+  function setUnitOverride(itemId: string, val: string) {
     setItemStates((prev) => ({ ...prev, [itemId]: { ...prev[itemId], unit: val } }))
   }
 
-  function setCount(itemId: number, val: string) {
+  function setCount(itemId: string, val: string) {
     setItemStates((prev) => ({ ...prev, [itemId]: { ...prev[itemId], count: val } }))
   }
 
-  function setExpiryDate(itemId: number, val: string) {
+  function setExpiryDate(itemId: string, val: string) {
     setItemStates((prev) => ({ ...prev, [itemId]: { ...prev[itemId], expiryDate: val } }))
   }
 
@@ -92,7 +92,7 @@ export function CompleteShoppingSheet({ open, onClose, checkedItems }: Props) {
     setItemStates((prev) => {
       const updated = { ...prev }
       for (const id of Object.keys(updated)) {
-        updated[Number(id)] = { ...updated[Number(id)], location: loc }
+        updated[id] = { ...updated[id], location: loc }
       }
       return updated
     })
