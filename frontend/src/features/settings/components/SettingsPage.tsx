@@ -32,7 +32,7 @@ const TABS: { id: Tab; icon: typeof User }[] = [
 
 const PROVIDERS = ['openai', 'anthropic', 'minimax', 'minimax_cn']
 const MODELS: Record<string, string[]> = {
-  openai:     ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
+  openai:     ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
   anthropic:  ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001'],
   minimax:    ['MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-M2.1', 'MiniMax-M2.1-highspeed', 'MiniMax-M2'],
   minimax_cn: ['MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-M2.1', 'MiniMax-M2.1-highspeed', 'MiniMax-M2'],

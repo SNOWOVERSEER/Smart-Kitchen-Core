@@ -422,9 +422,11 @@ export function RecipeCardDeck({
                 </button>
               </div>
 
-              <div className="relative z-[60] mt-[clamp(16px,2.6vh,30px)] flex items-center justify-center gap-4 pointer-events-auto">
-                {actionButtons}
-              </div>
+              {!isDetailOpen && (
+                <div className="relative z-[60] mt-[clamp(16px,2.6vh,30px)] flex items-center justify-center gap-4 pointer-events-auto">
+                  {actionButtons}
+                </div>
+              )}
             </div>
           ) : (
             // Stack mode — hide the recipe being shown in detail overlay
@@ -456,16 +458,18 @@ export function RecipeCardDeck({
                 </div>
               </div>
 
-              <div className="relative z-[60] mt-[clamp(16px,2.6vh,30px)] flex items-center justify-center gap-4 pointer-events-auto">
-                {actionButtons}
-              </div>
+              {!isDetailOpen && (
+                <div className="relative z-[60] mt-[clamp(16px,2.6vh,30px)] flex items-center justify-center gap-4 pointer-events-auto">
+                  {actionButtons}
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
       {/* Action buttons */}
-      {viewMode === 'grid' && (
+      {viewMode === 'grid' && !isDetailOpen && (
         <>
           <div className="hidden lg:flex w-full justify-center">
             {modeToggle}

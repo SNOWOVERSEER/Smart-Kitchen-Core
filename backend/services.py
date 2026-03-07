@@ -1,6 +1,7 @@
 """Business logic services using Supabase client."""
 
 from datetime import date, timedelta
+import json
 import re
 from typing import Any
 
@@ -749,6 +750,29 @@ def _get_assume_pantry_basics(user_id: str) -> bool:
     return True
 
 
+def _coerce_json_payload(value: Any) -> Any:
+    """Parse JSON strings returned by less strict structured-output providers."""
+    if not isinstance(value, str):
+        return value
+
+    text = value.strip()
+    if not text:
+        return value
+
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return value
+
+    if isinstance(parsed, dict) and "recipes" in parsed:
+        return parsed["recipes"]
+    return parsed
+
+
 def generate_recipes(
     user_id: str,
     categories: list[str],
@@ -760,10 +784,15 @@ def generate_recipes(
     """Generate recipe cards with smart mode detection and feasibility checking."""
     from schemas import RecipeCard
     from agent.llm_factory import get_user_llm
-    from pydantic import BaseModel as _BaseModel
+    from pydantic import BaseModel as _BaseModel, field_validator as _field_validator
 
     class _Output(_BaseModel):
         recipes: list[RecipeCard]
+
+        @_field_validator("recipes", mode="before")
+        @classmethod
+        def _parse_recipe_list(cls, value: Any) -> Any:
+            return _coerce_json_payload(value)
 
     llm = get_user_llm(user_id)
     structured_llm = llm.with_structured_output(_Output)

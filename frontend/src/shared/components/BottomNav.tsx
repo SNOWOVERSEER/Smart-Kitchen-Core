@@ -1,6 +1,6 @@
 import type { ElementType } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
-import { LayoutDashboard, Bot, Settings, UtensilsCrossed, CalendarDays } from 'lucide-react'
+import { LayoutDashboard, Bot, UtensilsCrossed, CalendarDays, ShoppingCart } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
@@ -9,7 +9,7 @@ const NAV_ITEMS: { to: string; icon: ElementType; key: string }[] = [
   { to: '/recipes',   icon: UtensilsCrossed,  key: 'recipes'  },
   { to: '/chat',      icon: Bot,              key: 'agent'    },
   { to: '/meals',     icon: CalendarDays,    key: 'meals'    },
-  { to: '/settings',  icon: Settings,         key: 'settings' },
+  { to: '/shopping',  icon: ShoppingCart,     key: 'shopping' },
 ]
 
 export function BottomNav() {

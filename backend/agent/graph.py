@@ -343,6 +343,11 @@ def run_agent_stream(
                     message, metadata = payload
                     if not isinstance(message, BaseMessageChunk):
                         continue
+                    # Only surface tokens from the main agent node. Other LLM calls
+                    # (e.g. structured recipe generation inside tools) can stream raw
+                    # JSON/tool payloads that should not appear in the chat bubble.
+                    if metadata.get("langgraph_node") != "agent":
+                        continue
                     for fragment_type, content in _extract_fragments(message.content):
                         event_type = "thinking_token" if fragment_type == "thinking" else "token"
                         token_queue.put({

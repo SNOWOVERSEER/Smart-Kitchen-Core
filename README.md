@@ -6,13 +6,13 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 
 - **Batch-Level Tracking**: Every inventory entry is a distinct "Batch" with its own expiry date, brand, and quantity
 - **FEFO Logic**: First Expired, First Out — automatically prioritizes open and soonest-expiring items
-- **AI-Powered Agent**: Natural language interface (Chinese + English) using a tool-calling ReAct loop
+- **AI-Powered Agent**: Natural language interface (Chinese + English) with streaming chat, thinking steps, and a tool-calling ReAct loop
 - **Recipe Studio**: Generate recipe cards from pantry + preferences, save favorites, and generate dish images
 - **Meal Planner**: Template + Instance architecture — create reusable meal templates in a library, drag to calendar to schedule instances, week schedule view with drag-and-drop
 - **Shopping List Flow**: Add items manually/from recipes/agent, then convert checked items into inventory in one step
 - **Human-in-the-Loop**: Preview + confirmation before any write operation (consume/discard/update)
 - **Multi-Turn Conversations**: Conversation state persisted via Supabase checkpointing
-- **Per-User AI Keys**: Users bring their own OpenAI or Anthropic API key (encrypted in Supabase Vault)
+- **Per-User AI Keys**: Users bring their own OpenAI, Anthropic, or MiniMax API key (encrypted in Supabase Vault)
 - **Multi-User**: Supabase Auth with email/password JWT; all data scoped by Row-Level Security
 - **Bilingual UI**: Full EN/ZH i18n; language switches instantly from Settings
 
@@ -30,7 +30,7 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 | Database     | Supabase (Hosted PostgreSQL + Auth + Vault)        |
 | Auth         | Supabase Auth (email/password JWT)                 |
 | AI Framework | LangChain / LangGraph (tool-calling ReAct)         |
-| LLM          | OpenAI GPT-4o / Anthropic Claude (per-user config) |
+| LLM          | OpenAI GPT-4.1/4o / Anthropic Claude / MiniMax M2.5 (per-user config) |
 
 ## Frontend Routes (Current)
 
@@ -51,7 +51,7 @@ An intelligent kitchen inventory management system with batch-level tracking, na
 
 - Docker & Docker Compose
 - A Supabase project ([supabase.com](https://supabase.com))
-- OpenAI or Anthropic API key (users can also bring their own via Settings)
+- OpenAI, Anthropic, or MiniMax API key (users can also bring their own via Settings)
 
 ### 1. Clone and Setup
 
@@ -138,6 +138,8 @@ DELETE /api/v1/settings/ai/{provider}
 ```
 
 API keys are encrypted in Supabase Vault and never returned in plaintext.
+Supported providers in Settings: `openai`, `anthropic`, `minimax`, and `minimax_cn`.
+Common OpenAI options in Settings: `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`, `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`.
 
 ### Inventory
 
@@ -169,6 +171,8 @@ DELETE /api/v1/recipes/{recipe_id}                  # Delete saved recipe
   "prompt": "spicy noodles in 20 minutes"
 }
 ```
+
+Recipe generation uses structured LLM output and includes a compatibility fallback for providers that return the `recipes` field as a JSON string instead of a native array.
 
 ### Shopping List
 
@@ -251,6 +255,7 @@ DELETE /api/v1/meals/{meal_id}/recipes/{recipe_id} # Remove recipe from meal
 
 ```http
 POST /api/v1/agent/action
+POST /api/v1/agent/stream
 ```
 
 ```json
@@ -271,6 +276,19 @@ POST /api/v1/agent/action
   "tool_calls": []
 }
 ```
+
+**Streaming endpoint (`/api/v1/agent/stream`):**
+
+- Uses `text/event-stream` over `POST` so the frontend can keep the `Authorization` header.
+- Emits:
+  - `thread_id` — conversation thread ID
+  - `node` — completed LangGraph node for progress UI
+  - `thinking_token` — reasoning/thinking text chunks from the main `agent` node
+  - `token` — answer text chunks from the main `agent` node
+  - `done` — final structured payload, same shape as `/api/v1/agent/action`
+- Only the main `agent` node streams visible text. `handle_input`, `execute_read`, `build_preview`, `execute_write`, and `respond` contribute progress events only.
+- Internal LLM calls inside tools (for example, structured recipe generation) are intentionally filtered so raw JSON/tool payloads do not leak into the chat bubble.
+- The frontend consumes this with `fetch()` + `ReadableStream`, shows node progress, and smooths chunked rendering for a less jumpy typing effect.
 
 **Status values:**
 
@@ -335,6 +353,10 @@ User confirms → execute_write → respond
 - **Bilingual**: Responds in user's language; internal DB values stay English
 - **Per-user LLM**: Each user configures their own AI provider and API key
 - **Shopping-aware**: Agent can read shopping list and create shopping items with confirmation
+- **Streaming chat**: `/api/v1/agent/stream` pushes SSE chunks for answer text, thinking text, and node progress
+- **Token routing**: `thinking_token` and `token` both come from the `agent` node; other nodes only update progress state
+- **Tool-output filtering**: Internal structured-output LLM calls are not surfaced to the visible chat stream
+- **Smoothed rendering**: Frontend reveals streamed chunks progressively instead of dumping each chunk in one frame
 
 ## FEFO Algorithm
 
@@ -401,7 +423,8 @@ smart-kitchen-core/
 │       ├── prompt.py        # Single SYSTEM_PROMPT
 │       ├── tools.py         # Tool definitions (search, add, consume, update, discard)
 │       ├── nodes.py         # Graph nodes (handle_input, agent, execute_read, etc.)
-│       ├── graph.py         # LangGraph wiring + SupabaseCheckpointer
+│       ├── graph.py         # LangGraph wiring + SupabaseCheckpointer + SSE streaming
+│       └── llm_factory.py   # Multi-provider LLM factory + per-user 5-min cache
 │       └── llm_factory.py   # Multi-provider LLM factory
 ├── frontend/
 │   └── src/
@@ -412,7 +435,7 @@ smart-kitchen-core/
 │       │   ├── recipes/     # Recipe prompt panel + fan/stack/grid card stage
 │       │   ├── meals/       # Meal planner — Template+Instance, WeekScheduleView, drag-to-schedule
 │       │   ├── shopping/    # Shopping list CRUD + complete-to-inventory flow
-│       │   ├── chat/        # Agent drawer (desktop) + chat page (mobile)
+│       │   ├── chat/        # Agent drawer/page + SSE stream parsing + smooth token rendering
 │       │   ├── history/     # Transaction log with filters + export
 │       │   ├── barcode/     # Camera scanner + product lookup
 │       │   └── settings/    # Profile, language, AI provider config
@@ -481,6 +504,12 @@ curl -X POST http://localhost:8001/api/v1/inventory \
 
 # Natural language command
 curl -X POST http://localhost:8001/api/v1/agent/action \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"text":"What do I have in the fridge?"}'
+
+# Streaming chat (SSE)
+curl -N -X POST http://localhost:8001/api/v1/agent/stream \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"text":"What do I have in the fridge?"}'
