@@ -1,4 +1,6 @@
 import axios from 'axios'
+import toast from 'react-hot-toast'
+import i18n from '@/shared/lib/i18n'
 import { useAuthStore } from '../stores/authStore'
 
 export const baseURL = import.meta.env.VITE_API_URL?.trim() || ''
@@ -54,6 +56,17 @@ export async function refreshAccessToken(): Promise<string> {
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // 429 — Rate limited
+    if (error.response?.status === 429) {
+      const retryAfter = error.response.headers['retry-after']
+      if (retryAfter) {
+        toast.error(i18n.t('common.rateLimited', { seconds: retryAfter }))
+      } else {
+        toast.error(i18n.t('common.rateLimitedGeneric'))
+      }
+      return Promise.reject(error)
+    }
+
     const originalRequest = error.config
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true

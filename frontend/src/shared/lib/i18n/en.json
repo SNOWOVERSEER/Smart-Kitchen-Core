@@ -535,6 +535,8 @@
     "close": "Close",
     "add": "Add",
     "loading": "Loading...",
-    "optional": "optional"
+    "optional": "optional",
+    "rateLimited": "Too many requests. Please try again in {{seconds}} seconds.",
+    "rateLimitedGeneric": "Too many requests. Please slow down."
   }
 }

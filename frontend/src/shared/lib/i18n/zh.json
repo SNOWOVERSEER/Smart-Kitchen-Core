@@ -535,6 +535,8 @@
     "close": "关闭",
     "add": "添加",
     "loading": "加载中...",
-    "optional": "可选"
+    "optional": "可选",
+    "rateLimited": "请求过于频繁，请 {{seconds}} 秒后再试。",
+    "rateLimitedGeneric": "请求过于频繁，请稍后再试。"
   }
 }

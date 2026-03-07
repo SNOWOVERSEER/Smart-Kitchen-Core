@@ -3,6 +3,9 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from auth import get_current_user
 from database import get_supabase_client, get_supabase_anon_client
@@ -38,6 +41,7 @@ from barcode import lookup_barcode
 from photo_recognize import recognize_image, build_agent_text_from_items
 from agent import run_agent, run_agent_stream
 from config import FRONTEND_URL
+from rate_limit import limiter, AI_RATE_LIMIT, AUTH_RATE_LIMIT, _get_ip
 from services import (
     add_inventory_item,
     get_inventory_grouped,
@@ -71,6 +75,8 @@ from services import (
 
 
 app = FastAPI(title="Kitchen Loop AI")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 allowed_origins = [
     "http://localhost:5173",
@@ -99,13 +105,14 @@ def health_check():
 # ── Auth Endpoints ──
 
 @app.post("/auth/signup", response_model=SignUpResponse)
-def signup(request: SignUpRequest):
+@limiter.limit(AUTH_RATE_LIMIT, key_func=_get_ip)
+def signup(request: Request, body: SignUpRequest):
     supabase = get_supabase_anon_client()
     try:
         result = supabase.auth.sign_up({
-            "email": request.email,
-            "password": request.password,
-            "options": {"data": {"display_name": request.display_name}},
+            "email": body.email,
+            "password": body.password,
+            "options": {"data": {"display_name": body.display_name}},
         })
     except Exception as e:
         error_detail = str(e)
@@ -123,24 +130,25 @@ def signup(request: SignUpRequest):
             access_token=result.session.access_token,
             refresh_token=result.session.refresh_token,
             user_id=result.user.id,
-            email=result.user.email or request.email,
+            email=result.user.email or body.email,
         )
 
     return SignUpResponse(
         requires_email_verification=True,
         message="Check your email for confirmation link.",
         user_id=result.user.id,
-        email=result.user.email or request.email,
+        email=result.user.email or body.email,
     )
 
 
 @app.post("/auth/login", response_model=AuthResponse)
-def login(request: LoginRequest):
+@limiter.limit(AUTH_RATE_LIMIT, key_func=_get_ip)
+def login(request: Request, body: LoginRequest):
     supabase = get_supabase_anon_client()
     try:
         result = supabase.auth.sign_in_with_password({
-            "email": request.email,
-            "password": request.password,
+            "email": body.email,
+            "password": body.password,
         })
     except Exception as e:
         raise HTTPException(status_code=401, detail=str(e))
@@ -159,7 +167,8 @@ def logout(user_id: str = Depends(get_current_user)):
 
 
 @app.post("/auth/refresh", response_model=AuthResponse)
-def refresh_token(refresh_token: str):
+@limiter.limit(AUTH_RATE_LIMIT, key_func=_get_ip)
+def refresh_token(request: Request, refresh_token: str):
     supabase = get_supabase_anon_client()
     try:
         result = supabase.auth.refresh_session(refresh_token)
@@ -306,10 +315,11 @@ def barcode_lookup(barcode: str, user_id: str = Depends(get_current_user)):
 # ── Photo Recognition ──
 
 @app.post("/api/v1/agent/photo-recognize", response_model=PhotoRecognizeResponse)
-def photo_recognize(request: PhotoRecognizeRequest, user_id: str = Depends(get_current_user)):
+@limiter.limit(AI_RATE_LIMIT)
+def photo_recognize(request: Request, body: PhotoRecognizeRequest, user_id: str = Depends(get_current_user)):
     # Step 1: Recognize items in photo
     try:
-        recognition = recognize_image(user_id, request.image_base64)
+        recognition = recognize_image(user_id, body.image_base64)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -327,7 +337,7 @@ def photo_recognize(request: PhotoRecognizeRequest, user_id: str = Depends(get_c
     agent_result = run_agent(
         text=agent_text,
         user_id=user_id,
-        thread_id=request.thread_id,
+        thread_id=body.thread_id,
     )
 
     # Step 3: Build response
@@ -415,12 +425,13 @@ def list_transaction_logs(limit: int = 50, user_id: str = Depends(get_current_us
 # ── AI Agent ──
 
 @app.post("/api/v1/agent/action", response_model=AgentActionResponse)
-def agent_action(request: AgentActionRequest, user_id: str = Depends(get_current_user)):
+@limiter.limit(AI_RATE_LIMIT)
+def agent_action(request: Request, body: AgentActionRequest, user_id: str = Depends(get_current_user)):
     result = run_agent(
-        text=request.text,
+        text=body.text,
         user_id=user_id,
-        thread_id=request.thread_id,
-        confirm_action=request.confirm,
+        thread_id=body.thread_id,
+        confirm_action=body.confirm,
     )
 
     pending = None
@@ -451,14 +462,15 @@ def agent_action(request: AgentActionRequest, user_id: str = Depends(get_current
 
 
 @app.post("/api/v1/agent/stream")
-def agent_stream(request: AgentActionRequest, user_id: str = Depends(get_current_user)):
+@limiter.limit(AI_RATE_LIMIT)
+def agent_stream(request: Request, body: AgentActionRequest, user_id: str = Depends(get_current_user)):
     """SSE streaming endpoint for the AI agent. Same input as /agent/action."""
     return StreamingResponse(
         run_agent_stream(
-            text=request.text,
+            text=body.text,
             user_id=user_id,
-            thread_id=request.thread_id,
-            confirm_action=request.confirm,
+            thread_id=body.thread_id,
+            confirm_action=body.confirm,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -468,18 +480,20 @@ def agent_stream(request: AgentActionRequest, user_id: str = Depends(get_current
 # ── Recipe endpoints ──
 
 @app.post("/api/v1/recipes/generate", response_model=GenerateRecipesResponse)
+@limiter.limit(AI_RATE_LIMIT)
 def generate_recipes_endpoint(
-    request: GenerateRecipesRequest,
+    request: Request,
+    body: GenerateRecipesRequest,
     user_id: str = Depends(get_current_user),
 ) -> GenerateRecipesResponse:
     try:
         result = generate_recipes(
             user_id=user_id,
-            categories=request.categories,
-            use_expiring=request.use_expiring or (request.mode == 'expiring'),
-            prompt=request.prompt,
-            count=request.count,
-            as_meal_set=request.as_meal_set,
+            categories=body.categories,
+            use_expiring=body.use_expiring or (body.mode == 'expiring'),
+            prompt=body.prompt,
+            count=body.count,
+            as_meal_set=body.as_meal_set,
         )
         return result
     except ValueError as e:
