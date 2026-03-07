@@ -234,7 +234,8 @@
     "tabs": {
       "profile": "Profile",
       "ai": "AI Configuration",
-      "notifications": "Notifications"
+      "notifications": "Notifications",
+      "subscription": "Subscription"
     },
     "profile": {
       "heading": "Profile",
@@ -538,5 +539,41 @@
     "optional": "optional",
     "rateLimited": "Too many requests. Please try again in {{seconds}} seconds.",
     "rateLimitedGeneric": "Too many requests. Please slow down."
+  },
+  "subscription": {
+    "title": "Subscription",
+    "description": "Manage your subscription and credits.",
+    "tierFree": "Free Trial",
+    "tierSupporter": "Supporter",
+    "tierByok": "BYOK",
+    "creditsRemaining": "{{count}} credits remaining",
+    "creditsMonthly": "{{used}} / {{total}} credits this month",
+    "bonusCredits": "+ {{count}} bonus credits",
+    "unlimited": "Using your own API key — unlimited",
+    "supportAuthor": "Support the author",
+    "supportDescription": "Like this project? Your support keeps development going.",
+    "manageSubscription": "Manage subscription",
+    "redeemCode": "Redeem a code",
+    "redeemPlaceholder": "Enter code",
+    "redeem": "Redeem",
+    "redeeming": "Redeeming...",
+    "redeemSuccess": "Code redeemed successfully!",
+    "redeemError": "Failed to redeem code",
+    "checkoutError": "Failed to start checkout",
+    "portalError": "Failed to open subscription portal",
+    "trialEnds": "Trial ends {{date}}",
+    "renewsOn": "Renews on {{date}}"
+  },
+  "paywall": {
+    "title": "AI credits used up",
+    "description": "Choose how to continue:",
+    "useOwnKey": "Use your own API Key",
+    "useOwnKeyDescription": "Free and unlimited — bring your own OpenAI or Anthropic key",
+    "supportAuthor": "Support the author",
+    "supportAuthorDescription": "Get 600 credits/month as a thank you",
+    "redeemCode": "Redeem a code",
+    "checkoutError": "Failed to start checkout",
+    "monthlyUsedUp": "Monthly credits used up",
+    "monthlyDescription": "Your monthly credits have been used. Redeem a code for extra credits, or wait for next month."
   }
 }

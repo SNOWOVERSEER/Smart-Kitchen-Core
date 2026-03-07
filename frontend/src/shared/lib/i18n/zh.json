@@ -234,7 +234,8 @@
     "tabs": {
       "profile": "个人资料",
       "ai": "AI 配置",
-      "notifications": "通知"
+      "notifications": "通知",
+      "subscription": "订阅"
     },
     "profile": {
       "heading": "个人资料",
@@ -538,5 +539,41 @@
     "optional": "可选",
     "rateLimited": "请求过于频繁，请 {{seconds}} 秒后再试。",
     "rateLimitedGeneric": "请求过于频繁，请稍后再试。"
+  },
+  "subscription": {
+    "title": "订阅",
+    "description": "管理你的订阅和额度。",
+    "tierFree": "体验版",
+    "tierSupporter": "支持者",
+    "tierByok": "极客版",
+    "creditsRemaining": "剩余 {{count}} 次额度",
+    "creditsMonthly": "本月已用 {{used}} / {{total}} 次",
+    "bonusCredits": "+ {{count}} 次兑换额度",
+    "unlimited": "使用自己的 API Key — 无限制",
+    "supportAuthor": "支持作者",
+    "supportDescription": "喜欢这个项目？你的支持是开发的动力。",
+    "manageSubscription": "管理订阅",
+    "redeemCode": "兑换码",
+    "redeemPlaceholder": "输入兑换码",
+    "redeem": "兑换",
+    "redeeming": "兑换中...",
+    "redeemSuccess": "兑换成功！",
+    "redeemError": "兑换失败",
+    "checkoutError": "无法开始结账",
+    "portalError": "无法打开订阅管理",
+    "trialEnds": "试用到期：{{date}}",
+    "renewsOn": "续费日期：{{date}}"
+  },
+  "paywall": {
+    "title": "AI 额度已用完",
+    "description": "选择继续方式：",
+    "useOwnKey": "使用自己的 API Key",
+    "useOwnKeyDescription": "免费无限制 — 填入你的 OpenAI 或 Anthropic Key",
+    "supportAuthor": "支持作者",
+    "supportAuthorDescription": "每月获得 600 次额度作为感谢",
+    "redeemCode": "兑换码",
+    "checkoutError": "无法开始结账",
+    "monthlyUsedUp": "本月额度已用完",
+    "monthlyDescription": "本月额度已用完，可以兑换额外额度，或等待下月重置。"
   }
 }
