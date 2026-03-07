@@ -15,10 +15,10 @@ export async function getSubscription(): Promise<SubscriptionData> {
   return response.data
 }
 
-export async function createCheckoutSession(couponCode?: string): Promise<string> {
+export async function createCheckoutSession(email?: string, couponCode?: string): Promise<string> {
   const response = await apiClient.post<{ checkout_url: string }>(
     '/api/v1/subscription/checkout',
-    { coupon_code: couponCode },
+    { email, coupon_code: couponCode },
   )
   return response.data.checkout_url
 }

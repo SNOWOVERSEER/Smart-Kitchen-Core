@@ -35,6 +35,11 @@ async function doStreamFetch(
     signal,
   })
 
+  if (res.status === 403) {
+    window.dispatchEvent(new CustomEvent('show-paywall'))
+    throw new Error('no_credits')
+  }
+
   if (!res.ok) {
     throw Object.assign(new Error(`Stream request failed: ${res.status}`), { status: res.status })
   }

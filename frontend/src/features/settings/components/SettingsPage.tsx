@@ -468,6 +468,7 @@ function NotificationsTab() {
 // ─── Subscription tab ─────────────────────────────────────────────────────
 function SubscriptionTab() {
   const { t } = useTranslation()
+  const email = useAuthStore((s) => s.email)
   const setSubscription = useSubscriptionStore((s) => s.setSubscription)
   const [redeemCode, setRedeemCode] = useState('')
   const [redeeming, setRedeeming] = useState(false)
@@ -493,7 +494,7 @@ function SubscriptionTab() {
 
   const handleCheckout = async () => {
     try {
-      const url = await createCheckoutSession()
+      const url = await createCheckoutSession(email ?? undefined)
       window.location.href = url
     } catch {
       toast.error(t('subscription.checkoutError'))

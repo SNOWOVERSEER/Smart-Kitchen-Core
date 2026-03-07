@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useAuthStore } from '@/shared/stores/authStore'
 import { useSubscriptionStore } from '@/shared/stores/subscriptionStore'
 import { createCheckoutSession, redeemVoucher, getSubscription } from '@/features/settings/subscriptionApi'
 import toast from 'react-hot-toast'
@@ -22,6 +23,7 @@ export function PaywallDialog() {
   const [showRedeem, setShowRedeem] = useState(false)
   const [code, setCode] = useState('')
   const [redeeming, setRedeeming] = useState(false)
+  const email = useAuthStore((s) => s.email)
   const tier = useSubscriptionStore((s) => s.tier)
   const setSubscription = useSubscriptionStore((s) => s.setSubscription)
 
@@ -43,7 +45,7 @@ export function PaywallDialog() {
 
   const handleSupport = async () => {
     try {
-      const url = await createCheckoutSession()
+      const url = await createCheckoutSession(email ?? undefined)
       window.location.href = url
     } catch {
       toast.error(t('paywall.checkoutError'))
