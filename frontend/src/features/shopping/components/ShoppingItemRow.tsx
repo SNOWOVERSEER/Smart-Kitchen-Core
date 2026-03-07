@@ -23,15 +23,13 @@ export function ShoppingItemRow({ item, onEdit }: Props) {
     setIsDeleteConfirmOpen(false)
   }
 
-  function handleDeleteTriggerClick(e: React.MouseEvent<HTMLButtonElement>) {
+  function handleDeleteClick(e: React.MouseEvent<HTMLButtonElement>) {
     e.stopPropagation()
     if (isRemoving || removeItem.isPending) return
-    setIsDeleteConfirmOpen((v) => !v)
-  }
-
-  function handleRemoveConfirmClick(e: React.MouseEvent<HTMLButtonElement>) {
-    e.stopPropagation()
-    if (isRemoving || removeItem.isPending) return
+    if (!isDeleteConfirmOpen) {
+      setIsDeleteConfirmOpen(true)
+      return
+    }
     setIsRemoving(true)
     removeItem.mutate(item.id, {
       onSettled: () => {
@@ -124,52 +122,75 @@ export function ShoppingItemRow({ item, onEdit }: Props) {
           </div>
         </div>
 
-        {/* Actions (compact): edit + delete; confirm overlays both */}
-        <div className="relative shrink-0 w-[76px] h-9 overflow-visible">
-          <motion.div
+        {/* Actions (compact): edit + morphing delete */}
+        <div className="relative shrink-0 h-9 w-[104px] overflow-visible">
+          <motion.button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit(item)
+            }}
             initial={false}
-            animate={{ x: isDeleteConfirmOpen ? -6 : 0, opacity: isDeleteConfirmOpen ? 0 : 1 }}
-            transition={{ type: 'spring', stiffness: 440, damping: 34 }}
-            className={`absolute inset-y-0 right-0 flex items-center justify-end gap-1 ${
+            animate={{
+              x: isDeleteConfirmOpen ? -8 : 0,
+              opacity: isDeleteConfirmOpen ? 0 : 1,
+            }}
+            transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+            className={`absolute inset-y-0 right-11 flex h-9 w-9 items-center justify-center rounded-xl text-stone-400 hover:text-[#1C1612] hover:bg-stone-100 transition-colors cursor-pointer ${
               isDeleteConfirmOpen ? 'pointer-events-none' : 'pointer-events-auto'
             }`}
+            aria-label={t('shopping.editItem')}
           >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onEdit(item)
-              }}
-              className="w-9 h-9 flex items-center justify-center rounded-xl text-stone-400 hover:text-[#1C1612] hover:bg-stone-100 transition-colors cursor-pointer"
-              aria-label={t('shopping.editItem')}
-            >
-              <Pencil className="w-[15px] h-[15px]" />
-            </button>
-
-            <button
-              type="button"
-              onClick={handleDeleteTriggerClick}
-              disabled={isRemoving || removeItem.isPending}
-              className="w-9 h-9 flex items-center justify-center rounded-xl text-stone-400 hover:text-destructive hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-60"
-              aria-label={t('shopping.deleteItem')}
-            >
-              <Trash2 className="w-[15px] h-[15px]" />
-            </button>
-          </motion.div>
+            <Pencil className="w-[15px] h-[15px]" />
+          </motion.button>
 
           <motion.button
             type="button"
-            onClick={handleRemoveConfirmClick}
+            onClick={handleDeleteClick}
             disabled={isRemoving || removeItem.isPending}
             initial={false}
-            animate={{ x: isDeleteConfirmOpen ? 0 : 92, opacity: isDeleteConfirmOpen ? 1 : 0 }}
-            transition={{ type: 'spring', stiffness: 440, damping: 34 }}
-            className={`absolute inset-y-0 right-0 z-20 h-9 px-3 rounded-xl bg-destructive text-white text-[11px] font-semibold flex items-center gap-1.5 disabled:opacity-65 ${
-              isDeleteConfirmOpen ? 'pointer-events-auto' : 'pointer-events-none'
-            }`}
+            animate={{
+              width: isDeleteConfirmOpen ? 98 : 36,
+              backgroundColor: isDeleteConfirmOpen ? 'rgb(239 68 68)' : 'rgba(255,255,255,0.92)',
+              borderColor: isDeleteConfirmOpen ? 'rgba(239,68,68,0.96)' : 'rgba(231,229,228,0.95)',
+              color: isDeleteConfirmOpen ? 'rgb(255,255,255)' : 'rgb(120,113,108)',
+              boxShadow: isDeleteConfirmOpen
+                ? '0 14px 24px -16px rgba(239, 68, 68, 0.72)'
+                : '0 4px 10px -8px rgba(0,0,0,0.16)',
+            }}
+            transition={{ type: 'spring', stiffness: 340, damping: 30, mass: 0.9 }}
+            className="absolute inset-y-0 right-0 flex h-9 items-center justify-start overflow-hidden rounded-xl border backdrop-blur-sm disabled:opacity-65"
+            style={{ transformOrigin: 'right center' }}
+            aria-label={t('shopping.deleteItem')}
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            {t('shopping.deleteItem')}
+            <motion.span
+              initial={false}
+              animate={{
+                scale: isDeleteConfirmOpen ? 0.96 : 1,
+                x: isDeleteConfirmOpen ? 1 : 0,
+              }}
+              transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center"
+            >
+              <Trash2 className="w-[15px] h-[15px]" />
+            </motion.span>
+
+            <motion.span
+              initial={false}
+              animate={{
+                opacity: isDeleteConfirmOpen ? 1 : 0,
+                x: isDeleteConfirmOpen ? 0 : 8,
+                filter: isDeleteConfirmOpen ? 'blur(0px)' : 'blur(2px)',
+              }}
+              transition={{
+                duration: isDeleteConfirmOpen ? 0.18 : 0.12,
+                ease: [0.22, 1, 0.36, 1],
+                delay: isDeleteConfirmOpen ? 0.06 : 0,
+              }}
+              className="pr-3 text-[11px] font-semibold whitespace-nowrap"
+            >
+              {t('shopping.deleteItem')}
+            </motion.span>
           </motion.button>
         </div>
       </div>

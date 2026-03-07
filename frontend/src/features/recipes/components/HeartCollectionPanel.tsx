@@ -3,22 +3,25 @@ import { ChevronRight, RefreshCw, Search } from 'lucide-react'
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
 import { useTranslation } from 'react-i18next'
-import { useSavedRecipes } from '@/features/recipes/hooks/useRecipes'
+import { useDeleteRecipe, useSavedRecipes } from '@/features/recipes/hooks/useRecipes'
 import { SavedRecipeCard } from './SavedRecipeCard'
 import { RecipeDetailOverlay } from './RecipeDetailOverlay'
 import type { SavedRecipe } from '@/shared/lib/api.types'
 
 interface Props {
   open: boolean
+  onOpen: () => void
   onClose: () => void
 }
 
-export function HeartCollectionPanel({ open, onClose }: Props) {
+export function HeartCollectionPanel({ open, onOpen, onClose }: Props) {
   const { t } = useTranslation()
   const { data: recipes = [], isLoading, isFetching, refetch } = useSavedRecipes()
+  const deleteRecipe = useDeleteRecipe()
   const [selectedRecipe, setSelectedRecipe] = useState<SavedRecipe | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) setSearchQuery('')
@@ -38,6 +41,19 @@ export function HeartCollectionPanel({ open, onClose }: Props) {
   function handleCardClick(recipe: SavedRecipe) {
     setSelectedRecipe(recipe)
     setDetailOpen(true)
+  }
+
+  function handleQuickDelete(recipe: SavedRecipe) {
+    setPendingDeleteId(recipe.id)
+    deleteRecipe.mutate(recipe.id, {
+      onSuccess: () => {
+        if (selectedRecipe?.id === recipe.id) {
+          setDetailOpen(false)
+          setSelectedRecipe(null)
+        }
+      },
+      onSettled: () => setPendingDeleteId(null),
+    })
   }
 
   return (
@@ -99,6 +115,8 @@ export function HeartCollectionPanel({ open, onClose }: Props) {
                     key={recipe.id}
                     recipe={recipe}
                     onClick={() => handleCardClick(recipe)}
+                    onDelete={() => handleQuickDelete(recipe)}
+                    isDeleting={deleteRecipe.isPending && pendingDeleteId === recipe.id}
                   />
                 ))}
               </div>
@@ -112,6 +130,7 @@ export function HeartCollectionPanel({ open, onClose }: Props) {
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         savedRecipeId={selectedRecipe?.id}
+        onOpenSavedPanel={onOpen}
       />
     </>
   )

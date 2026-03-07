@@ -975,7 +975,7 @@ def save_recipe(
     return encode_recipe_row(row)
 
 
-def get_saved_recipes(user_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
+def get_saved_recipes(user_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
     """Return user's saved recipes ordered by created_at DESC."""
     supabase = get_supabase_client()
     result = (supabase.table("saved_recipes")

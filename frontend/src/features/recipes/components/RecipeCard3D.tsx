@@ -13,10 +13,9 @@ interface Props {
   isFanCenter?: boolean
   isFanHighlighted?: boolean
   onLike: () => void
-  onSkip: () => void
+  onSkip: (options?: { animateOut?: boolean }) => void
   onTap: () => void
   disabled?: boolean
-  cardRef?: React.RefObject<HTMLDivElement | null>
 }
 
 const TAG_GRADIENT_MAP: Record<string, string> = {
@@ -42,7 +41,6 @@ export function RecipeCard3D({
   onSkip,
   onTap,
   disabled = false,
-  cardRef,
 }: Props) {
   const { t } = useTranslation()
 
@@ -61,7 +59,9 @@ export function RecipeCard3D({
 
   function handleDragEnd(_: unknown, info: { offset: { x: number } }) {
     if (info.offset.x > 100) void animate(dragX, 600, { duration: 0.3 }).then(onLike)
-    else if (info.offset.x < -100) void animate(dragX, -600, { duration: 0.3 }).then(onSkip)
+    else if (info.offset.x < -100) {
+      void animate(dragX, -600, { duration: 0.58, ease: [0.16, 1, 0.3, 1] }).then(() => onSkip({ animateOut: false }))
+    }
     else void animate(dragX, 0, { type: 'spring', stiffness: 400, damping: 30 })
   }
 
@@ -158,7 +158,9 @@ export function RecipeCard3D({
     return (
       <motion.div
         layoutId={`recipe-card-${recipe.title}`}
-        ref={cardRef}
+        data-recipe-card="true"
+        data-recipe-title={recipe.title}
+        data-active-card={isTop ? 'true' : undefined}
         className={`select-none rounded-3xl bg-white shadow-xl border border-stone-100 overflow-hidden flex flex-col absolute inset-0 ${
           isTop ? 'cursor-pointer' : 'cursor-default'
         }`}
@@ -224,7 +226,9 @@ export function RecipeCard3D({
 
     return (
       <motion.div
-        ref={cardRef}
+        data-recipe-card="true"
+        data-recipe-title={recipe.title}
+        data-active-card={isCenterCard ? 'true' : undefined}
         className={`select-none rounded-3xl bg-white shadow-xl border overflow-hidden flex flex-col absolute inset-0 cursor-pointer ${
           isHighlighted ? 'border-primary/60 ring-2 ring-primary/20' : 'border-stone-100'
         }`}
@@ -256,7 +260,8 @@ export function RecipeCard3D({
   // --- Grid mode ---
   return (
     <motion.div
-      ref={cardRef}
+      data-recipe-card="true"
+      data-recipe-title={recipe.title}
       className="relative w-full aspect-[3/4] select-none rounded-3xl bg-white shadow-xl border border-stone-100 overflow-hidden flex flex-col cursor-pointer"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}

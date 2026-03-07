@@ -1,4 +1,6 @@
-import { Clock, Users } from 'lucide-react'
+import { useState } from 'react'
+import { motion } from 'framer-motion'
+import { Clock, Users, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { SavedRecipe } from '@/shared/lib/api.types'
 
@@ -15,10 +17,13 @@ const TAG_GRADIENT_MAP: Record<string, string> = {
 interface Props {
   recipe: SavedRecipe
   onClick: () => void
+  onDelete: () => void
+  isDeleting?: boolean
 }
 
-export function SavedRecipeCard({ recipe, onClick }: Props) {
+export function SavedRecipeCard({ recipe, onClick, onDelete, isDeleting = false }: Props) {
   const { t } = useTranslation()
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const firstTag = recipe.tags[0]?.toLowerCase() ?? ''
   const gradientKey = Object.keys(TAG_GRADIENT_MAP).find(k => firstTag.includes(k))
   const gradientClass = gradientKey ? TAG_GRADIENT_MAP[gradientKey] : 'from-accent to-muted'
@@ -32,21 +37,98 @@ export function SavedRecipeCard({ recipe, onClick }: Props) {
   ).length
   const totalCount = recipe.ingredients.length
 
+  function closeDeleteConfirm() {
+    if (isDeleting) return
+    setIsDeleteConfirmOpen(false)
+  }
+
+  function handleCardClick() {
+    if (isDeleteConfirmOpen) {
+      closeDeleteConfirm()
+      return
+    }
+    onClick()
+  }
+
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
-      className="bg-card rounded-xl border border-border overflow-hidden cursor-pointer hover:shadow-md transition-shadow flex flex-col"
+      onClick={handleCardClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          handleCardClick()
+        }
+      }}
+      className="relative bg-card rounded-xl border border-border overflow-hidden cursor-pointer hover:shadow-md transition-shadow flex flex-col"
     >
       {/* Image / gradient area */}
-      <div className="h-28 overflow-hidden bg-muted shrink-0">
+      <div className="relative h-28 overflow-hidden bg-muted shrink-0">
         {recipe.image_url ? (
           <img src={recipe.image_url} alt={recipe.title} className="w-full h-full object-cover" />
         ) : (
           <div className={`w-full h-full bg-gradient-to-br ${gradientClass}`} />
         )}
+
+        <div className="absolute top-2 right-2 z-10 h-8 w-24 overflow-visible">
+          <motion.button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (isDeleting) return
+              if (!isDeleteConfirmOpen) {
+                setIsDeleteConfirmOpen(true)
+                return
+              }
+              onDelete()
+            }}
+            disabled={isDeleting}
+            initial={false}
+            animate={{
+              width: isDeleteConfirmOpen ? 92 : 32,
+              backgroundColor: isDeleteConfirmOpen ? 'rgb(239 68 68)' : 'rgba(255,255,255,0.88)',
+              borderColor: isDeleteConfirmOpen ? 'rgba(239,68,68,0.96)' : 'rgba(255,255,255,0.72)',
+              color: isDeleteConfirmOpen ? 'rgb(255,255,255)' : 'rgb(120,113,108)',
+              boxShadow: isDeleteConfirmOpen
+                ? '0 14px 24px -16px rgba(239, 68, 68, 0.72)'
+                : '0 4px 10px -8px rgba(0,0,0,0.22)',
+            }}
+            transition={{ type: 'spring', stiffness: 340, damping: 30, mass: 0.9 }}
+            className="absolute inset-y-0 right-0 flex h-8 items-center justify-start overflow-hidden rounded-full border backdrop-blur-sm disabled:opacity-65"
+            style={{ transformOrigin: 'right center' }}
+            aria-label={t('recipes.deleteRecipe')}
+          >
+            <motion.span
+              initial={false}
+              animate={{
+                scale: isDeleteConfirmOpen ? 0.96 : 1,
+                x: isDeleteConfirmOpen ? 1 : 0,
+              }}
+              transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+              className="flex h-8 w-8 shrink-0 items-center justify-center"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </motion.span>
+
+            <motion.span
+              initial={false}
+              animate={{
+                opacity: isDeleteConfirmOpen ? 1 : 0,
+                x: isDeleteConfirmOpen ? 0 : 8,
+                filter: isDeleteConfirmOpen ? 'blur(0px)' : 'blur(2px)',
+              }}
+              transition={{
+                duration: isDeleteConfirmOpen ? 0.18 : 0.12,
+                ease: [0.22, 1, 0.36, 1],
+                delay: isDeleteConfirmOpen ? 0.06 : 0,
+              }}
+              className="pr-3 text-[10.5px] font-semibold whitespace-nowrap"
+            >
+              {t('shopping.deleteItem')}
+            </motion.span>
+          </motion.button>
+        </div>
       </div>
 
       {/* Content */}

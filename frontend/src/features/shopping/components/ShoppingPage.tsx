@@ -354,6 +354,7 @@ export function ShoppingPage() {
 
       <HeartCollectionPanel
         open={heartPanelOpen}
+        onOpen={() => setHeartPanelOpen(true)}
         onClose={() => setHeartPanelOpen(false)}
       />
     </div>

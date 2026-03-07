@@ -14,7 +14,8 @@ import type { RecipeCard } from '@/shared/lib/api.types'
 
 export function RecipesPage() {
   const { t } = useTranslation()
-  const heartRef = useRef<HTMLButtonElement>(null)
+  const desktopHeartRef = useRef<HTMLButtonElement>(null)
+  const mobileHeartRef = useRef<HTMLButtonElement>(null)
   const [heartPulse, setHeartPulse] = useState(false)
   const [heartPanelOpen, setHeartPanelOpen] = useState(false)
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
@@ -67,6 +68,7 @@ export function RecipesPage() {
   // Mobile heart — no ref (hidden via CSS when lg, ref would return zero-size DOMRect)
   const mobileHeartButton = (
     <motion.button
+      ref={mobileHeartRef}
       animate={heartPulse ? { scale: [1, 1.35, 1] } : { scale: 1 }}
       transition={{ duration: 0.4 }}
       onClick={() => setHeartPanelOpen(true)}
@@ -85,7 +87,7 @@ export function RecipesPage() {
   // Desktop heart — holds the ref used by fly animation (always visible at lg+)
   const desktopHeartButton = (
     <motion.button
-      ref={heartRef}
+      ref={desktopHeartRef}
       animate={heartPulse ? { scale: [1, 1.35, 1] } : { scale: 1 }}
       transition={{ duration: 0.4 }}
       onClick={() => setHeartPanelOpen(true)}
@@ -300,7 +302,19 @@ export function RecipesPage() {
                 sourceMode={selectedCategories.join(',') || (useExpiring ? 'expiring' : 'feeling')}
                 sourcePrompt={prompt || undefined}
                 onGenerateMore={handleGenerate}
-                heartRef={heartRef}
+                getHeartTarget={() => {
+                  const mobile = mobileHeartRef.current
+                  if (mobile) {
+                    const rect = mobile.getBoundingClientRect()
+                    if (rect.width > 0 && rect.height > 0) return mobile
+                  }
+                  const desktop = desktopHeartRef.current
+                  if (desktop) {
+                    const rect = desktop.getBoundingClientRect()
+                    if (rect.width > 0 && rect.height > 0) return desktop
+                  }
+                  return null
+                }}
                 onHeartPulse={handleHeartPulse}
                 onViewModeChange={setDeckViewMode}
               />
@@ -342,6 +356,7 @@ export function RecipesPage() {
 
       <HeartCollectionPanel
         open={heartPanelOpen}
+        onOpen={() => setHeartPanelOpen(true)}
         onClose={() => setHeartPanelOpen(false)}
       />
     </div>

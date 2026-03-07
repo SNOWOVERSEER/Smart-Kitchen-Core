@@ -403,49 +403,61 @@ export function MealDetailOverlay({ mealId, open, onClose }: MealDetailOverlayPr
                                     )} />
                                   </button>
 
-                                  {/* Remove button — animated two-tap confirm */}
-                                  <div className="relative shrink-0 w-7 h-7 overflow-visible">
-                                    {/* Normal X button */}
-                                    <motion.div
-                                      className={cn(
-                                        'absolute inset-0 flex items-center justify-center',
-                                        confirmingRemoveId === r.recipe_id ? 'pointer-events-none' : 'pointer-events-auto',
-                                      )}
-                                      animate={{
-                                        x: confirmingRemoveId === r.recipe_id ? -6 : 0,
-                                        opacity: confirmingRemoveId === r.recipe_id ? 0 : 1,
-                                      }}
-                                      transition={{ type: 'spring', stiffness: 440, damping: 34 }}
-                                    >
-                                      <button
-                                        type="button"
-                                        onClick={() => setConfirmingRemoveId(r.recipe_id)}
-                                        className="p-1.5 rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                                        title={t('meals.removeRecipe')}
-                                      >
-                                        <X className="h-3.5 w-3.5" />
-                                      </button>
-                                    </motion.div>
-
-                                    {/* Sliding confirm button */}
+                                  {/* Remove button — morphing two-tap confirm */}
+                                  <div className="relative shrink-0 h-7 w-[92px] overflow-visible">
                                     <motion.button
                                       type="button"
-                                      className={cn(
-                                        'absolute top-0 right-0 h-7 flex items-center gap-1 px-2 rounded-lg bg-red-500 text-white text-[11px] font-semibold whitespace-nowrap',
-                                        confirmingRemoveId === r.recipe_id ? 'pointer-events-auto' : 'pointer-events-none',
-                                      )}
-                                      animate={{
-                                        x: confirmingRemoveId === r.recipe_id ? 0 : 80,
-                                        opacity: confirmingRemoveId === r.recipe_id ? 1 : 0,
-                                      }}
-                                      transition={{ type: 'spring', stiffness: 440, damping: 34 }}
                                       onClick={() => {
+                                        if (confirmingRemoveId !== r.recipe_id) {
+                                          setConfirmingRemoveId(r.recipe_id)
+                                          return
+                                        }
                                         handleRemoveRecipe(r.recipe_id)
                                         setConfirmingRemoveId(null)
                                       }}
+                                      initial={false}
+                                      animate={{
+                                        width: confirmingRemoveId === r.recipe_id ? 88 : 28,
+                                        backgroundColor: confirmingRemoveId === r.recipe_id ? 'rgb(239 68 68)' : 'rgba(255,255,255,0.94)',
+                                        borderColor: confirmingRemoveId === r.recipe_id ? 'rgba(239,68,68,0.96)' : 'rgba(231,229,228,0.95)',
+                                        color: confirmingRemoveId === r.recipe_id ? 'rgb(255,255,255)' : 'rgb(168,162,158)',
+                                        boxShadow: confirmingRemoveId === r.recipe_id
+                                          ? '0 14px 24px -16px rgba(239, 68, 68, 0.72)'
+                                          : '0 4px 10px -8px rgba(0,0,0,0.16)',
+                                      }}
+                                      transition={{ type: 'spring', stiffness: 340, damping: 30, mass: 0.9 }}
+                                      className="absolute inset-y-0 right-0 flex h-7 items-center justify-start overflow-hidden rounded-lg border backdrop-blur-sm"
+                                      style={{ transformOrigin: 'right center' }}
+                                      title={t('meals.removeRecipe')}
                                     >
-                                      <Trash2 className="w-3 h-3" />
-                                      {t('meals.removeRecipe')}
+                                      <motion.span
+                                        initial={false}
+                                        animate={{
+                                          scale: confirmingRemoveId === r.recipe_id ? 0.96 : 1,
+                                          x: confirmingRemoveId === r.recipe_id ? 1 : 0,
+                                        }}
+                                        transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+                                        className="flex h-7 w-7 shrink-0 items-center justify-center"
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                      </motion.span>
+
+                                      <motion.span
+                                        initial={false}
+                                        animate={{
+                                          opacity: confirmingRemoveId === r.recipe_id ? 1 : 0,
+                                          x: confirmingRemoveId === r.recipe_id ? 0 : 8,
+                                          filter: confirmingRemoveId === r.recipe_id ? 'blur(0px)' : 'blur(2px)',
+                                        }}
+                                        transition={{
+                                          duration: confirmingRemoveId === r.recipe_id ? 0.18 : 0.12,
+                                          ease: [0.22, 1, 0.36, 1],
+                                          delay: confirmingRemoveId === r.recipe_id ? 0.06 : 0,
+                                        }}
+                                        className="pr-2.5 text-[10.5px] font-semibold whitespace-nowrap"
+                                      >
+                                        {t('shopping.deleteItem', 'Remove')}
+                                      </motion.span>
                                     </motion.button>
                                   </div>
                                 </div>

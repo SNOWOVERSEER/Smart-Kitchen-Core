@@ -6,8 +6,11 @@ import type { GenerateRecipesRequest, SaveRecipeRequest } from '@/shared/lib/api
 
 const RECIPES_KEY = ['recipes'] as const
 
-export function useSavedRecipes() {
-  return useQuery({ queryKey: RECIPES_KEY, queryFn: getSavedRecipes })
+export function useSavedRecipes(limit = 100, offset = 0) {
+  return useQuery({
+    queryKey: [...RECIPES_KEY, limit, offset],
+    queryFn: () => getSavedRecipes(limit, offset),
+  })
 }
 
 export function useRecipe(id: string) {

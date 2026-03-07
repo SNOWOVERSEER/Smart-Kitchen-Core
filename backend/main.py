@@ -503,7 +503,7 @@ def save_recipe_endpoint(
 
 @app.get("/api/v1/recipes", response_model=list[SavedRecipeResponse])
 def list_recipes_endpoint(
-    limit: int = 20,
+    limit: int = 100,
     offset: int = 0,
     user_id: str = Depends(get_current_user),
 ) -> list[SavedRecipeResponse]:

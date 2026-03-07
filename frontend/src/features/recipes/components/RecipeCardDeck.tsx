@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { motion } from 'framer-motion'
+import { motion, animate } from 'framer-motion'
 import { ChevronLeft, ChevronRight, X, Heart, LayoutGrid, Layers, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSaveRecipe } from '@/features/recipes/hooks/useRecipes'
@@ -27,7 +27,7 @@ interface Props {
   sourceMode: string
   sourcePrompt?: string
   onGenerateMore: () => void
-  heartRef: React.RefObject<HTMLButtonElement | null>
+  getHeartTarget: () => HTMLButtonElement | null
   onHeartPulse: () => void
   onViewModeChange?: (mode: 'stack' | 'fan' | 'grid') => void
 }
@@ -55,11 +55,12 @@ export function RecipeCardDeck({
   sourceMode,
   sourcePrompt,
   onGenerateMore,
-  heartRef,
+  getHeartTarget,
   onHeartPulse,
   onViewModeChange,
 }: Props) {
   const { t } = useTranslation()
+  const deckRootRef = useRef<HTMLDivElement | null>(null)
   const [viewMode, setViewMode] = useState<'stack' | 'fan' | 'grid'>('stack')
   const [detailRecipe, setDetailRecipe] = useState<RecipeCard | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
@@ -70,7 +71,6 @@ export function RecipeCardDeck({
   const [fanCenterIndex, setFanCenterIndex] = useState(0)
   const [fanHighlightIndex, setFanHighlightIndex] = useState(0)
   const [fanPendingOpenTitle, setFanPendingOpenTitle] = useState<string | null>(null)
-  const topCardRef = useRef<HTMLDivElement | null>(null)
   const fanLiftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const saveRecipe = useSaveRecipe()
 
@@ -128,18 +128,39 @@ export function RecipeCardDeck({
     return () => clearTimeout(timer)
   }, [allRemaining, normalizedFanCenterIndex, fanPendingOpenTitle])
 
+  function getActiveCardElement() {
+    return deckRootRef.current?.querySelector('[data-active-card="true"]') as HTMLDivElement | null
+  }
+
+  async function animateCardSkip() {
+    const card = getActiveCardElement()
+    if (!card) return
+    await animate(
+      card,
+      { x: -Math.max(window.innerWidth * 0.82, 420), rotate: -18, opacity: 0 },
+      { duration: 0.58, ease: [0.16, 1, 0.3, 1] }
+    )
+  }
+
+  function triggerHeartFly(recipe: RecipeCard): boolean {
+    const from = getActiveCardElement()?.getBoundingClientRect()
+    const heartTarget = getHeartTarget()
+    const to = heartTarget?.getBoundingClientRect()
+    const imageUrl = 'image_url' in recipe && typeof recipe.image_url === 'string' ? recipe.image_url : undefined
+    if (!from || !to || to.width <= 0 || to.height <= 0) return false
+    setFlyState({ from, to, imageUrl })
+    return true
+  }
+
+  function finishAction(recipe: RecipeCard) {
+    setActedOnTitles(prev => new Set([...prev, recipe.title]))
+  }
+
   function handleLike(recipe: RecipeCard) {
     clearFanLiftTimer()
     setFanPendingOpenTitle(null)
-    // Fly animation only in stack mode where topCardRef is populated
-    if (viewMode === 'stack') {
-      const from = topCardRef.current?.getBoundingClientRect()
-      const to = heartRef.current?.getBoundingClientRect()
-      const imageUrl = 'image_url' in recipe && typeof recipe.image_url === 'string' ? recipe.image_url : undefined
-      // Guard: on mobile the desktop heartRef returns zero-size DOMRect
-      if (from && to && to.width > 0) setFlyState({ from, to, imageUrl })
-    }
-    setActedOnTitles(prev => new Set([...prev, recipe.title]))
+    const didFly = triggerHeartFly(recipe)
+    finishAction(recipe)
     saveRecipe.mutate(
       {
         recipe,
@@ -147,15 +168,19 @@ export function RecipeCardDeck({
         source_prompt: sourcePrompt,
         image_prompt: recipe.image_prompt ?? undefined,
       },
-      { onSuccess: () => onHeartPulse() }
+      { onSuccess: () => { if (!didFly) onHeartPulse() } }
     )
   }
 
-  function handleSkip(recipe?: RecipeCard) {
+  async function handleSkip(recipe?: RecipeCard, options?: { animateOut?: boolean }) {
     clearFanLiftTimer()
     setFanPendingOpenTitle(null)
     const target = recipe ?? allRemaining[0]
-    if (target) setActedOnTitles(prev => new Set([...prev, target.title]))
+    if (!target) return
+    if (options?.animateOut !== false) {
+      await animateCardSkip()
+    }
+    finishAction(target)
   }
 
   function rotateFan(step: -1 | 1) {
@@ -315,10 +340,10 @@ export function RecipeCardDeck({
       <button
         onClick={() => {
           if (viewMode === 'fan') {
-            if (fanTarget) handleSkip(fanTarget)
+            if (fanTarget) void handleSkip(fanTarget, { animateOut: true })
             return
           }
-          handleSkip()
+          void handleSkip(undefined, { animateOut: true })
         }}
         aria-label={t('recipes.skip')}
         className="w-14 h-14 rounded-full bg-white text-stone-400 shadow-md flex items-center justify-center hover:text-red-500 hover:shadow-lg transition-all border border-stone-100"
@@ -350,6 +375,7 @@ export function RecipeCardDeck({
 
   return (
     <div
+      ref={deckRootRef}
       className={`w-full ${viewMode === 'grid' ? 'flex flex-col gap-4 overflow-x-hidden' : 'flex h-full min-h-0 flex-col overflow-hidden'
         }`}
     >
@@ -403,7 +429,7 @@ export function RecipeCardDeck({
                         isFanCenter={fanOffset === 0}
                         isFanHighlighted={idx === normalizedFanHighlightIndex}
                         onLike={() => handleLike(recipe)}
-                        onSkip={() => handleSkip(recipe)}
+                        onSkip={() => handleSkip(recipe, { animateOut: true })}
                         onTap={() => handleFanCardTap(recipe, idx)}
                         disabled={saveRecipe.isPending}
                       />
@@ -447,9 +473,8 @@ export function RecipeCardDeck({
                         displayMode="stack"
                         isTop={isTop}
                         stackIndex={stackIndex}
-                        cardRef={isTop ? topCardRef : undefined}
                         onLike={() => handleLike(recipe)}
-                        onSkip={() => handleSkip(recipe)}
+                        onSkip={() => handleSkip(recipe, { animateOut: true })}
                         onTap={() => { if (isTop) { setDetailRecipe(recipe); setIsDetailOpen(true) } }}
                         disabled={isTop && saveRecipe.isPending}
                       />
@@ -502,7 +527,10 @@ export function RecipeCardDeck({
             rotate: 180,
           }}
           transition={{ duration: 0.65, ease: [0.32, 0.72, 0, 1] }}
-          onAnimationComplete={() => setFlyState(null)}
+          onAnimationComplete={() => {
+            setFlyState(null)
+            onHeartPulse()
+          }}
         >
           {flyState.imageUrl ? (
             <img src={flyState.imageUrl} alt="" className="w-full h-full object-cover" />
@@ -523,7 +551,7 @@ export function RecipeCardDeck({
           setIsDetailOpen(false)
         }}
         onSkip={() => {
-          if (detailRecipe) handleSkip(detailRecipe)
+          if (detailRecipe) void handleSkip(detailRecipe, { animateOut: false })
           setIsDetailOpen(false)
         }}
       />

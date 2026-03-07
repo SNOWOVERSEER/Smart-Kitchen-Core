@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Check, CalendarPlus } from 'lucide-react'
+import { X, Clock, Users, CheckCircle2, AlertCircle, Trash2, Plus, Check, CalendarPlus, ChevronLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useDeleteRecipe } from '@/features/recipes/hooks/useRecipes'
 import { useAddShoppingItem } from '@/features/shopping/hooks/useShoppingList'
@@ -15,6 +15,7 @@ interface Props {
   onSave?: () => void
   onSkip?: () => void
   savedRecipeId?: string
+  onOpenSavedPanel?: () => void
 }
 
 const TAG_GRADIENT_MAP: Record<string, string> = {
@@ -27,7 +28,7 @@ const TAG_GRADIENT_MAP: Record<string, string> = {
   comfort: 'from-amber-200 to-orange-100',
 }
 
-export function RecipeDetailOverlay({ recipe, open, onClose, onSave, onSkip, savedRecipeId }: Props) {
+export function RecipeDetailOverlay({ recipe, open, onClose, onSave, onSkip, savedRecipeId, onOpenSavedPanel }: Props) {
   const { t } = useTranslation()
   const isSaved = savedRecipeId != null
   const missingIngredients = recipe ? recipe.ingredients.filter(i => !i.have_in_stock) : []
@@ -65,7 +66,7 @@ export function RecipeDetailOverlay({ recipe, open, onClose, onSave, onSkip, sav
           <>
             {/* Backdrop */}
             <motion.div
-              className="fixed inset-0 z-40 bg-stone-900/40 backdrop-blur-sm"
+              className="fixed inset-0 z-[64] bg-stone-900/40 backdrop-blur-sm"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -74,7 +75,7 @@ export function RecipeDetailOverlay({ recipe, open, onClose, onSave, onSkip, sav
 
             {/* Detail card */}
             <motion.div
-              className="fixed inset-x-3 bottom-3 top-10 z-50 rounded-3xl border-2 border-border shadow-2xl overflow-hidden flex flex-col bg-[#FFFEF9] lg:inset-x-auto lg:left-1/2 lg:-translate-x-1/2 lg:w-[720px] lg:top-12 lg:bottom-auto lg:max-h-[88vh] lg:flex-row"
+              className="fixed inset-x-3 bottom-3 top-10 z-[65] rounded-3xl border-2 border-border shadow-2xl overflow-hidden flex flex-col bg-[#FFFEF9] lg:inset-x-auto lg:left-1/2 lg:-translate-x-1/2 lg:w-[720px] lg:top-12 lg:bottom-auto lg:max-h-[88vh] lg:flex-row"
               initial={{ opacity: 0, scale: 0.96, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -294,6 +295,24 @@ export function RecipeDetailOverlay({ recipe, open, onClose, onSave, onSkip, sav
                 </div>
               </div>
             </motion.div>
+
+            {isSaved && onOpenSavedPanel && (
+              <motion.button
+                type="button"
+                onClick={onOpenSavedPanel}
+                className="hidden lg:flex fixed right-0 top-1/2 z-[66] -translate-y-1/2 h-24 w-11 items-center justify-center rounded-l-[22px] border border-r-0 border-border/80 bg-white/95 text-stone-500 shadow-[0_14px_28px_-16px_rgba(0,0,0,0.55)] backdrop-blur-sm transition-colors hover:text-primary"
+                aria-label={t('recipes.savedRecipesPanel')}
+                title={t('recipes.savedRecipesPanel')}
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 10 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <div className="flex h-16 w-7 items-center justify-center rounded-full bg-stone-100/95">
+                  <ChevronLeft className="h-4 w-4" />
+                </div>
+              </motion.button>
+            )}
           </>
         )}
       </AnimatePresence>

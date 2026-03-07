@@ -6,6 +6,8 @@ import type {
   SavedRecipe,
 } from '@/shared/lib/api.types'
 
+const DEFAULT_SAVED_RECIPES_LIMIT = 100
+
 export async function generateRecipes(req: GenerateRecipesRequest): Promise<GenerateRecipesResponse> {
   const response = await apiClient.post<GenerateRecipesResponse>('/api/v1/recipes/generate', req)
   return response.data
@@ -16,8 +18,10 @@ export async function saveRecipe(req: SaveRecipeRequest): Promise<SavedRecipe> {
   return response.data
 }
 
-export async function getSavedRecipes(): Promise<SavedRecipe[]> {
-  const response = await apiClient.get<SavedRecipe[]>('/api/v1/recipes')
+export async function getSavedRecipes(limit = DEFAULT_SAVED_RECIPES_LIMIT, offset = 0): Promise<SavedRecipe[]> {
+  const response = await apiClient.get<SavedRecipe[]>('/api/v1/recipes', {
+    params: { limit, offset },
+  })
   return response.data
 }
 
