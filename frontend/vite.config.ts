@@ -21,7 +21,7 @@ export default defineConfig({
         target: 'http://localhost:8001',
         changeOrigin: true,
       },
-      '/auth': {
+      '^/auth/(login|signup|logout|refresh|me)$': {
         target: 'http://localhost:8001',
         changeOrigin: true,
       },

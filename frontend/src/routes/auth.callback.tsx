@@ -3,6 +3,8 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { supabase } from '../shared/lib/supabase'
 import { useAuthStore } from '../shared/stores/authStore'
+import { getProfile, updateProfile } from '../features/auth/api'
+import { queryClient } from '../shared/lib/queryClient'
 
 function OAuthCallback() {
   const navigate = useNavigate()
@@ -23,6 +25,30 @@ function OAuthCallback() {
         user_id: session.user.id,
         email: session.user.email ?? '',
       })
+
+      const metadata = session.user.user_metadata as Record<string, unknown> | undefined
+      const displayNameCandidate =
+        (typeof metadata?.full_name === 'string' && metadata.full_name.trim()) ||
+        (typeof metadata?.name === 'string' && metadata.name.trim()) ||
+        ''
+
+      try {
+        let profile = await getProfile()
+        if (!profile.display_name?.trim() && displayNameCandidate) {
+          profile = await updateProfile({ display_name: displayNameCandidate })
+        }
+        queryClient.setQueryData(['profile'], profile)
+      } catch {
+        if (displayNameCandidate) {
+          try {
+            const profile = await updateProfile({ display_name: displayNameCandidate })
+            queryClient.setQueryData(['profile'], profile)
+          } catch {
+            // Ignore profile sync failures so OAuth login still succeeds.
+          }
+        }
+      }
+
       void navigate({ to: '/dashboard' })
     }
 
