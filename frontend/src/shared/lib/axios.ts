@@ -67,6 +67,12 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    // 403 — No credits (paywall)
+    if (error.response?.status === 403 && error.response?.data?.detail === 'no_credits') {
+      window.dispatchEvent(new CustomEvent('show-paywall'))
+      return Promise.reject(error)
+    }
+
     const originalRequest = error.config
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true

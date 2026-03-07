@@ -4,6 +4,7 @@ import { useRouterState } from '@tanstack/react-router'
 import { Sidebar } from './Sidebar'
 import { BottomNav } from './BottomNav'
 import { FABChatButton } from './FABChatButton'
+import { PaywallDialog } from './PaywallDialog'
 import { ChatDrawer } from '@/features/chat/components/ChatDrawer'
 
 interface LayoutProps {
@@ -71,6 +72,9 @@ export function Layout({ children }: LayoutProps) {
 
       {/* Desktop FAB */}
       <FABChatButton />
+
+      {/* Paywall dialog */}
+      <PaywallDialog />
     </div>
   )
 }
