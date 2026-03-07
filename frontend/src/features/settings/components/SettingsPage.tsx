@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  User, Bot, Bell, CheckCircle, Trash2, Plus, Eye, EyeOff, Lock, SlidersHorizontal,
+  User, Bot, Bell, CheckCircle, Trash2, Plus, Eye, EyeOff, Lock, SlidersHorizontal, CreditCard,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/shared/stores/authStore'
@@ -15,6 +15,13 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { TopBar } from '@/shared/components/TopBar'
 import { DesktopPageHeader } from '@/shared/components/DesktopPageHeader'
+import { useSubscriptionStore } from '@/shared/stores/subscriptionStore'
+import {
+  getSubscription,
+  createCheckoutSession,
+  createPortalSession,
+  redeemVoucher,
+} from '../subscriptionApi'
 import { getAIConfigs, addAIConfig, deleteAIConfig, activateProvider } from '../api'
 import { getProfile, updateProfile } from '@/features/auth/api'
 import { queryClient } from '@/shared/lib/queryClient'
@@ -22,11 +29,12 @@ import type { AddAIConfigRequest } from '@/shared/lib/api.types'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils'
 
-type Tab = 'profile' | 'ai' | 'notifications'
+type Tab = 'profile' | 'ai' | 'subscription' | 'notifications'
 
 const TABS: { id: Tab; icon: typeof User }[] = [
   { id: 'profile',       icon: User },
   { id: 'ai',            icon: Bot  },
+  { id: 'subscription',  icon: CreditCard },
   { id: 'notifications', icon: Bell },
 ]
 
@@ -457,6 +465,187 @@ function NotificationsTab() {
   )
 }
 
+// ─── Subscription tab ─────────────────────────────────────────────────────
+function SubscriptionTab() {
+  const { t } = useTranslation()
+  const setSubscription = useSubscriptionStore((s) => s.setSubscription)
+  const [redeemCode, setRedeemCode] = useState('')
+  const [redeeming, setRedeeming] = useState(false)
+
+  const { data: sub, isLoading } = useQuery({
+    queryKey: ['subscription'],
+    queryFn: getSubscription,
+  })
+
+  useEffect(() => {
+    if (sub) {
+      setSubscription({
+        tier: sub.tier,
+        promptCredits: sub.prompt_credits,
+        bonusCredits: sub.bonus_credits,
+        totalCredits: sub.total_credits,
+        hasApiKey: sub.has_api_key,
+        trialEndsAt: sub.trial_ends_at,
+        currentPeriodEnd: sub.current_period_end,
+      })
+    }
+  }, [sub, setSubscription])
+
+  const handleCheckout = async () => {
+    try {
+      const url = await createCheckoutSession()
+      window.location.href = url
+    } catch {
+      toast.error(t('subscription.checkoutError'))
+    }
+  }
+
+  const handlePortal = async () => {
+    try {
+      const url = await createPortalSession()
+      window.location.href = url
+    } catch {
+      toast.error(t('subscription.portalError'))
+    }
+  }
+
+  const handleRedeem = async () => {
+    if (!redeemCode.trim()) return
+    setRedeeming(true)
+    try {
+      const result = await redeemVoucher(redeemCode.trim())
+      toast.success(result.message)
+      setRedeemCode('')
+      void queryClient.invalidateQueries({ queryKey: ['subscription'] })
+    } catch {
+      toast.error(t('subscription.redeemError'))
+    } finally {
+      setRedeeming(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-5 w-36 mb-3" />
+        <Skeleton className="h-20 rounded-xl" />
+        <Skeleton className="h-12 rounded-xl" />
+      </div>
+    )
+  }
+
+  const tier = sub?.tier ?? 'free'
+  const promptCredits = sub?.prompt_credits ?? 0
+  const bonusCredits = sub?.bonus_credits ?? 0
+  const totalCredits = sub?.total_credits ?? 0
+
+  const tierLabels: Record<string, string> = {
+    free: t('subscription.tierFree'),
+    supporter: t('subscription.tierSupporter'),
+    byok: t('subscription.tierByok'),
+  }
+
+  const tierColors: Record<string, string> = {
+    free: 'bg-zinc-100 text-zinc-700 border-zinc-200',
+    supporter: 'bg-amber-50 text-amber-700 border-amber-200',
+    byok: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  }
+
+  return (
+    <div>
+      <SectionHeading
+        title={t('subscription.title')}
+        description={t('subscription.description')}
+      />
+
+      {/* Tier badge + credits */}
+      <div className="rounded-xl border border-border bg-card p-5 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <span className={cn(
+            'inline-flex items-center text-xs font-semibold rounded-full px-2.5 py-1 border',
+            tierColors[tier] ?? tierColors.free,
+          )}>
+            {tierLabels[tier] ?? tier}
+          </span>
+          {sub?.current_period_end && tier === 'supporter' && (
+            <span className="text-xs text-muted-foreground">
+              {t('subscription.renewsOn', { date: new Date(sub.current_period_end).toLocaleDateString() })}
+            </span>
+          )}
+          {sub?.trial_ends_at && (
+            <span className="text-xs text-muted-foreground">
+              {t('subscription.trialEnds', { date: new Date(sub.trial_ends_at).toLocaleDateString() })}
+            </span>
+          )}
+        </div>
+
+        {tier === 'byok' ? (
+          <p className="text-sm text-muted-foreground">{t('subscription.unlimited')}</p>
+        ) : (
+          <div className="space-y-1">
+            {tier === 'supporter' ? (
+              <p className="text-sm text-foreground">
+                {t('subscription.creditsMonthly', { used: 600 - promptCredits, total: 600 })}
+              </p>
+            ) : (
+              <p className="text-sm text-foreground">
+                {t('subscription.creditsRemaining', { count: totalCredits })}
+              </p>
+            )}
+            {bonusCredits > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {t('subscription.bonusCredits', { count: bonusCredits })}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="space-y-4">
+        {tier !== 'supporter' && (
+          <div>
+            <p className="text-sm font-medium text-foreground mb-1">{t('subscription.supportAuthor')}</p>
+            <p className="text-xs text-muted-foreground mb-3">{t('subscription.supportDescription')}</p>
+            <Button onClick={handleCheckout} className="h-9">
+              {t('subscription.supportAuthor')}
+            </Button>
+          </div>
+        )}
+
+        {tier === 'supporter' && (
+          <div>
+            <Button variant="outline" onClick={handlePortal} className="h-9">
+              {t('subscription.manageSubscription')}
+            </Button>
+          </div>
+        )}
+
+        {/* Redeem code */}
+        <div className="pt-4 border-t border-border">
+          <p className="text-sm font-medium text-foreground mb-2">{t('subscription.redeemCode')}</p>
+          <div className="flex gap-2 max-w-sm">
+            <Input
+              value={redeemCode}
+              onChange={(e) => setRedeemCode(e.target.value)}
+              placeholder={t('subscription.redeemPlaceholder')}
+              className="h-9"
+              onKeyDown={(e) => e.key === 'Enter' && handleRedeem()}
+            />
+            <Button
+              onClick={handleRedeem}
+              disabled={!redeemCode.trim() || redeeming}
+              className="h-9 shrink-0"
+            >
+              {redeeming ? t('subscription.redeeming') : t('subscription.redeem')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Settings page ────────────────────────────────────────────────────────
 export function SettingsPage() {
   const { t } = useTranslation()
@@ -520,6 +709,7 @@ export function SettingsPage() {
                 >
                   {activeTab === 'profile'       && <ProfileTab />}
                   {activeTab === 'ai'            && <AIConfigTab />}
+                  {activeTab === 'subscription'  && <SubscriptionTab />}
                   {activeTab === 'notifications' && <NotificationsTab />}
                 </motion.div>
               </AnimatePresence>
