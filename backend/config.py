@@ -23,3 +23,6 @@ PLATFORM_MODEL: str = os.getenv("PLATFORM_MODEL", "gpt-4.1-mini")
 STRIPE_SECRET_KEY: str | None = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET: str | None = os.getenv("STRIPE_WEBHOOK_SECRET")
 STRIPE_PRICE_ID: str | None = os.getenv("STRIPE_PRICE_ID")
+STRIPE_CREDITS_PRICE_ID: str | None = os.getenv("STRIPE_CREDITS_PRICE_ID")
+
+ADMIN_EMAILS: list[str] = [e.strip() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()]

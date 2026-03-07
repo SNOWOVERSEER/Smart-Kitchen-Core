@@ -377,3 +377,7 @@ class VoucherRedeemResponse(BaseModel):
     type: str
     value: int
     message: str
+
+
+class BuyCreditsRequest(BaseModel):
+    email: str | None = None

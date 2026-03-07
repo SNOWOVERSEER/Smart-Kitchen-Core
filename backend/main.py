@@ -39,6 +39,7 @@ from schemas import (
     # Subscription
     SubscriptionResponse, CheckoutRequest, CheckoutResponse,
     PortalResponse, VoucherRedeemRequest, VoucherRedeemResponse,
+    BuyCreditsRequest,
 )
 from barcode import lookup_barcode
 from photo_recognize import recognize_image, build_agent_text_from_items
@@ -49,6 +50,7 @@ from subscription import (
     get_subscription_status,
     create_checkout_session,
     create_portal_session,
+    create_credits_checkout,
     handle_stripe_webhook,
     redeem_voucher,
 )
@@ -451,6 +453,12 @@ def create_checkout(body: CheckoutRequest, user_id: str = Depends(get_current_us
 def create_portal(user_id: str = Depends(get_current_user)):
     url = create_portal_session(user_id)
     return PortalResponse(portal_url=url)
+
+
+@app.post("/api/v1/subscription/buy-credits", response_model=CheckoutResponse)
+def buy_credits_endpoint(body: BuyCreditsRequest, user_id: str = Depends(get_current_user)):
+    url = create_credits_checkout(user_id, body.email or "")
+    return CheckoutResponse(checkout_url=url)
 
 
 @app.post("/api/v1/webhook/stripe")

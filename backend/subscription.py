@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 import stripe
 from fastapi import HTTPException
 
-from config import STRIPE_SECRET_KEY, STRIPE_PRICE_ID, STRIPE_WEBHOOK_SECRET, FRONTEND_URL
+from config import STRIPE_SECRET_KEY, STRIPE_PRICE_ID, STRIPE_CREDITS_PRICE_ID, STRIPE_WEBHOOK_SECRET, FRONTEND_URL
 from database import get_supabase_admin_client
 
 
@@ -131,6 +131,34 @@ def create_portal_session(user_id: str) -> str:
     return session.url
 
 
+def create_credits_checkout(user_id: str, user_email: str) -> str:
+    """Create a one-time Stripe Checkout for credit pack purchase."""
+    if not STRIPE_SECRET_KEY or not STRIPE_CREDITS_PRICE_ID:
+        raise HTTPException(status_code=503, detail="Credit purchase not configured")
+
+    supabase = get_supabase_admin_client()
+    result = supabase.table("subscriptions").select("stripe_customer_id").eq("user_id", user_id).limit(1).execute()
+    sub = result.data[0] if result.data else None
+    customer_id = sub.get("stripe_customer_id") if sub else None
+
+    if not customer_id:
+        customer = stripe.Customer.create(email=user_email, metadata={"user_id": user_id})
+        customer_id = customer.id
+        supabase.table("subscriptions").update({
+            "stripe_customer_id": customer_id,
+        }).eq("user_id", user_id).execute()
+
+    session = stripe.checkout.Session.create(
+        customer=customer_id,
+        mode="payment",
+        line_items=[{"price": STRIPE_CREDITS_PRICE_ID, "quantity": 1}],
+        success_url=f"{FRONTEND_URL or 'http://localhost:5173'}/settings?credits_purchased=true",
+        cancel_url=f"{FRONTEND_URL or 'http://localhost:5173'}/settings",
+        metadata={"user_id": user_id, "type": "credits"},
+    )
+    return session.url
+
+
 def handle_stripe_webhook(payload: bytes, sig_header: str) -> None:
     """Process Stripe webhook events."""
     if not STRIPE_WEBHOOK_SECRET:
@@ -148,23 +176,34 @@ def handle_stripe_webhook(payload: bytes, sig_header: str) -> None:
         if event_type == "checkout.session.completed":
             session = event["data"]["object"]
             user_id = session["metadata"].get("user_id")
-            customer_id = session.get("customer")
-            subscription_id = session.get("subscription")
+            purchase_type = session["metadata"].get("type")
 
-            if user_id and subscription_id:
-                sub_obj = stripe.Subscription.retrieve(subscription_id)
-                supabase.table("subscriptions").update({
-                    "tier": "supporter",
-                    "stripe_customer_id": customer_id,
-                    "stripe_subscription_id": subscription_id,
-                    "prompt_credits": 600,
-                    "current_period_start": datetime.fromtimestamp(
-                        sub_obj["current_period_start"], tz=timezone.utc
-                    ).isoformat(),
-                    "current_period_end": datetime.fromtimestamp(
-                        sub_obj["current_period_end"], tz=timezone.utc
-                    ).isoformat(),
-                }).eq("user_id", user_id).execute()
+            if purchase_type == "credits" and user_id:
+                CREDITS_PER_PACK = 50
+                result = supabase.table("subscriptions").select("id, bonus_credits").eq("user_id", user_id).limit(1).execute()
+                if result.data:
+                    sub = result.data[0]
+                    supabase.table("subscriptions").update({
+                        "bonus_credits": sub["bonus_credits"] + CREDITS_PER_PACK,
+                    }).eq("id", sub["id"]).execute()
+            elif user_id:
+                customer_id = session.get("customer")
+                subscription_id = session.get("subscription")
+
+                if subscription_id:
+                    sub_obj = stripe.Subscription.retrieve(subscription_id)
+                    supabase.table("subscriptions").update({
+                        "tier": "supporter",
+                        "stripe_customer_id": customer_id,
+                        "stripe_subscription_id": subscription_id,
+                        "prompt_credits": 600,
+                        "current_period_start": datetime.fromtimestamp(
+                            sub_obj["current_period_start"], tz=timezone.utc
+                        ).isoformat(),
+                        "current_period_end": datetime.fromtimestamp(
+                            sub_obj["current_period_end"], tz=timezone.utc
+                        ).isoformat(),
+                    }).eq("user_id", user_id).execute()
 
         elif event_type == "invoice.paid":
             subscription_id = event["data"]["object"].get("subscription")
