@@ -6,7 +6,7 @@ import stripe
 from fastapi import HTTPException
 
 from config import STRIPE_SECRET_KEY, STRIPE_PRICE_ID, STRIPE_WEBHOOK_SECRET, FRONTEND_URL
-from database import get_supabase_client
+from database import get_supabase_admin_client
 
 
 if STRIPE_SECRET_KEY:
@@ -15,7 +15,7 @@ if STRIPE_SECRET_KEY:
 
 def get_subscription_status(user_id: str) -> dict:
     """Get full subscription status for the user."""
-    supabase = get_supabase_client()
+    supabase = get_supabase_admin_client()
 
     result = supabase.table("subscriptions").select("*").eq("user_id", user_id).limit(1).execute()
     sub = result.data[0] if result.data else None
@@ -53,7 +53,7 @@ def create_checkout_session(user_id: str, user_email: str, coupon_code: str | No
     if not STRIPE_SECRET_KEY or not STRIPE_PRICE_ID:
         raise HTTPException(status_code=503, detail="Stripe not configured")
 
-    supabase = get_supabase_client()
+    supabase = get_supabase_admin_client()
 
     result = supabase.table("subscriptions").select("stripe_customer_id").eq("user_id", user_id).limit(1).execute()
     sub = result.data[0] if result.data else None
@@ -108,7 +108,7 @@ def create_portal_session(user_id: str) -> str:
     if not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Stripe not configured")
 
-    supabase = get_supabase_client()
+    supabase = get_supabase_admin_client()
     result = supabase.table("subscriptions").select("stripe_customer_id").eq("user_id", user_id).limit(1).execute()
     sub = result.data[0] if result.data else None
     customer_id = sub.get("stripe_customer_id") if sub else None
@@ -134,7 +134,7 @@ def handle_stripe_webhook(payload: bytes, sig_header: str) -> None:
     except stripe.error.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
-    supabase = get_supabase_client()
+    supabase = get_supabase_admin_client()
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
@@ -202,7 +202,7 @@ def handle_stripe_webhook(payload: bytes, sig_header: str) -> None:
 
 def redeem_voucher(user_id: str, code: str) -> dict:
     """Redeem a voucher code. Returns type, value, and message."""
-    supabase = get_supabase_client()
+    supabase = get_supabase_admin_client()
 
     result = supabase.table("vouchers").select("*").eq("code", code).limit(1).execute()
     if not result.data:

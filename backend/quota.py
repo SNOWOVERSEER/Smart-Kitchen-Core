@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from fastapi import Depends, HTTPException
 
 from auth import get_current_user
-from database import get_supabase_client
+from database import get_supabase_admin_client
 
 
 @dataclass
@@ -92,7 +92,7 @@ def check_and_deduct_credit(
     - Free/Supporter: deduct from prompt_credits first, then bonus_credits
     - No credits left: raise 403
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase_admin_client()
 
     # 1. Check BYOK
     if _has_active_api_key(supabase, user_id):
@@ -146,7 +146,7 @@ def check_credit_skip_confirm(
     Variant for agent endpoints: checks credit availability but does NOT deduct.
     The endpoint itself calls deduct_credit() only for new messages (not confirm/cancel).
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase_admin_client()
 
     if _has_active_api_key(supabase, user_id):
         return QuotaContext(
@@ -174,7 +174,7 @@ def check_credit_skip_confirm(
 
 def deduct_credit(user_id: str) -> None:
     """Explicitly deduct 1 credit. Called after confirming this is a real AI call."""
-    supabase = get_supabase_client()
+    supabase = get_supabase_admin_client()
     sub = _get_subscription(supabase, user_id)
     tier = sub["tier"]
 
