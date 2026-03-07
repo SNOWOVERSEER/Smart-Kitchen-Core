@@ -40,6 +40,16 @@ from schemas import (
     SubscriptionResponse, CheckoutRequest, CheckoutResponse,
     PortalResponse, VoucherRedeemRequest, VoucherRedeemResponse,
     BuyCreditsRequest,
+    AdminUpdateCreditsRequest, AdminCreateVoucherRequest,
+)
+from admin import (
+    get_admin_user,
+    list_subscriptions as admin_list_subscriptions,
+    update_user_credits,
+    get_usage_stats,
+    list_vouchers as admin_list_vouchers,
+    create_voucher as admin_create_voucher,
+    delete_voucher as admin_delete_voucher,
 )
 from barcode import lookup_barcode
 from photo_recognize import recognize_image, build_agent_text_from_items
@@ -730,3 +740,31 @@ def remove_recipe_from_meal_endpoint(meal_id: str, recipe_id: str, user_id: str 
     if not meal:
         raise HTTPException(status_code=404, detail="Meal not found")
     return meal
+
+
+# ── Admin endpoints ──
+
+@app.get("/api/v1/admin/subscriptions")
+def admin_list_subs(page: int = 0, limit: int = 50, _admin: str = Depends(get_admin_user)):
+    return admin_list_subscriptions(page, limit)
+
+@app.patch("/api/v1/admin/subscriptions/{user_id}/credits")
+def admin_update_credits(user_id: str, body: AdminUpdateCreditsRequest, _admin: str = Depends(get_admin_user)):
+    return update_user_credits(user_id, body.prompt_credits, body.bonus_credits)
+
+@app.get("/api/v1/admin/usage-stats")
+def admin_usage_stats(days: int = 30, _admin: str = Depends(get_admin_user)):
+    return get_usage_stats(days)
+
+@app.get("/api/v1/admin/vouchers")
+def admin_list_vouchers_endpoint(_admin: str = Depends(get_admin_user)):
+    return admin_list_vouchers()
+
+@app.post("/api/v1/admin/vouchers")
+def admin_create_voucher_endpoint(body: AdminCreateVoucherRequest, _admin: str = Depends(get_admin_user)):
+    return admin_create_voucher(body.code, body.type, body.value, body.max_uses, body.expires_at)
+
+@app.delete("/api/v1/admin/vouchers/{voucher_id}")
+def admin_delete_voucher_endpoint(voucher_id: int, _admin: str = Depends(get_admin_user)):
+    admin_delete_voucher(voucher_id)
+    return {"status": "deleted"}

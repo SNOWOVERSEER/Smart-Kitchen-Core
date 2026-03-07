@@ -381,3 +381,15 @@ class VoucherRedeemResponse(BaseModel):
 
 class BuyCreditsRequest(BaseModel):
     email: str | None = None
+
+
+class AdminUpdateCreditsRequest(BaseModel):
+    prompt_credits: int | None = None
+    bonus_credits: int | None = None
+
+class AdminCreateVoucherRequest(BaseModel):
+    code: str
+    type: str
+    value: int
+    max_uses: int | None = None
+    expires_at: str | None = None
