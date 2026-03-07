@@ -82,6 +82,23 @@ def _log_usage(supabase, user_id: str, action: str, tier: str, credited: bool) -
     }).execute()
 
 
+def _deduct_credit_atomic(supabase, user_id: str) -> str:
+    """Atomically deduct 1 credit via RPC. Returns 'prompt' or 'bonus'."""
+    try:
+        result = supabase.rpc("deduct_one_credit", {"p_user_id": user_id}).execute()
+        if not result.data:
+            raise HTTPException(status_code=403, detail="no_credits")
+        return result.data[0]["pool"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        if "no_credits" in str(e):
+            raise HTTPException(status_code=403, detail="no_credits")
+        if "no_subscription" in str(e):
+            raise HTTPException(status_code=403, detail="no_credits")
+        raise
+
+
 def check_and_deduct_credit(
     user_id: str = Depends(get_current_user),
 ) -> QuotaContext:
@@ -89,7 +106,7 @@ def check_and_deduct_credit(
     FastAPI dependency: check user's tier and deduct 1 credit if needed.
 
     - BYOK users: pass through, no deduction
-    - Free/Supporter: deduct from prompt_credits first, then bonus_credits
+    - Free/Supporter: atomically deduct from prompt_credits first, then bonus_credits
     - No credits left: raise 403
     """
     supabase = get_supabase_admin_client()
@@ -109,34 +126,15 @@ def check_and_deduct_credit(
     sub = _lazy_expire_trial(supabase, sub)
     tier = sub["tier"]
 
-    # 3. Try deduct prompt_credits first
-    if sub["prompt_credits"] > 0:
-        supabase.table("subscriptions").update({
-            "prompt_credits": sub["prompt_credits"] - 1,
-        }).eq("id", sub["id"]).execute()
-        _log_usage(supabase, user_id, "ai_call", tier, credited=True)
-        return QuotaContext(
-            user_id=user_id,
-            tier=tier,
-            deducted=True,
-            use_platform_key=True,
-        )
-
-    # 4. Try deduct bonus_credits
-    if sub["bonus_credits"] > 0:
-        supabase.table("subscriptions").update({
-            "bonus_credits": sub["bonus_credits"] - 1,
-        }).eq("id", sub["id"]).execute()
-        _log_usage(supabase, user_id, "ai_call", tier, credited=True)
-        return QuotaContext(
-            user_id=user_id,
-            tier=tier,
-            deducted=True,
-            use_platform_key=True,
-        )
-
-    # 5. No credits
-    raise HTTPException(status_code=403, detail="no_credits")
+    # 3. Atomically deduct 1 credit (prompt first, then bonus)
+    pool = _deduct_credit_atomic(supabase, user_id)
+    _log_usage(supabase, user_id, "ai_call", tier, credited=True)
+    return QuotaContext(
+        user_id=user_id,
+        tier=tier,
+        deducted=True,
+        use_platform_key=True,
+    )
 
 
 def check_credit_skip_confirm(
@@ -172,19 +170,11 @@ def check_credit_skip_confirm(
     )
 
 
-def deduct_credit(user_id: str) -> None:
+def deduct_credit(user_id: str, action: str = "ai_call") -> None:
     """Explicitly deduct 1 credit. Called after confirming this is a real AI call."""
     supabase = get_supabase_admin_client()
     sub = _get_subscription(supabase, user_id)
     tier = sub["tier"]
 
-    if sub["prompt_credits"] > 0:
-        supabase.table("subscriptions").update({
-            "prompt_credits": sub["prompt_credits"] - 1,
-        }).eq("id", sub["id"]).execute()
-    elif sub["bonus_credits"] > 0:
-        supabase.table("subscriptions").update({
-            "bonus_credits": sub["bonus_credits"] - 1,
-        }).eq("id", sub["id"]).execute()
-
-    _log_usage(supabase, user_id, "ai_call", tier, credited=True)
+    _deduct_credit_atomic(supabase, user_id)
+    _log_usage(supabase, user_id, action, tier, credited=True)

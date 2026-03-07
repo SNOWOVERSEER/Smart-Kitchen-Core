@@ -473,7 +473,7 @@ def redeem_voucher_endpoint(body: VoucherRedeemRequest, user_id: str = Depends(g
 def agent_action(request: Request, response: Response, body: AgentActionRequest, quota: QuotaContext = Depends(check_credit_skip_confirm)):
     # Only deduct credit for new messages, not confirm/cancel
     if body.confirm is None and quota.tier != "byok":
-        deduct_credit(quota.user_id)
+        deduct_credit(quota.user_id, action="agent_chat")
 
     result = run_agent(
         text=body.text,
@@ -515,7 +515,7 @@ def agent_stream(request: Request, response: Response, body: AgentActionRequest,
     """SSE streaming endpoint for the AI agent. Same input as /agent/action."""
     # Only deduct credit for new messages, not confirm/cancel
     if body.confirm is None and quota.tier != "byok":
-        deduct_credit(quota.user_id)
+        deduct_credit(quota.user_id, action="agent_chat")
 
     return StreamingResponse(
         run_agent_stream(
