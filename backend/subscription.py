@@ -45,6 +45,7 @@ def get_subscription_status(user_id: str) -> dict:
         "has_api_key": has_api_key,
         "trial_ends_at": sub.get("trial_ends_at"),
         "current_period_end": sub.get("current_period_end"),
+        "payment_failed": sub.get("payment_failed", False),
     }
 
 
@@ -92,12 +93,18 @@ def create_checkout_session(user_id: str, user_email: str, coupon_code: str | No
         )
         if v_result.data:
             voucher = v_result.data[0]
-            coupon = stripe.Coupon.create(
-                percent_off=voucher["value"],
-                duration="once",
-                name=f"Voucher {coupon_code}",
-            )
-            params["discounts"] = [{"coupon": coupon.id}]
+            coupon_id = voucher.get("stripe_coupon_id")
+            if not coupon_id:
+                coupon = stripe.Coupon.create(
+                    percent_off=voucher["value"],
+                    duration="once",
+                    name=f"Voucher {coupon_code}",
+                )
+                coupon_id = coupon.id
+                supabase.table("vouchers").update({
+                    "stripe_coupon_id": coupon_id,
+                }).eq("id", voucher["id"]).execute()
+            params["discounts"] = [{"coupon": coupon_id}]
 
     session = stripe.checkout.Session.create(**params)
     return session.url
@@ -135,42 +142,21 @@ def handle_stripe_webhook(payload: bytes, sig_header: str) -> None:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     supabase = get_supabase_admin_client()
+    event_type = event["type"]
 
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
-        user_id = session["metadata"].get("user_id")
-        customer_id = session.get("customer")
-        subscription_id = session.get("subscription")
+    try:
+        if event_type == "checkout.session.completed":
+            session = event["data"]["object"]
+            user_id = session["metadata"].get("user_id")
+            customer_id = session.get("customer")
+            subscription_id = session.get("subscription")
 
-        if user_id and subscription_id:
-            sub_obj = stripe.Subscription.retrieve(subscription_id)
-            supabase.table("subscriptions").update({
-                "tier": "supporter",
-                "stripe_customer_id": customer_id,
-                "stripe_subscription_id": subscription_id,
-                "prompt_credits": 600,
-                "current_period_start": datetime.fromtimestamp(
-                    sub_obj["current_period_start"], tz=timezone.utc
-                ).isoformat(),
-                "current_period_end": datetime.fromtimestamp(
-                    sub_obj["current_period_end"], tz=timezone.utc
-                ).isoformat(),
-            }).eq("user_id", user_id).execute()
-
-    elif event["type"] == "invoice.paid":
-        subscription_id = event["data"]["object"].get("subscription")
-        if subscription_id:
-            result = (
-                supabase.table("subscriptions")
-                .select("id, user_id")
-                .eq("stripe_subscription_id", subscription_id)
-                .limit(1)
-                .execute()
-            )
-            if result.data:
-                sub = result.data[0]
+            if user_id and subscription_id:
                 sub_obj = stripe.Subscription.retrieve(subscription_id)
                 supabase.table("subscriptions").update({
+                    "tier": "supporter",
+                    "stripe_customer_id": customer_id,
+                    "stripe_subscription_id": subscription_id,
                     "prompt_credits": 600,
                     "current_period_start": datetime.fromtimestamp(
                         sub_obj["current_period_start"], tz=timezone.utc
@@ -178,26 +164,97 @@ def handle_stripe_webhook(payload: bytes, sig_header: str) -> None:
                     "current_period_end": datetime.fromtimestamp(
                         sub_obj["current_period_end"], tz=timezone.utc
                     ).isoformat(),
-                }).eq("id", sub["id"]).execute()
+                }).eq("user_id", user_id).execute()
 
-    elif event["type"] == "customer.subscription.deleted":
-        subscription_id = event["data"]["object"].get("id")
-        if subscription_id:
-            result = (
-                supabase.table("subscriptions")
-                .select("id")
-                .eq("stripe_subscription_id", subscription_id)
-                .limit(1)
-                .execute()
-            )
-            if result.data:
-                supabase.table("subscriptions").update({
-                    "tier": "free",
-                    "prompt_credits": 0,
-                    "stripe_subscription_id": None,
-                    "current_period_start": None,
-                    "current_period_end": None,
-                }).eq("id", result.data[0]["id"]).execute()
+        elif event_type == "invoice.paid":
+            subscription_id = event["data"]["object"].get("subscription")
+            if subscription_id:
+                result = (
+                    supabase.table("subscriptions")
+                    .select("id, user_id")
+                    .eq("stripe_subscription_id", subscription_id)
+                    .limit(1)
+                    .execute()
+                )
+                if result.data:
+                    sub = result.data[0]
+                    sub_obj = stripe.Subscription.retrieve(subscription_id)
+                    supabase.table("subscriptions").update({
+                        "prompt_credits": 600,
+                        "current_period_start": datetime.fromtimestamp(
+                            sub_obj["current_period_start"], tz=timezone.utc
+                        ).isoformat(),
+                        "current_period_end": datetime.fromtimestamp(
+                            sub_obj["current_period_end"], tz=timezone.utc
+                        ).isoformat(),
+                    }).eq("id", sub["id"]).execute()
+
+        elif event_type == "customer.subscription.deleted":
+            subscription_id = event["data"]["object"].get("id")
+            if subscription_id:
+                result = (
+                    supabase.table("subscriptions")
+                    .select("id")
+                    .eq("stripe_subscription_id", subscription_id)
+                    .limit(1)
+                    .execute()
+                )
+                if result.data:
+                    supabase.table("subscriptions").update({
+                        "tier": "free",
+                        "prompt_credits": 0,
+                        "stripe_subscription_id": None,
+                        "current_period_start": None,
+                        "current_period_end": None,
+                    }).eq("id", result.data[0]["id"]).execute()
+
+        elif event_type == "customer.subscription.updated":
+            sub_obj = event["data"]["object"]
+            subscription_id = sub_obj.get("id")
+            if subscription_id:
+                result = (
+                    supabase.table("subscriptions")
+                    .select("id")
+                    .eq("stripe_subscription_id", subscription_id)
+                    .limit(1)
+                    .execute()
+                )
+                if result.data:
+                    updates: dict = {
+                        "current_period_start": datetime.fromtimestamp(
+                            sub_obj["current_period_start"], tz=timezone.utc
+                        ).isoformat(),
+                        "current_period_end": datetime.fromtimestamp(
+                            sub_obj["current_period_end"], tz=timezone.utc
+                        ).isoformat(),
+                    }
+                    status = sub_obj.get("status")
+                    if status in ("past_due", "unpaid"):
+                        updates["payment_failed"] = True
+                    elif status == "active":
+                        updates["payment_failed"] = False
+                    supabase.table("subscriptions").update(updates).eq("id", result.data[0]["id"]).execute()
+
+        elif event_type == "invoice.payment_failed":
+            subscription_id = event["data"]["object"].get("subscription")
+            if subscription_id:
+                result = (
+                    supabase.table("subscriptions")
+                    .select("id")
+                    .eq("stripe_subscription_id", subscription_id)
+                    .limit(1)
+                    .execute()
+                )
+                if result.data:
+                    supabase.table("subscriptions").update({
+                        "payment_failed": True,
+                    }).eq("id", result.data[0]["id"]).execute()
+
+        else:
+            print(f"[stripe-webhook] Unhandled event type: {event_type}")
+
+    except Exception as e:
+        print(f"[stripe-webhook] Error processing {event_type}: {e}")
 
 
 def redeem_voucher(user_id: str, code: str) -> dict:

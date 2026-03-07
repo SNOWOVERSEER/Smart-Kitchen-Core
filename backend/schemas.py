@@ -358,6 +358,7 @@ class SubscriptionResponse(BaseModel):
     has_api_key: bool
     trial_ends_at: datetime | None = None
     current_period_end: datetime | None = None
+    payment_failed: bool = False
 
 class CheckoutRequest(BaseModel):
     coupon_code: str | None = None
