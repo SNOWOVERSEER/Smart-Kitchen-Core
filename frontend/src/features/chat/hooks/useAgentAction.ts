@@ -47,6 +47,94 @@ function getNodeLabel(node: string): string {
   return labels[node] ?? node
 }
 
+function createSmoothStreamRenderer(
+  id: string,
+  updateMessage: (id: string, updates: Partial<{ content: string; thinkingContent: string }>) => void,
+) {
+  let targetAnswer = ''
+  let targetThinking = ''
+  let renderedAnswer = ''
+  let renderedThinking = ''
+  let rafId = 0
+  let lastFrameTs = 0
+
+  const charsForFrame = (remaining: number, deltaMs: number) => {
+    const charsPerSecond = Math.min(900, 120 + remaining * 4)
+    return Math.max(1, Math.min(remaining, Math.floor((charsPerSecond * deltaMs) / 1000)))
+  }
+
+  const tick = (ts: number) => {
+    const deltaMs = lastFrameTs ? Math.min(48, ts - lastFrameTs) : 16
+    lastFrameTs = ts
+
+    const updates: Partial<{ content: string; thinkingContent: string }> = {}
+
+    const answerRemaining = targetAnswer.length - renderedAnswer.length
+    if (answerRemaining > 0) {
+      const chars = charsForFrame(answerRemaining, deltaMs)
+      renderedAnswer = targetAnswer.slice(0, renderedAnswer.length + chars)
+      updates.content = renderedAnswer
+    }
+
+    const thinkingRemaining = targetThinking.length - renderedThinking.length
+    if (thinkingRemaining > 0) {
+      const chars = charsForFrame(thinkingRemaining, deltaMs)
+      renderedThinking = targetThinking.slice(0, renderedThinking.length + chars)
+      updates.thinkingContent = renderedThinking
+    }
+
+    if (Object.keys(updates).length > 0) {
+      updateMessage(id, updates)
+    }
+
+    if (renderedAnswer.length < targetAnswer.length || renderedThinking.length < targetThinking.length) {
+      rafId = requestAnimationFrame(tick)
+    } else {
+      rafId = 0
+      lastFrameTs = 0
+    }
+  }
+
+  const ensureTick = () => {
+    if (!rafId) {
+      rafId = requestAnimationFrame(tick)
+    }
+  }
+
+  return {
+    pushAnswer: (chunk: string) => {
+      if (!chunk) return
+      targetAnswer += chunk
+      ensureTick()
+    },
+    pushThinking: (chunk: string) => {
+      if (!chunk) return
+      targetThinking += chunk
+      ensureTick()
+    },
+    flush: () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId)
+        rafId = 0
+      }
+      lastFrameTs = 0
+
+      const updates: Partial<{ content: string; thinkingContent: string }> = {}
+      if (renderedAnswer !== targetAnswer) {
+        renderedAnswer = targetAnswer
+        updates.content = renderedAnswer
+      }
+      if (renderedThinking !== targetThinking) {
+        renderedThinking = targetThinking
+        updates.thinkingContent = renderedThinking
+      }
+      if (Object.keys(updates).length > 0) {
+        updateMessage(id, updates)
+      }
+    },
+  }
+}
+
 export function useAgentAction() {
   const { addMessage, updateMessage, setThreadId, thread_id } = useChatStore()
   const typingIdRef = useRef<string>('')
@@ -60,28 +148,8 @@ export function useAgentAction() {
   const mutation = useMutation({
     mutationFn: async (req: AgentActionRequest) => {
       const msgId = typingIdRef.current
-      let thinkingAccumulated = ''
-      let responseAccumulated = ''
-      let isResponding = false
       const steps: ThinkingStep[] = []
-
-      // rAF batching for smooth token rendering
-      let pendingTokens = ''
-      let rafId = 0
-      const flushTokens = () => {
-        if (pendingTokens) {
-          if (isResponding) {
-            responseAccumulated += pendingTokens
-            pendingTokens = ''
-            updateMessage(msgId, { content: responseAccumulated })
-          } else {
-            thinkingAccumulated += pendingTokens
-            pendingTokens = ''
-            updateMessage(msgId, { thinkingContent: thinkingAccumulated })
-          }
-        }
-        rafId = 0
-      }
+      const renderer = createSmoothStreamRenderer(msgId, updateMessage)
 
       const controller = new AbortController()
       abortRef.current = controller
@@ -91,28 +159,14 @@ export function useAgentAction() {
           { ...req, thread_id: req.thread_id ?? thread_id },
           {
             onToken: (token) => {
-              pendingTokens += token
-              if (!rafId) {
-                rafId = requestAnimationFrame(flushTokens)
-              }
+              renderer.pushAnswer(token)
             },
-            onText: (content) => {
-              // Flush any pending tokens first
-              if (rafId) {
-                cancelAnimationFrame(rafId)
-                rafId = 0
-              }
-              pendingTokens = ''
-              responseAccumulated = content
-              updateMessage(msgId, { content: responseAccumulated })
+            onThinkingToken: (token) => {
+              renderer.pushThinking(token)
             },
             onNode: (node) => {
               steps.push({ node, label: getNodeLabel(node), timestamp: Date.now() })
               updateMessage(msgId, { thinkingSteps: [...steps] })
-            },
-            onResponding: () => {
-              // Backend signals: subsequent tokens are the final response
-              isResponding = true
             },
             onThreadId: (tid) => {
               setThreadId(tid)
@@ -121,17 +175,7 @@ export function useAgentAction() {
           controller.signal,
         )
       } finally {
-        // Flush remaining tokens
-        if (rafId) cancelAnimationFrame(rafId)
-        if (pendingTokens) {
-          if (isResponding) {
-            responseAccumulated += pendingTokens
-            updateMessage(msgId, { content: responseAccumulated })
-          } else {
-            thinkingAccumulated += pendingTokens
-            updateMessage(msgId, { thinkingContent: thinkingAccumulated })
-          }
-        }
+        renderer.flush()
         abortRef.current = null
       }
     },

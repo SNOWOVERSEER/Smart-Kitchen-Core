@@ -6,8 +6,7 @@ import threading
 import uuid
 from typing import Any, Generator
 
-from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import BaseMessageChunk, SystemMessage
 from langgraph.graph import StateGraph, END
 
 from database import _current_access_token
@@ -257,27 +256,30 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-class _TokenQueueHandler(BaseCallbackHandler):
-    """LangChain callback that pushes LLM tokens into a thread-safe queue.
+def _extract_fragments(content: Any) -> list[tuple[str, str]]:
+    """Extract typed text fragments from Anthropic/OpenAI message content."""
+    if isinstance(content, str):
+        return [("text", content)] if content else []
 
-    Coerces token to plain string — Anthropic streaming with tool calls
-    may pass content block dicts instead of plain strings.
-    """
+    if isinstance(content, dict):
+        block_type = content.get("type")
+        if block_type == "thinking" and isinstance(content.get("thinking"), str):
+            return [("thinking", content["thinking"])]
+        if block_type == "text" and isinstance(content.get("text"), str):
+            return [("text", content["text"])]
+        if isinstance(content.get("thinking"), str):
+            return [("thinking", content["thinking"])]
+        if isinstance(content.get("text"), str):
+            return [("text", content["text"])]
+        return []
 
-    def __init__(self, token_queue: queue.Queue[dict]) -> None:
-        super().__init__()
-        self.queue = token_queue
+    if isinstance(content, list):
+        fragments: list[tuple[str, str]] = []
+        for item in content:
+            fragments.extend(_extract_fragments(item))
+        return fragments
 
-    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        # Coerce to plain string (Anthropic may send content block dicts)
-        if isinstance(token, dict):
-            text = token.get("text", "") if token.get("type") == "text" else ""
-        elif isinstance(token, str):
-            text = token
-        else:
-            text = str(token) if token else ""
-        if text:
-            self.queue.put({"type": "token", "content": text})
+    return [("text", str(content))] if content else []
 
 
 # Sentinel to signal the background thread is done
@@ -290,18 +292,18 @@ def run_agent_stream(
     thread_id: str | None = None,
     confirm_action: bool | None = None,
 ) -> Generator[str, None, None]:
-    """Run the agent with real per-token SSE streaming.
+    """Run the agent with chunk-level SSE streaming.
 
     Yields SSE events:
       event: thread_id  — thread ID for frontend tracking
       event: node       — graph node completed (for progress indication)
       event: token      — individual LLM token (real-time character streaming)
-      event: responding — signals frontend to switch tokens into main content bubble
+      event: thinking_token — model reasoning/thinking text
       event: done       — final structured payload (same shape as AgentActionResponse)
 
-    Implementation: runs the graph in a background thread with a LangChain
-    callback handler that pushes tokens to a queue. The main generator reads
-    from the queue and yields SSE events.
+    Implementation: runs the graph in a background thread and uses LangGraph's
+    native ``stream_mode=["messages", "updates"]``. ``messages`` yields model
+    chunks immediately; ``updates`` yields completed node updates for progress.
     """
     if not thread_id:
         thread_id = str(uuid.uuid4())
@@ -327,32 +329,34 @@ def run_agent_stream(
             _current_access_token.set(request_token)
 
         try:
-            handler = _TokenQueueHandler(token_queue)
             last_state: dict[str, Any] = {}
 
-            for node_output in _compiled_app.stream(
+            for mode, payload in _compiled_app.stream(
                 input_state,
-                config={"recursion_limit": 25, "callbacks": [handler]},
+                config={"recursion_limit": 25},
+                stream_mode=["messages", "updates"],
             ):
                 if cancel_event.is_set():
                     break
 
-                for node_name, state_update in node_output.items():
-                    token_queue.put({"type": "node", "node": node_name})
-                    if not state_update:
+                if mode == "messages":
+                    message, metadata = payload
+                    if not isinstance(message, BaseMessageChunk):
                         continue
+                    for fragment_type, content in _extract_fragments(message.content):
+                        event_type = "thinking_token" if fragment_type == "thinking" else "token"
+                        token_queue.put({
+                            "type": event_type,
+                            "content": content,
+                            "node": metadata.get("langgraph_node"),
+                        })
+                    continue
 
-                    last_state.update(state_update)
-
-                    # When a node produces the final response, signal the
-                    # frontend to switch to "content" mode and re-emit the
-                    # text as small token chunks for smooth main-bubble streaming.
-                    resp_text = state_update.get("response")
-                    if resp_text:
-                        token_queue.put({"type": "responding"})
-                        chunk_size = 4
-                        for ci in range(0, len(resp_text), chunk_size):
-                            token_queue.put({"type": "token", "content": resp_text[ci:ci + chunk_size]})
+                if mode == "updates":
+                    for node_name, state_update in payload.items():
+                        token_queue.put({"type": "node", "node": node_name})
+                        if state_update:
+                            last_state.update(state_update)
 
             merged = {**input_state, **last_state}
             result_holder.append(merged)
@@ -386,10 +390,10 @@ def run_agent_stream(
                 break
             elif event["type"] == "token":
                 yield _sse("token", {"content": event["content"]})
+            elif event["type"] == "thinking_token":
+                yield _sse("thinking_token", {"content": event["content"]})
             elif event["type"] == "node":
                 yield _sse("node", {"node": event["node"]})
-            elif event["type"] == "responding":
-                yield _sse("responding", {})
 
         # Thread finished — build and yield final response
         if error_holder:

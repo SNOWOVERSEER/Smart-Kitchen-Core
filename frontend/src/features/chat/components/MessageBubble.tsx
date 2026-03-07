@@ -19,6 +19,7 @@ export function MessageBubble({ message, onConfirm }: MessageBubbleProps) {
   const hasConfirm = message.status === 'awaiting_confirm' && message.pendingAction
 
   const hasThinkingSteps = !isUser && message.thinkingSteps && message.thinkingSteps.length > 0
+  const renderStreamingText = !isUser && !!message.isTyping
 
   // Typing placeholder is rendered by TypingIndicator — skip here to avoid duplicate avatar
   // But if we have thinking steps, show this bubble instead of the generic typing indicator
@@ -58,6 +59,8 @@ export function MessageBubble({ message, onConfirm }: MessageBubbleProps) {
             )}
           >
             {isUser ? (
+              <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            ) : renderStreamingText ? (
               <p className="whitespace-pre-wrap break-words">{message.content}</p>
             ) : (
               <div className="prose-chat">

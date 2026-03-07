@@ -14,10 +14,9 @@ export async function postPhotoRecognize(data: PhotoRecognizeRequest): Promise<P
 
 interface StreamCallbacks {
   onToken: (token: string) => void
-  onText: (content: string) => void
+  onThinkingToken: (token: string) => void
   onNode: (node: string) => void
   onThreadId: (threadId: string) => void
-  onResponding?: () => void
 }
 
 async function doStreamFetch(
@@ -68,13 +67,6 @@ async function doStreamFetch(
         continue
       }
 
-      // `responding` event has no data payload
-      if (eventType === 'responding') {
-        callbacks.onResponding?.()
-        boundary = buffer.indexOf('\n\n')
-        continue
-      }
-
       if (!eventData) {
         boundary = buffer.indexOf('\n\n')
         continue
@@ -86,8 +78,8 @@ async function doStreamFetch(
           case 'token':
             callbacks.onToken((parsed as { content: string }).content)
             break
-          case 'text':
-            callbacks.onText((parsed as { content: string }).content)
+          case 'thinking_token':
+            callbacks.onThinkingToken((parsed as { content: string }).content)
             break
           case 'node':
             callbacks.onNode((parsed as { node: string }).node)
