@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from auth import get_current_user
 from database import get_supabase_client, get_supabase_anon_client
 from id_codec import decode_id, decode_or_int
+from agent.llm_factory import invalidate_llm_cache
 from schemas import (
     # Auth
     SignUpRequest, LoginRequest, AuthResponse, SignUpResponse, ProfileResponse, ProfileUpdate,
@@ -249,6 +250,8 @@ def upsert_ai_config(config: AIConfigCreate, user_id: str = Depends(get_current_
         {"is_active": False}
     ).eq("user_id", user_id).neq("provider", config.provider).execute()
 
+    invalidate_llm_cache(user_id)
+
     row = result.data[0]
     preview = f"{config.api_key[:7]}...{config.api_key[-4:]}"
     return AIConfigResponse(
@@ -266,6 +269,7 @@ def delete_ai_config(provider: str, user_id: str = Depends(get_current_user)):
     supabase.table("user_ai_configs").delete().eq(
         "user_id", user_id
     ).eq("provider", provider).execute()
+    invalidate_llm_cache(user_id)
     return {"message": f"AI config for {provider} deleted"}
 
 
@@ -280,6 +284,7 @@ def activate_ai_config(provider: str, user_id: str = Depends(get_current_user)):
     supabase.table("user_ai_configs").update(
         {"is_active": True}
     ).eq("user_id", user_id).eq("provider", provider).execute()
+    invalidate_llm_cache(user_id)
     return {"message": f"{provider} activated"}
 
 

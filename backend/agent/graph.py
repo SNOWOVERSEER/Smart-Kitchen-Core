@@ -106,6 +106,9 @@ class SupabaseCheckpointer:
 
 checkpointer = SupabaseCheckpointer()
 
+# Pre-compile graph once (structure is static; state varies per request)
+_compiled_app = build_graph().compile()
+
 
 def _serialize_messages(messages: list) -> list[dict]:
     """Convert LangChain messages to serializable dicts for checkpointing."""
@@ -149,10 +152,6 @@ def run_agent(
     # Load existing state from checkpoint
     existing_state = checkpointer.get(thread_id)
 
-    # Build graph
-    graph = build_graph()
-    app = graph.compile()
-
     # Build input text
     if confirm_action is not None:
         input_text = "confirm" if confirm_action else "cancel"
@@ -194,7 +193,7 @@ def run_agent(
     input_state["user_id"] = user_id
 
     try:
-        result = app.invoke(input_state, config={"recursion_limit": 25})
+        result = _compiled_app.invoke(input_state, config={"recursion_limit": 25})
     except Exception as e:
         print(f"[ERROR] Graph execution failed: {e}")
         import traceback

@@ -30,10 +30,11 @@ export function useAgentAction() {
     },
     onMutate: () => {
       const typingId = addMessage({ role: 'assistant', content: '', isTyping: true })
-      return { typingId }
+      return { typingId, startTime: performance.now() }
     },
     onSuccess: (data, _vars, context) => {
-      const { typingId } = context as { typingId: string }
+      const { typingId, startTime } = context as { typingId: string; startTime: number }
+      const elapsedMs = Math.round(performance.now() - startTime)
       setThreadId(data.thread_id)
       removeMessage(typingId)
 
@@ -44,6 +45,7 @@ export function useAgentAction() {
         status: data.status,
         pendingAction: data.pending_action ?? undefined,
         pendingRecipes: data.pending_recipes ?? undefined,
+        elapsedMs,
       })
 
       typewriterReveal(assistantId, data.response, updateMessage)
@@ -77,10 +79,11 @@ export function usePhotoRecognize() {
     onMutate: () => {
       addMessage({ role: 'user', content: '[Photo sent]' })
       const typingId = addMessage({ role: 'assistant', content: '', isTyping: true })
-      return { typingId }
+      return { typingId, startTime: performance.now() }
     },
     onSuccess: (data, _vars, context) => {
-      const { typingId } = context as { typingId: string }
+      const { typingId, startTime } = context as { typingId: string; startTime: number }
+      const elapsedMs = Math.round(performance.now() - startTime)
       setThreadId(data.agent_response.thread_id)
       removeMessage(typingId)
 
@@ -90,6 +93,7 @@ export function usePhotoRecognize() {
         isTyping: true,
         status: data.agent_response.status,
         pendingAction: data.agent_response.pending_action ?? undefined,
+        elapsedMs,
       })
 
       typewriterReveal(assistantId, data.agent_response.response, updateMessage)

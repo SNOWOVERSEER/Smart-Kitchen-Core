@@ -4,7 +4,7 @@ import json
 from datetime import date
 from typing import Any
 
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 
 from agent.state import AgentState, READ_TOOLS, WRITE_TOOLS
 from agent.tools import ALL_TOOLS
@@ -163,6 +163,30 @@ def _trim_messages(messages: list) -> list:
     return system_msgs + other_msgs[-MAX_HISTORY_MESSAGES:]
 
 
+def _tag_cache_control(messages: list) -> list:
+    """Tag system messages with cache_control for Anthropic prompt caching.
+
+    OpenAI caches automatically; Anthropic requires an explicit
+    cache_control breakpoint on the message metadata.  This converts
+    plain dict system messages to SystemMessage objects with the flag.
+    """
+    out: list = []
+    for m in messages:
+        is_system = (
+            isinstance(m, SystemMessage)
+            or (isinstance(m, dict) and m.get("role") == "system")
+        )
+        if is_system:
+            content = m.content if isinstance(m, SystemMessage) else m.get("content", "")
+            out.append(SystemMessage(
+                content=content,
+                additional_kwargs={"cache_control": {"type": "ephemeral"}},
+            ))
+        else:
+            out.append(m)
+    return out
+
+
 def agent_node(state: AgentState) -> dict:
     """
     Call the LLM with bound tools. The LLM decides what to do:
@@ -172,6 +196,7 @@ def agent_node(state: AgentState) -> dict:
     """
     user_id = state.get("user_id", "")
     messages = _trim_messages(state.get("messages", []))
+    messages = _tag_cache_control(messages)
 
     llm = get_user_llm(user_id)
     llm_with_tools = llm.bind_tools(ALL_TOOLS)

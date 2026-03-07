@@ -139,9 +139,16 @@ export function MessageBubble({ message, onConfirm }: MessageBubbleProps) {
           </div>
         )}
 
-        {/* Timestamp */}
+        {/* Timestamp + elapsed */}
         <span className="text-[10px] text-stone-400 px-1">
           {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {!isUser && message.elapsedMs != null && (
+            <span className="ml-1.5 text-stone-300">
+              {message.elapsedMs >= 1000
+                ? `${(message.elapsedMs / 1000).toFixed(1)}s`
+                : `${message.elapsedMs}ms`}
+            </span>
+          )}
         </span>
       </div>
     </motion.div>

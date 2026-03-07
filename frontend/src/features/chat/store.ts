@@ -11,6 +11,7 @@ export interface Message {
   pendingRecipes?: RecipeCard[]
   isTyping?: boolean
   confirmed?: 'yes' | 'no'
+  elapsedMs?: number
 }
 
 interface ChatState {
