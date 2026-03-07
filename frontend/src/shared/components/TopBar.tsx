@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useAuthStore } from '../stores/authStore'
+import { useSubscriptionStore } from '../stores/subscriptionStore'
 import { logout, getProfile } from '@/features/auth/api'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -62,6 +63,7 @@ export function TopBar({
       await logout()
     } finally {
       clearAuth()
+      useSubscriptionStore.getState().clearSubscription()
       void navigate({ to: '/login' })
     }
   }

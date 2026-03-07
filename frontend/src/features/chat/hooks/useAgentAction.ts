@@ -4,6 +4,7 @@ import i18n from '@/shared/lib/i18n'
 import { useChatStore, type ThinkingStep } from '../store'
 import { streamAgentAction, postPhotoRecognize } from '../api'
 import { queryClient } from '@/shared/lib/queryClient'
+import { useSubscriptionStore } from '@/shared/stores/subscriptionStore'
 import type { AgentActionRequest, PhotoRecognizeRequest } from '@/shared/lib/api.types'
 
 function typewriterReveal(
@@ -184,7 +185,7 @@ export function useAgentAction() {
       typingIdRef.current = typingId
       startTimeRef.current = performance.now()
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       const msgId = typingIdRef.current
       const elapsedMs = Math.round(performance.now() - startTimeRef.current)
 
@@ -196,6 +197,11 @@ export function useAgentAction() {
         pendingRecipes: data.pending_recipes ?? undefined,
         elapsedMs,
       })
+
+      // Optimistic credit deduction for new AI calls (not confirm/cancel)
+      if (variables.confirm === undefined || variables.confirm === null) {
+        useSubscriptionStore.getState().decrementCredit()
+      }
 
       if (data.status === 'completed') {
         void queryClient.invalidateQueries({ queryKey: ['inventory'] })
@@ -247,6 +253,9 @@ export function usePhotoRecognize() {
       })
 
       typewriterReveal(assistantId, data.agent_response.response, updateMessage)
+
+      // Optimistic credit deduction for photo recognition
+      useSubscriptionStore.getState().decrementCredit()
     },
     onError: (_error, _vars, context) => {
       const { typingId } = context as { typingId: string }

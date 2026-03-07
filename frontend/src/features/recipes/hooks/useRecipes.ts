@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import i18next from 'i18next'
 import { generateRecipes, saveRecipe, getSavedRecipes, getSavedRecipe, deleteRecipe } from '@/features/recipes/api'
+import { useSubscriptionStore } from '@/shared/stores/subscriptionStore'
 import type { GenerateRecipesRequest, SaveRecipeRequest } from '@/shared/lib/api.types'
 
 const RECIPES_KEY = ['recipes'] as const
@@ -24,6 +25,10 @@ export function useRecipe(id: string) {
 export function useGenerateRecipes() {
   return useMutation({
     mutationFn: (req: GenerateRecipesRequest) => generateRecipes(req),
+    onSuccess: () => {
+      // Optimistic credit deduction for recipe generation
+      useSubscriptionStore.getState().decrementCredit()
+    },
     // No invalidation — results are ephemeral (not saved until swiped right)
   })
 }

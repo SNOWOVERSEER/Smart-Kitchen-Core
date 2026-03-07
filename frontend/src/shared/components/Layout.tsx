@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouterState } from '@tanstack/react-router'
 import { Sidebar } from './Sidebar'
@@ -6,6 +6,9 @@ import { BottomNav } from './BottomNav'
 import { FABChatButton } from './FABChatButton'
 import { PaywallDialog } from './PaywallDialog'
 import { ChatDrawer } from '@/features/chat/components/ChatDrawer'
+import { useAuthStore } from '@/shared/stores/authStore'
+import { useSubscriptionStore } from '@/shared/stores/subscriptionStore'
+import { getSubscription } from '@/features/settings/subscriptionApi'
 
 interface LayoutProps {
   children: ReactNode
@@ -14,6 +17,30 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const { location } = useRouterState()
   const isChat = location.pathname === '/chat'
+
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const setSubscription = useSubscriptionStore((s) => s.setSubscription)
+  const subscriptionLoaded = useSubscriptionStore((s) => s.loaded)
+
+  useEffect(() => {
+    if (isAuthenticated && !subscriptionLoaded) {
+      getSubscription()
+        .then((sub) => {
+          setSubscription({
+            tier: sub.tier,
+            promptCredits: sub.prompt_credits,
+            bonusCredits: sub.bonus_credits,
+            totalCredits: sub.total_credits,
+            hasApiKey: sub.has_api_key,
+            trialEndsAt: sub.trial_ends_at,
+            currentPeriodEnd: sub.current_period_end,
+          })
+        })
+        .catch(() => {
+          // Silently fail — subscription will be loaded when settings page is visited
+        })
+    }
+  }, [isAuthenticated, subscriptionLoaded, setSubscription])
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

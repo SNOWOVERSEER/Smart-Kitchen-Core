@@ -2,6 +2,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import i18n from '@/shared/lib/i18n'
 import { useAuthStore } from '../stores/authStore'
+import { useSubscriptionStore } from '../stores/subscriptionStore'
 
 export const baseURL = import.meta.env.VITE_API_URL?.trim() || ''
 
@@ -26,6 +27,7 @@ export async function refreshAccessToken(): Promise<string> {
   const { refresh_token, setAuth, clearAuth } = useAuthStore.getState()
   if (!refresh_token) {
     clearAuth()
+    useSubscriptionStore.getState().clearSubscription()
     window.location.href = '/login'
     throw new Error('No refresh token')
   }
@@ -87,6 +89,7 @@ apiClient.interceptors.response.use(
         return apiClient(originalRequest)
       } catch {
         useAuthStore.getState().clearAuth()
+        useSubscriptionStore.getState().clearSubscription()
         window.location.href = '/login'
       }
     }

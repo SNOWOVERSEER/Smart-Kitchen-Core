@@ -1,5 +1,6 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
 import { useAuthStore } from '../shared/stores/authStore'
+import { useSubscriptionStore } from '../shared/stores/subscriptionStore'
 import { Layout } from '../shared/components/Layout'
 import { refreshToken } from '../features/auth/api'
 
@@ -28,6 +29,7 @@ export const Route = createFileRoute('/_protected')({
       })
     } catch {
       clearAuth()
+      useSubscriptionStore.getState().clearSubscription()
       throw redirect({ to: '/' })
     }
   },
