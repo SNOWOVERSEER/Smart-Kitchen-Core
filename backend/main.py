@@ -36,11 +36,22 @@ from schemas import (
     CompleteShoppingRequest, CompleteShoppingResult,
     # Meals
     MealCreate, MealUpdate, MealResponse, AddRecipesToMealRequest, InstantiateMealRequest,
+    # Subscription
+    SubscriptionResponse, CheckoutRequest, CheckoutResponse,
+    PortalResponse, VoucherRedeemRequest, VoucherRedeemResponse,
 )
 from barcode import lookup_barcode
 from photo_recognize import recognize_image, build_agent_text_from_items
 from agent import run_agent, run_agent_stream
 from config import FRONTEND_URL
+from quota import check_and_deduct_credit, check_credit_skip_confirm, deduct_credit, QuotaContext
+from subscription import (
+    get_subscription_status,
+    create_checkout_session,
+    create_portal_session,
+    handle_stripe_webhook,
+    redeem_voucher,
+)
 from rate_limit import limiter, AI_RATE_LIMIT, AUTH_RATE_LIMIT, _get_ip
 from services import (
     add_inventory_item,
@@ -316,10 +327,10 @@ def barcode_lookup(barcode: str, user_id: str = Depends(get_current_user)):
 
 @app.post("/api/v1/agent/photo-recognize", response_model=PhotoRecognizeResponse)
 @limiter.limit(AI_RATE_LIMIT)
-def photo_recognize(request: Request, body: PhotoRecognizeRequest, user_id: str = Depends(get_current_user)):
+def photo_recognize(request: Request, body: PhotoRecognizeRequest, quota: QuotaContext = Depends(check_and_deduct_credit)):
     # Step 1: Recognize items in photo
     try:
-        recognition = recognize_image(user_id, body.image_base64)
+        recognition = recognize_image(quota.user_id, body.image_base64)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -336,7 +347,7 @@ def photo_recognize(request: Request, body: PhotoRecognizeRequest, user_id: str 
     agent_text = build_agent_text_from_items(items)
     agent_result = run_agent(
         text=agent_text,
-        user_id=user_id,
+        user_id=quota.user_id,
         thread_id=body.thread_id,
     )
 
@@ -422,14 +433,51 @@ def list_transaction_logs(limit: int = 50, user_id: str = Depends(get_current_us
     return get_transaction_logs(user_id, limit)
 
 
+# ── Subscription Endpoints ──
+
+@app.get("/api/v1/subscription", response_model=SubscriptionResponse)
+def get_subscription(user_id: str = Depends(get_current_user)):
+    return get_subscription_status(user_id)
+
+
+@app.post("/api/v1/subscription/checkout", response_model=CheckoutResponse)
+def create_checkout(body: CheckoutRequest, user_id: str = Depends(get_current_user)):
+    email = body.email or ""
+    url = create_checkout_session(user_id, email, body.coupon_code)
+    return CheckoutResponse(checkout_url=url)
+
+
+@app.post("/api/v1/subscription/portal", response_model=PortalResponse)
+def create_portal(user_id: str = Depends(get_current_user)):
+    url = create_portal_session(user_id)
+    return PortalResponse(portal_url=url)
+
+
+@app.post("/api/v1/webhook/stripe")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    handle_stripe_webhook(payload, sig)
+    return {"status": "ok"}
+
+
+@app.post("/api/v1/voucher/redeem", response_model=VoucherRedeemResponse)
+def redeem_voucher_endpoint(body: VoucherRedeemRequest, user_id: str = Depends(get_current_user)):
+    return redeem_voucher(user_id, body.code)
+
+
 # ── AI Agent ──
 
 @app.post("/api/v1/agent/action", response_model=AgentActionResponse)
 @limiter.limit(AI_RATE_LIMIT)
-def agent_action(request: Request, body: AgentActionRequest, user_id: str = Depends(get_current_user)):
+def agent_action(request: Request, body: AgentActionRequest, quota: QuotaContext = Depends(check_credit_skip_confirm)):
+    # Only deduct credit for new messages, not confirm/cancel
+    if body.confirm is None and quota.tier != "byok":
+        deduct_credit(quota.user_id)
+
     result = run_agent(
         text=body.text,
-        user_id=user_id,
+        user_id=quota.user_id,
         thread_id=body.thread_id,
         confirm_action=body.confirm,
     )
@@ -463,12 +511,16 @@ def agent_action(request: Request, body: AgentActionRequest, user_id: str = Depe
 
 @app.post("/api/v1/agent/stream")
 @limiter.limit(AI_RATE_LIMIT)
-def agent_stream(request: Request, body: AgentActionRequest, user_id: str = Depends(get_current_user)):
+def agent_stream(request: Request, body: AgentActionRequest, quota: QuotaContext = Depends(check_credit_skip_confirm)):
     """SSE streaming endpoint for the AI agent. Same input as /agent/action."""
+    # Only deduct credit for new messages, not confirm/cancel
+    if body.confirm is None and quota.tier != "byok":
+        deduct_credit(quota.user_id)
+
     return StreamingResponse(
         run_agent_stream(
             text=body.text,
-            user_id=user_id,
+            user_id=quota.user_id,
             thread_id=body.thread_id,
             confirm_action=body.confirm,
         ),
@@ -484,11 +536,11 @@ def agent_stream(request: Request, body: AgentActionRequest, user_id: str = Depe
 def generate_recipes_endpoint(
     request: Request,
     body: GenerateRecipesRequest,
-    user_id: str = Depends(get_current_user),
+    quota: QuotaContext = Depends(check_and_deduct_credit),
 ) -> GenerateRecipesResponse:
     try:
         result = generate_recipes(
-            user_id=user_id,
+            user_id=quota.user_id,
             categories=body.categories,
             use_expiring=body.use_expiring or (body.mode == 'expiring'),
             prompt=body.prompt,
