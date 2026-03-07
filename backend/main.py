@@ -1,6 +1,6 @@
 """FastAPI application with Supabase Auth and multi-user support."""
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -117,7 +117,7 @@ def health_check():
 
 @app.post("/auth/signup", response_model=SignUpResponse)
 @limiter.limit(AUTH_RATE_LIMIT, key_func=_get_ip)
-def signup(request: Request, body: SignUpRequest):
+def signup(request: Request, response: Response, body: SignUpRequest):
     supabase = get_supabase_anon_client()
     try:
         result = supabase.auth.sign_up({
@@ -154,7 +154,7 @@ def signup(request: Request, body: SignUpRequest):
 
 @app.post("/auth/login", response_model=AuthResponse)
 @limiter.limit(AUTH_RATE_LIMIT, key_func=_get_ip)
-def login(request: Request, body: LoginRequest):
+def login(request: Request, response: Response, body: LoginRequest):
     supabase = get_supabase_anon_client()
     try:
         result = supabase.auth.sign_in_with_password({
@@ -179,7 +179,7 @@ def logout(user_id: str = Depends(get_current_user)):
 
 @app.post("/auth/refresh", response_model=AuthResponse)
 @limiter.limit(AUTH_RATE_LIMIT, key_func=_get_ip)
-def refresh_token(request: Request, refresh_token: str):
+def refresh_token(request: Request, response: Response, refresh_token: str):
     supabase = get_supabase_anon_client()
     try:
         result = supabase.auth.refresh_session(refresh_token)
@@ -327,7 +327,7 @@ def barcode_lookup(barcode: str, user_id: str = Depends(get_current_user)):
 
 @app.post("/api/v1/agent/photo-recognize", response_model=PhotoRecognizeResponse)
 @limiter.limit(AI_RATE_LIMIT)
-def photo_recognize(request: Request, body: PhotoRecognizeRequest, quota: QuotaContext = Depends(check_and_deduct_credit)):
+def photo_recognize(request: Request, response: Response, body: PhotoRecognizeRequest, quota: QuotaContext = Depends(check_and_deduct_credit)):
     # Step 1: Recognize items in photo
     try:
         recognition = recognize_image(quota.user_id, body.image_base64)
@@ -470,7 +470,7 @@ def redeem_voucher_endpoint(body: VoucherRedeemRequest, user_id: str = Depends(g
 
 @app.post("/api/v1/agent/action", response_model=AgentActionResponse)
 @limiter.limit(AI_RATE_LIMIT)
-def agent_action(request: Request, body: AgentActionRequest, quota: QuotaContext = Depends(check_credit_skip_confirm)):
+def agent_action(request: Request, response: Response, body: AgentActionRequest, quota: QuotaContext = Depends(check_credit_skip_confirm)):
     # Only deduct credit for new messages, not confirm/cancel
     if body.confirm is None and quota.tier != "byok":
         deduct_credit(quota.user_id)
@@ -511,7 +511,7 @@ def agent_action(request: Request, body: AgentActionRequest, quota: QuotaContext
 
 @app.post("/api/v1/agent/stream")
 @limiter.limit(AI_RATE_LIMIT)
-def agent_stream(request: Request, body: AgentActionRequest, quota: QuotaContext = Depends(check_credit_skip_confirm)):
+def agent_stream(request: Request, response: Response, body: AgentActionRequest, quota: QuotaContext = Depends(check_credit_skip_confirm)):
     """SSE streaming endpoint for the AI agent. Same input as /agent/action."""
     # Only deduct credit for new messages, not confirm/cancel
     if body.confirm is None and quota.tier != "byok":
@@ -535,6 +535,7 @@ def agent_stream(request: Request, body: AgentActionRequest, quota: QuotaContext
 @limiter.limit(AI_RATE_LIMIT)
 def generate_recipes_endpoint(
     request: Request,
+    response: Response,
     body: GenerateRecipesRequest,
     quota: QuotaContext = Depends(check_and_deduct_credit),
 ) -> GenerateRecipesResponse:
