@@ -346,3 +346,33 @@ class MealResponse(BaseModel):
 
 class AddRecipesToMealRequest(BaseModel):
     recipe_ids: list[str] = Field(..., min_length=1)
+
+
+# ── Subscription Schemas ──
+
+class SubscriptionResponse(BaseModel):
+    tier: str
+    prompt_credits: int
+    bonus_credits: int
+    total_credits: int
+    has_api_key: bool
+    trial_ends_at: datetime | None = None
+    current_period_end: datetime | None = None
+
+class CheckoutRequest(BaseModel):
+    coupon_code: str | None = None
+    email: str | None = None
+
+class CheckoutResponse(BaseModel):
+    checkout_url: str
+
+class PortalResponse(BaseModel):
+    portal_url: str
+
+class VoucherRedeemRequest(BaseModel):
+    code: str
+
+class VoucherRedeemResponse(BaseModel):
+    type: str
+    value: int
+    message: str
