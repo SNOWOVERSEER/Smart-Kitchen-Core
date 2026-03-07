@@ -108,6 +108,7 @@ export function ChatDrawer() {
             <ChatInput
               onSend={handleSend}
               onPhoto={supportsVision ? handlePhoto : undefined}
+              onStop={agentMutation.isPending ? agentMutation.abort : undefined}
               disabled={isBusy}
               noVisionReason={!supportsVision}
             />

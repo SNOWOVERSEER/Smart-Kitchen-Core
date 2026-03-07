@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { type Message } from '../store'
 import { ChatRecipeCards } from './ChatRecipeCards'
 import { ConfirmCard } from './ConfirmCard'
+import { ThinkingSteps } from './ThinkingSteps'
 import { cn } from '@/lib/utils'
 
 interface MessageBubbleProps {
@@ -17,8 +18,11 @@ export function MessageBubble({ message, onConfirm }: MessageBubbleProps) {
   const hasRecipes = message.pendingRecipes && message.pendingRecipes.length > 0
   const hasConfirm = message.status === 'awaiting_confirm' && message.pendingAction
 
+  const hasThinkingSteps = !isUser && message.thinkingSteps && message.thinkingSteps.length > 0
+
   // Typing placeholder is rendered by TypingIndicator — skip here to avoid duplicate avatar
-  if (message.isTyping && !message.content) return null
+  // But if we have thinking steps, show this bubble instead of the generic typing indicator
+  if (message.isTyping && !message.content && !hasThinkingSteps) return null
 
   return (
     <motion.div
@@ -38,6 +42,11 @@ export function MessageBubble({ message, onConfirm }: MessageBubbleProps) {
       )}
 
       <div className={cn('flex flex-col gap-1.5 max-w-[82%] min-w-0', isUser && 'items-end')}>
+        {/* Thinking steps (Gemini-style collapsible) */}
+        {hasThinkingSteps && (
+          <ThinkingSteps steps={message.thinkingSteps!} isTyping={!!message.isTyping} thinkingContent={message.thinkingContent} />
+        )}
+
         {/* Text bubble */}
         {message.content && (
           <div

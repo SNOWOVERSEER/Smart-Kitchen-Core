@@ -1,5 +1,5 @@
 import { useState, useRef, type KeyboardEvent } from 'react'
-import { Send, Camera } from 'lucide-react'
+import { Send, Camera, Square } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 interface ChatInputProps {
   onSend: (text: string) => void
   onPhoto?: (base64: string) => void
+  onStop?: () => void
   disabled?: boolean
   value?: string
   onChange?: (v: string) => void
@@ -14,7 +15,7 @@ interface ChatInputProps {
   noVisionReason?: boolean
 }
 
-export function ChatInput({ onSend, onPhoto, disabled, value, onChange, noVisionReason }: ChatInputProps) {
+export function ChatInput({ onSend, onPhoto, onStop, disabled, value, onChange, noVisionReason }: ChatInputProps) {
   const { t } = useTranslation()
   const [internal, setInternal] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -101,19 +102,29 @@ export function ChatInput({ onSend, onPhoto, disabled, value, onChange, noVision
           />
         </div>
 
-        <motion.button
-          whileTap={canSend ? { scale: 0.9 } : undefined}
-          onClick={handleSend}
-          disabled={!canSend}
-          className={cn(
-            'w-9 h-9 flex items-center justify-center rounded-xl transition-all shrink-0',
-            canSend
-              ? 'bg-[#1C1612] text-white shadow-sm hover:bg-[#1C1612]/90'
-              : 'bg-stone-100 text-stone-300 cursor-not-allowed'
-          )}
-        >
-          <Send className="w-4 h-4" />
-        </motion.button>
+        {disabled && onStop ? (
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={onStop}
+            className="w-9 h-9 flex items-center justify-center rounded-xl bg-red-500 text-white shadow-sm hover:bg-red-600 transition-all shrink-0"
+          >
+            <Square className="w-3.5 h-3.5 fill-current" />
+          </motion.button>
+        ) : (
+          <motion.button
+            whileTap={canSend ? { scale: 0.9 } : undefined}
+            onClick={handleSend}
+            disabled={!canSend}
+            className={cn(
+              'w-9 h-9 flex items-center justify-center rounded-xl transition-all shrink-0',
+              canSend
+                ? 'bg-[#1C1612] text-white shadow-sm hover:bg-[#1C1612]/90'
+                : 'bg-stone-100 text-stone-300 cursor-not-allowed'
+            )}
+          >
+            <Send className="w-4 h-4" />
+          </motion.button>
+        )}
       </div>
       <p className="text-[10px] text-stone-400 text-center mt-1.5">
         {t('chat.disclaimer')}

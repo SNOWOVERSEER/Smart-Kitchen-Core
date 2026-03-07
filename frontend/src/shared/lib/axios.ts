@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/authStore'
 
-const baseURL = import.meta.env.VITE_API_URL?.trim() || ''
+export const baseURL = import.meta.env.VITE_API_URL?.trim() || ''
 
 export const apiClient = axios.create({
   baseURL,
@@ -20,7 +20,7 @@ apiClient.interceptors.request.use((config) => {
 // Track in-flight refresh to avoid parallel refresh calls
 let refreshPromise: Promise<string> | null = null
 
-async function refreshAccessToken(): Promise<string> {
+export async function refreshAccessToken(): Promise<string> {
   const { refresh_token, setAuth, clearAuth } = useAuthStore.getState()
   if (!refresh_token) {
     clearAuth()

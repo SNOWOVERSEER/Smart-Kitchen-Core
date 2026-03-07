@@ -90,7 +90,7 @@ export function ChatPage() {
       <MessageList onConfirm={handleConfirm} onQuickAction={handleSend} />
 
       {/* Input */}
-      <ChatInput onSend={handleSend} onPhoto={supportsVision ? handlePhoto : undefined} disabled={isBusy} noVisionReason={!supportsVision} />
+      <ChatInput onSend={handleSend} onPhoto={supportsVision ? handlePhoto : undefined} onStop={agentMutation.isPending ? agentMutation.abort : undefined} disabled={isBusy} noVisionReason={!supportsVision} />
     </div>
   )
 }

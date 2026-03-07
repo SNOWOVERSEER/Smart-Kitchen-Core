@@ -15,7 +15,10 @@ export function MessageList({ onConfirm, onQuickAction }: MessageListProps) {
   const { t } = useTranslation()
   const { messages } = useChatStore()
   const bottomRef = useRef<HTMLDivElement>(null)
-  const isTyping = messages.some((m) => m.isTyping)
+  // Show generic typing indicator only when a message is typing but has no thinking steps or content
+  const isTyping = messages.some(
+    (m) => m.isTyping && !m.content && (!m.thinkingSteps || m.thinkingSteps.length === 0)
+  )
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })

@@ -1,6 +1,8 @@
+import { useRef, useCallback } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { useChatStore } from '../store'
-import { postAgentAction, postPhotoRecognize } from '../api'
+import i18n from '@/shared/lib/i18n'
+import { useChatStore, type ThinkingStep } from '../store'
+import { streamAgentAction, postPhotoRecognize } from '../api'
 import { queryClient } from '@/shared/lib/queryClient'
 import type { AgentActionRequest, PhotoRecognizeRequest } from '@/shared/lib/api.types'
 
@@ -11,7 +13,7 @@ function typewriterReveal(
 ) {
   let i = 0
   const interval = setInterval(() => {
-    i += 3 // reveal 3 chars per tick for speed
+    i += 3
     const revealed = fullText.slice(0, i)
     updateMessage(id, { content: revealed })
     if (i >= fullText.length) {
@@ -21,34 +23,135 @@ function typewriterReveal(
   }, 16)
 }
 
-export function useAgentAction() {
-  const { addMessage, updateMessage, removeMessage, setThreadId, thread_id } = useChatStore()
+/** Map graph node names to human-readable labels */
+const NODE_LABELS: Record<string, string> = {
+  handle_input: 'Processing input',
+  agent: 'Thinking',
+  execute_read: 'Searching inventory',
+  build_preview: 'Preparing preview',
+  execute_write: 'Executing changes',
+  respond: 'Composing response',
+}
 
-  return useMutation({
+const NODE_LABELS_ZH: Record<string, string> = {
+  handle_input: '处理输入',
+  agent: '思考中',
+  execute_read: '查询库存',
+  build_preview: '准备预览',
+  execute_write: '执行变更',
+  respond: '生成回复',
+}
+
+function getNodeLabel(node: string): string {
+  const labels = i18n.language?.startsWith('zh') ? NODE_LABELS_ZH : NODE_LABELS
+  return labels[node] ?? node
+}
+
+export function useAgentAction() {
+  const { addMessage, updateMessage, setThreadId, thread_id } = useChatStore()
+  const typingIdRef = useRef<string>('')
+  const startTimeRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const abort = useCallback(() => {
+    abortRef.current?.abort()
+  }, [])
+
+  const mutation = useMutation({
     mutationFn: async (req: AgentActionRequest) => {
-      return postAgentAction({ ...req, thread_id: req.thread_id ?? thread_id })
+      const msgId = typingIdRef.current
+      let thinkingAccumulated = ''
+      let responseAccumulated = ''
+      let isResponding = false
+      const steps: ThinkingStep[] = []
+
+      // rAF batching for smooth token rendering
+      let pendingTokens = ''
+      let rafId = 0
+      const flushTokens = () => {
+        if (pendingTokens) {
+          if (isResponding) {
+            responseAccumulated += pendingTokens
+            pendingTokens = ''
+            updateMessage(msgId, { content: responseAccumulated })
+          } else {
+            thinkingAccumulated += pendingTokens
+            pendingTokens = ''
+            updateMessage(msgId, { thinkingContent: thinkingAccumulated })
+          }
+        }
+        rafId = 0
+      }
+
+      const controller = new AbortController()
+      abortRef.current = controller
+
+      try {
+        return await streamAgentAction(
+          { ...req, thread_id: req.thread_id ?? thread_id },
+          {
+            onToken: (token) => {
+              pendingTokens += token
+              if (!rafId) {
+                rafId = requestAnimationFrame(flushTokens)
+              }
+            },
+            onText: (content) => {
+              // Flush any pending tokens first
+              if (rafId) {
+                cancelAnimationFrame(rafId)
+                rafId = 0
+              }
+              pendingTokens = ''
+              responseAccumulated = content
+              updateMessage(msgId, { content: responseAccumulated })
+            },
+            onNode: (node) => {
+              steps.push({ node, label: getNodeLabel(node), timestamp: Date.now() })
+              updateMessage(msgId, { thinkingSteps: [...steps] })
+            },
+            onResponding: () => {
+              // Backend signals: subsequent tokens are the final response
+              isResponding = true
+            },
+            onThreadId: (tid) => {
+              setThreadId(tid)
+            },
+          },
+          controller.signal,
+        )
+      } finally {
+        // Flush remaining tokens
+        if (rafId) cancelAnimationFrame(rafId)
+        if (pendingTokens) {
+          if (isResponding) {
+            responseAccumulated += pendingTokens
+            updateMessage(msgId, { content: responseAccumulated })
+          } else {
+            thinkingAccumulated += pendingTokens
+            updateMessage(msgId, { thinkingContent: thinkingAccumulated })
+          }
+        }
+        abortRef.current = null
+      }
     },
     onMutate: () => {
       const typingId = addMessage({ role: 'assistant', content: '', isTyping: true })
-      return { typingId, startTime: performance.now() }
+      typingIdRef.current = typingId
+      startTimeRef.current = performance.now()
     },
-    onSuccess: (data, _vars, context) => {
-      const { typingId, startTime } = context as { typingId: string; startTime: number }
-      const elapsedMs = Math.round(performance.now() - startTime)
-      setThreadId(data.thread_id)
-      removeMessage(typingId)
+    onSuccess: (data) => {
+      const msgId = typingIdRef.current
+      const elapsedMs = Math.round(performance.now() - startTimeRef.current)
 
-      const assistantId = addMessage({
-        role: 'assistant',
-        content: '',
-        isTyping: true,
+      updateMessage(msgId, {
+        content: data.response,
+        isTyping: false,
         status: data.status,
         pendingAction: data.pending_action ?? undefined,
         pendingRecipes: data.pending_recipes ?? undefined,
         elapsedMs,
       })
-
-      typewriterReveal(assistantId, data.response, updateMessage)
 
       if (data.status === 'completed') {
         void queryClient.invalidateQueries({ queryKey: ['inventory'] })
@@ -58,15 +161,18 @@ export function useAgentAction() {
         void queryClient.invalidateQueries({ queryKey: ['meals'] })
       }
     },
-    onError: (_error, _vars, context) => {
-      const { typingId } = context as { typingId: string }
-      removeMessage(typingId)
-      addMessage({
-        role: 'assistant',
-        content: 'Something went wrong. Please try again.', // fallback; i18n handled at UI layer
-      })
+    onError: () => {
+      const msgId = typingIdRef.current
+      if (msgId) {
+        updateMessage(msgId, {
+          content: 'Something went wrong. Please try again.',
+          isTyping: false,
+        })
+      }
     },
   })
+
+  return { ...mutation, abort }
 }
 
 export function usePhotoRecognize() {

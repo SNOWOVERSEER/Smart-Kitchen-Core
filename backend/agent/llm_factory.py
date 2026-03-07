@@ -47,12 +47,14 @@ def _build_llm(user_id: str) -> BaseChatModel:
                 api_key=api_key,
                 model=config["model_id"],
                 temperature=0,
+                streaming=True,
             )
         elif config["provider"] == "anthropic":
             return ChatAnthropic(
                 api_key=api_key,
                 model=config["model_id"],
                 temperature=0,
+                streaming=True,
             )
         elif config["provider"] == "minimax":
             return ChatAnthropic(
@@ -60,6 +62,7 @@ def _build_llm(user_id: str) -> BaseChatModel:
                 anthropic_api_url="https://api.minimax.io/anthropic",
                 model=config["model_id"],
                 temperature=0,
+                streaming=True,
             )
         elif config["provider"] == "minimax_cn":
             return ChatAnthropic(
@@ -67,6 +70,7 @@ def _build_llm(user_id: str) -> BaseChatModel:
                 anthropic_api_url="https://api.minimaxi.com/anthropic",
                 model=config["model_id"],
                 temperature=0,
+                streaming=True,
             )
 
     # Fallback to server default
@@ -75,6 +79,7 @@ def _build_llm(user_id: str) -> BaseChatModel:
             api_key=DEFAULT_OPENAI_API_KEY,
             model="gpt-4o",
             temperature=0,
+            streaming=True,
         )
 
     raise ValueError("No AI provider configured. Please add an API key in settings.")

@@ -1,6 +1,7 @@
 """FastAPI application with Supabase Auth and multi-user support."""
 
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from auth import get_current_user
@@ -35,7 +36,7 @@ from schemas import (
 )
 from barcode import lookup_barcode
 from photo_recognize import recognize_image, build_agent_text_from_items
-from agent import run_agent
+from agent import run_agent, run_agent_stream
 from config import FRONTEND_URL
 from services import (
     add_inventory_item,
@@ -446,6 +447,21 @@ def agent_action(request: AgentActionRequest, user_id: str = Depends(get_current
         pending_action=pending,
         tool_calls=result.get("tool_calls", []),
         pending_recipes=result.get("pending_recipes"),
+    )
+
+
+@app.post("/api/v1/agent/stream")
+def agent_stream(request: AgentActionRequest, user_id: str = Depends(get_current_user)):
+    """SSE streaming endpoint for the AI agent. Same input as /agent/action."""
+    return StreamingResponse(
+        run_agent_stream(
+            text=request.text,
+            user_id=user_id,
+            thread_id=request.thread_id,
+            confirm_action=request.confirm,
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

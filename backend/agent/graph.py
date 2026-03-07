@@ -1,11 +1,16 @@
 """LangGraph construction for the Kitchen Loop AI tool-calling agent."""
 
+import json
+import queue
+import threading
 import uuid
-from typing import Any
+from typing import Any, Generator
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import SystemMessage
 from langgraph.graph import StateGraph, END
 
+from database import _current_access_token
 from agent.state import AgentState
 from agent.nodes import (
     handle_input,
@@ -128,69 +133,107 @@ def _serialize_messages(messages: list) -> list[dict]:
     return serialized
 
 
+def _build_input_state(
+    text: str,
+    user_id: str,
+    thread_id: str,
+    confirm_action: bool | None,
+) -> dict[str, Any]:
+    """Build the graph input state from request params + checkpoint."""
+    existing_state = checkpointer.get(thread_id)
+
+    input_text = ("confirm" if confirm_action else "cancel") if confirm_action is not None else text
+
+    input_state: dict[str, Any] = {}
+    if existing_state:
+        input_state["messages"] = existing_state.get("messages", [])
+        input_state["pending_writes"] = existing_state.get("pending_writes")
+        input_state["pending_recipes"] = existing_state.get("pending_recipes")
+        input_state["status"] = existing_state.get("agent_status", "processing")
+    else:
+        input_state["messages"] = []
+
+    has_system = any(
+        isinstance(m, SystemMessage) or (isinstance(m, dict) and m.get("role") == "system")
+        for m in input_state["messages"]
+    )
+    if not has_system:
+        from agent.nodes import _get_user_language
+        user_lang = _get_user_language(user_id)
+        if any("\u4e00" <= c <= "\u9fff" for c in input_text):
+            user_lang = "zh"
+        system_msg = {"role": "system", "content": get_system_prompt(user_lang)}
+        input_state["messages"] = [system_msg] + input_state["messages"]
+
+    input_state["messages"] = input_state["messages"] + [
+        {"role": "user", "content": input_text}
+    ]
+    input_state["user_id"] = user_id
+    return input_state
+
+
+def _build_response(result: dict, thread_id: str) -> dict:
+    """Build the API response dict from graph result + save checkpoint."""
+    response = result.get("response", "")
+    status = result.get("status", "completed")
+    pending_writes = result.get("pending_writes")
+    tool_calls_log = result.get("tool_calls_log", [])
+    pending_recipes = result.get("pending_recipes")
+
+    # Save checkpoint
+    messages_to_save = _serialize_messages(result.get("messages", []))
+    checkpoint = {
+        "messages": messages_to_save,
+        "pending_writes": pending_writes,
+        "pending_recipes": pending_recipes,
+        "agent_status": status,
+        "user_id": result.get("user_id", ""),
+    }
+    checkpointer.put(thread_id, result.get("user_id", ""), checkpoint)
+
+    # Build pending_action for frontend
+    pending_dict = None
+    if pending_writes:
+        intent_map = {
+            "add_item": "ADD",
+            "consume_item": "CONSUME",
+            "discard_batch": "DISCARD",
+            "update_item": "UPDATE",
+        }
+        pending_dict = {
+            "items": [
+                {
+                    "index": i,
+                    "intent": intent_map.get(pw["tool"], pw["tool"].upper()),
+                    "extracted_info": pw["args"],
+                    "missing_fields": [],
+                }
+                for i, pw in enumerate(pending_writes)
+            ],
+            "confirmation_message": result.get("preview_message", ""),
+        }
+
+    return {
+        "response": response,
+        "thread_id": thread_id,
+        "status": status,
+        "pending_action": pending_dict,
+        "tool_calls": tool_calls_log,
+        "pending_recipes": pending_recipes,
+    }
+
+
 def run_agent(
     text: str,
     user_id: str,
     thread_id: str | None = None,
     confirm_action: bool | None = None,
 ) -> dict:
-    """
-    Run the agent with user input, scoped to a specific user.
-
-    Args:
-        text: User's natural language input
-        user_id: Authenticated user's UUID
-        thread_id: Thread ID for conversation continuity (None = new conversation)
-        confirm_action: Explicit confirmation (True/False) or None for natural language
-
-    Returns:
-        dict with response, thread_id, status, pending_action, tool_calls
-    """
+    """Run the agent synchronously (blocking). Returns full result dict."""
     if not thread_id:
         thread_id = str(uuid.uuid4())
 
-    # Load existing state from checkpoint
-    existing_state = checkpointer.get(thread_id)
-
-    # Build input text
-    if confirm_action is not None:
-        input_text = "confirm" if confirm_action else "cancel"
-    else:
-        input_text = text
-
-    # Build input state
-    input_state: dict[str, Any] = {}
-
-    if existing_state:
-        # Restore saved state
-        saved_messages = existing_state.get("messages", [])
-        input_state["messages"] = saved_messages
-        input_state["pending_writes"] = existing_state.get("pending_writes")
-        input_state["pending_recipes"] = existing_state.get("pending_recipes")
-        # Use agent_status (not DB status) to avoid collision
-        input_state["status"] = existing_state.get("agent_status", "processing")
-    else:
-        input_state["messages"] = []
-
-    # Ensure system message is first (Fix 1: correct ordering)
-    has_system = any(
-        isinstance(m, SystemMessage) or (isinstance(m, dict) and m.get("role") == "system")
-        for m in input_state["messages"]
-    )
-    if not has_system:
-        from agent.nodes import _detect_language, _get_user_language
-        user_lang = _get_user_language(user_id)
-        # Detect language from current input
-        if any("\u4e00" <= c <= "\u9fff" for c in input_text):
-            user_lang = "zh"
-        system_msg = {"role": "system", "content": get_system_prompt(user_lang)}
-        input_state["messages"] = [system_msg] + input_state["messages"]
-
-    # Append new user message
-    input_state["messages"] = input_state["messages"] + [
-        {"role": "user", "content": input_text}
-    ]
-    input_state["user_id"] = user_id
+    input_state = _build_input_state(text, user_id, thread_id, confirm_action)
 
     try:
         result = _compiled_app.invoke(input_state, config={"recursion_limit": 25})
@@ -206,64 +249,176 @@ def run_agent(
             "tool_calls": [],
         }
 
-    response = result.get("response", "")
-    status = result.get("status", "completed")
-    pending_writes = result.get("pending_writes")
-    tool_calls_log = result.get("tool_calls_log", [])
+    return _build_response(result, thread_id)
 
-    # Serialize messages for checkpoint
-    messages_to_save = _serialize_messages(result.get("messages", []))
 
-    # Save checkpoint — keep thread active for multi-turn continuity.
-    # Threads stay active so consecutive interactions share conversation context.
-    # Only explicit frontend reset (new thread_id=None) starts a fresh thread.
-    pending_recipes = result.get("pending_recipes")
-    checkpoint = {
-        "messages": messages_to_save,
-        "pending_writes": pending_writes,
-        "pending_recipes": pending_recipes,
-        "agent_status": status,
-        "user_id": user_id,
-    }
-    checkpointer.put(thread_id, user_id, checkpoint)
-    if pending_recipes:
-        print(f"[CHECKPOINT] Thread {thread_id} active with {len(pending_recipes)} pending recipes")
-    elif status == "completed":
-        print(f"[CHECKPOINT] Thread {thread_id} turn completed, thread stays active")
+def _sse(event: str, data: dict) -> str:
+    """Format a Server-Sent Event."""
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-    # Build pending_action for API response (matches frontend schema)
-    pending_dict = None
-    if pending_writes:
-        items = []
-        for i, pw in enumerate(pending_writes):
-            tool_name = pw["tool"]
-            args = pw["args"]
 
-            # Map tool name to intent for frontend compatibility
-            intent_map = {
-                "add_item": "ADD",
-                "consume_item": "CONSUME",
-                "discard_batch": "DISCARD",
-                "update_item": "UPDATE",
-            }
+class _TokenQueueHandler(BaseCallbackHandler):
+    """LangChain callback that pushes LLM tokens into a thread-safe queue.
 
-            items.append({
-                "index": i,
-                "intent": intent_map.get(tool_name, tool_name.upper()),
-                "extracted_info": args,
-                "missing_fields": [],
+    Coerces token to plain string — Anthropic streaming with tool calls
+    may pass content block dicts instead of plain strings.
+    """
+
+    def __init__(self, token_queue: queue.Queue[dict]) -> None:
+        super().__init__()
+        self.queue = token_queue
+
+    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        # Coerce to plain string (Anthropic may send content block dicts)
+        if isinstance(token, dict):
+            text = token.get("text", "") if token.get("type") == "text" else ""
+        elif isinstance(token, str):
+            text = token
+        else:
+            text = str(token) if token else ""
+        if text:
+            self.queue.put({"type": "token", "content": text})
+
+
+# Sentinel to signal the background thread is done
+_STREAM_DONE = "___DONE___"
+
+
+def run_agent_stream(
+    text: str,
+    user_id: str,
+    thread_id: str | None = None,
+    confirm_action: bool | None = None,
+) -> Generator[str, None, None]:
+    """Run the agent with real per-token SSE streaming.
+
+    Yields SSE events:
+      event: thread_id  — thread ID for frontend tracking
+      event: node       — graph node completed (for progress indication)
+      event: token      — individual LLM token (real-time character streaming)
+      event: responding — signals frontend to switch tokens into main content bubble
+      event: done       — final structured payload (same shape as AgentActionResponse)
+
+    Implementation: runs the graph in a background thread with a LangChain
+    callback handler that pushes tokens to a queue. The main generator reads
+    from the queue and yields SSE events.
+    """
+    if not thread_id:
+        thread_id = str(uuid.uuid4())
+
+    input_state = _build_input_state(text, user_id, thread_id, confirm_action)
+
+    # Yield thread_id immediately so frontend can track it
+    yield _sse("thread_id", {"thread_id": thread_id})
+
+    token_queue: queue.Queue[dict] = queue.Queue()
+    result_holder: list[dict[str, Any]] = []
+    error_holder: list[Exception] = []
+    cancel_event = threading.Event()
+
+    # Capture the auth context from the request thread so the worker
+    # thread can re-set it (contextvars don't propagate to new threads).
+    request_token = _current_access_token.get()
+
+    def _run_graph() -> None:
+        """Run the graph in a background thread, pushing events to the queue."""
+        # Propagate auth context into this thread
+        if request_token:
+            _current_access_token.set(request_token)
+
+        try:
+            handler = _TokenQueueHandler(token_queue)
+            last_state: dict[str, Any] = {}
+
+            for node_output in _compiled_app.stream(
+                input_state,
+                config={"recursion_limit": 25, "callbacks": [handler]},
+            ):
+                if cancel_event.is_set():
+                    break
+
+                for node_name, state_update in node_output.items():
+                    token_queue.put({"type": "node", "node": node_name})
+                    if not state_update:
+                        continue
+
+                    last_state.update(state_update)
+
+                    # When a node produces the final response, signal the
+                    # frontend to switch to "content" mode and re-emit the
+                    # text as small token chunks for smooth main-bubble streaming.
+                    resp_text = state_update.get("response")
+                    if resp_text:
+                        token_queue.put({"type": "responding"})
+                        chunk_size = 4
+                        for ci in range(0, len(resp_text), chunk_size):
+                            token_queue.put({"type": "token", "content": resp_text[ci:ci + chunk_size]})
+
+            merged = {**input_state, **last_state}
+            result_holder.append(merged)
+        except Exception as e:
+            error_holder.append(e)
+        finally:
+            token_queue.put({"type": _STREAM_DONE})
+
+    # Start graph execution in background thread
+    worker = threading.Thread(target=_run_graph, daemon=True)
+    worker.start()
+
+    # Main generator: read from queue and yield SSE events
+    try:
+        while True:
+            try:
+                event = token_queue.get(timeout=120)
+            except queue.Empty:
+                cancel_event.set()
+                yield _sse("done", {
+                    "response": "Request timed out.",
+                    "thread_id": thread_id,
+                    "status": "error",
+                    "pending_action": None,
+                    "tool_calls": [],
+                    "pending_recipes": None,
+                })
+                return
+
+            if event["type"] == _STREAM_DONE:
+                break
+            elif event["type"] == "token":
+                yield _sse("token", {"content": event["content"]})
+            elif event["type"] == "node":
+                yield _sse("node", {"node": event["node"]})
+            elif event["type"] == "responding":
+                yield _sse("responding", {})
+
+        # Thread finished — build and yield final response
+        if error_holder:
+            e = error_holder[0]
+            print(f"[ERROR] Stream graph execution failed: {e}")
+            import traceback
+            traceback.print_exc()
+            yield _sse("done", {
+                "response": f"Error: {str(e)}",
+                "thread_id": thread_id,
+                "status": "error",
+                "pending_action": None,
+                "tool_calls": [],
+                "pending_recipes": None,
             })
-
-        pending_dict = {
-            "items": items,
-            "confirmation_message": result.get("preview_message", ""),
-        }
-
-    return {
-        "response": response,
-        "thread_id": thread_id,
-        "status": status,
-        "pending_action": pending_dict,
-        "tool_calls": tool_calls_log,
-        "pending_recipes": result.get("pending_recipes"),
-    }
+        elif result_holder:
+            final = _build_response(result_holder[0], thread_id)
+            yield _sse("done", final)
+        else:
+            yield _sse("done", {
+                "response": "No response from agent.",
+                "thread_id": thread_id,
+                "status": "error",
+                "pending_action": None,
+                "tool_calls": [],
+                "pending_recipes": None,
+            })
+    except GeneratorExit:
+        # Client disconnected — signal the worker to stop
+        cancel_event.set()
+    finally:
+        worker.join(timeout=5)

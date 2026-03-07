@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import type { AgentStatus, PendingActionResponse, RecipeCard } from '@/shared/lib/api.types'
 
+export interface ThinkingStep {
+  node: string
+  label: string
+  timestamp: number
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -12,6 +18,8 @@ export interface Message {
   isTyping?: boolean
   confirmed?: 'yes' | 'no'
   elapsedMs?: number
+  thinkingSteps?: ThinkingStep[]
+  thinkingContent?: string
 }
 
 interface ChatState {
