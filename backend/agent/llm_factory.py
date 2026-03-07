@@ -12,7 +12,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 
-from config import DEFAULT_OPENAI_API_KEY
+from config import PLATFORM_API_KEY, PLATFORM_MODEL
 from database import get_supabase_client
 
 # Cache: { user_id: (llm_instance, expiry_timestamp) }
@@ -73,11 +73,11 @@ def _build_llm(user_id: str) -> BaseChatModel:
                 streaming=True,
             )
 
-    # Fallback to server default
-    if DEFAULT_OPENAI_API_KEY:
+    # Fallback to platform key for Free/Supporter users
+    if PLATFORM_API_KEY:
         return ChatOpenAI(
-            api_key=DEFAULT_OPENAI_API_KEY,
-            model="gpt-4o",
+            api_key=PLATFORM_API_KEY,
+            model=PLATFORM_MODEL,
             temperature=0,
             streaming=True,
         )

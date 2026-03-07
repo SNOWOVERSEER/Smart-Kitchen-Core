@@ -14,3 +14,12 @@ SUPABASE_SECRET_KEY: str | None = os.getenv("SUPABASE_SECRET_KEY") or os.getenv(
 DEFAULT_OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
 
 FRONTEND_URL: str | None = os.getenv("FRONTEND_URL")
+
+# Platform LLM key for Free/Supporter users
+PLATFORM_API_KEY: str | None = os.getenv("PLATFORM_API_KEY") or DEFAULT_OPENAI_API_KEY
+PLATFORM_MODEL: str = os.getenv("PLATFORM_MODEL", "gpt-4.1-mini")
+
+# Stripe
+STRIPE_SECRET_KEY: str | None = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET: str | None = os.getenv("STRIPE_WEBHOOK_SECRET")
+STRIPE_PRICE_ID: str | None = os.getenv("STRIPE_PRICE_ID")
