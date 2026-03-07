@@ -75,7 +75,7 @@ export function LandingPricing() {
         >
           <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-white/10 blur-3xl" />
           <h3 className="text-2xl mb-2 relative z-10" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>
-            Kitchen Loop Member
+            Kitchen Loop AI Member
           </h3>
           <div className="text-4xl font-bold mb-6 relative z-10">
             $5<span className="text-lg font-normal text-white/65">/month</span>

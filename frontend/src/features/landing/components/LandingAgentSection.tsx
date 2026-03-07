@@ -116,7 +116,7 @@ export function LandingAgentSection() {
             <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
             <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
             <div className="ml-3 flex-1 h-5 rounded bg-white/60 flex items-center px-2.5">
-              <span className="text-[10px] font-mono" style={{ color: 'var(--lp-ink-muted)' }}>Kitchen Loop Agent</span>
+              <span className="text-[10px] font-mono" style={{ color: 'var(--lp-ink-muted)' }}>Kitchen Loop AI Agent</span>
             </div>
           </div>
 

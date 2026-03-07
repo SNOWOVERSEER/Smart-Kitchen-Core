@@ -119,7 +119,7 @@ export function LandingInventorySection() {
             style={{ y: chatY, opacity: chatOp }}
             className="absolute w-80 bg-[#111] rounded-[1.5rem] p-5 shadow-2xl border border-white/10"
           >
-            <div className="text-xs text-white/40 mb-3 font-mono">Kitchen Loop Agent</div>
+            <div className="text-xs text-white/40 mb-3 font-mono">Kitchen Loop AI Agent</div>
             <div className="flex flex-col gap-2.5 text-sm">
               <div className="text-white/80 bg-white/10 rounded-xl rounded-tl-sm px-3.5 py-2.5 w-fit">
                 Add 2L A2 Milk to fridge, expires Feb 28

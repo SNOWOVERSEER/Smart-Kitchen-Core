@@ -68,7 +68,7 @@ from services import (
 )
 
 
-app = FastAPI(title="Kitchen Loop Core")
+app = FastAPI(title="Kitchen Loop AI")
 
 allowed_origins = [
     "http://localhost:5173",
@@ -91,7 +91,7 @@ app.add_middleware(
 
 @app.get("/")
 def health_check():
-    return {"status": "online", "service": "Kitchen Loop Core"}
+    return {"status": "online", "service": "Kitchen Loop AI"}
 
 
 # ── Auth Endpoints ──

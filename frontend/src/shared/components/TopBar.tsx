@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect } from 'react'
-import { Bell, Search, ChefHat, type LucideIcon } from 'lucide-react'
+import { Bell, Search, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import {
@@ -55,7 +55,7 @@ export function TopBar({
   const displayName = profile?.display_name ?? ''
   const initials = displayName.trim()
     ? displayName.trim().split(/\s+/).map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-    : (email ? email.slice(0, 2).toUpperCase() : 'KL')
+    : (email ? email.slice(0, 2).toUpperCase() : 'AI')
 
   const handleLogout = async () => {
     try {
@@ -129,44 +129,50 @@ export function TopBar({
     )
   }
 
-  const MobileIcon = MobileIconProp ?? ChefHat
+  const MobileIcon = MobileIconProp
   const mobileLeadLabel = title ?? t('nav.brand')
   const brandLabel = t('nav.brand')
   const showBrandLine = mobileLeadLabel !== brandLabel
   const mobileLead = (
     <div className="flex items-center gap-2 shrink-0 min-w-0">
-      <div
-        className={cn(
-          'rounded-lg flex items-center justify-center shrink-0',
-          showBrandLine
-            ? 'w-9 h-9 [@media(max-width:380px)]:w-8 [@media(max-width:380px)]:h-8'
-            : 'w-7 h-7'
-        )}
-        style={{ backgroundColor: '#C97B5C' }}
-      >
-        <MobileIcon
+      {MobileIcon && (
+        <div
           className={cn(
-            'text-white',
+            'rounded-lg flex items-center justify-center shrink-0',
             showBrandLine
-              ? 'w-[18px] h-[18px] [@media(max-width:380px)]:w-4 [@media(max-width:380px)]:h-4'
-              : 'w-4 h-4'
+              ? 'w-9 h-9 [@media(max-width:380px)]:w-8 [@media(max-width:380px)]:h-8'
+              : 'w-7 h-7'
           )}
-        />
-      </div>
+          style={{ backgroundColor: '#C97B5C' }}
+        >
+          <MobileIcon
+            className={cn(
+              'text-white',
+              showBrandLine
+                ? 'w-[18px] h-[18px] [@media(max-width:380px)]:w-4 [@media(max-width:380px)]:h-4'
+                : 'w-4 h-4'
+            )}
+          />
+        </div>
+      )}
       <div className="min-w-0">
         {showBrandLine && (
-          <p className="text-[9px] leading-none font-semibold tracking-[0.11em] uppercase text-stone-400 [@media(max-width:380px)]:text-[8px]">
+          <p className="text-[10px] leading-none font-semibold tracking-[0.11em] uppercase text-stone-400 [@media(max-width:380px)]:text-[9px] flex items-center gap-1">
             {brandLabel}
+            <span className="text-[6.5px] font-bold text-white w-3 h-3 rounded-[3px] flex items-center justify-center leading-none tracking-normal normal-case" style={{ backgroundColor: '#C97B5C' }}>AI</span>
           </p>
         )}
         <p
           className={cn(
-            'text-foreground truncate',
+            'text-foreground truncate flex items-center gap-1',
             showBrandLine ? 'text-[1.03rem] [@media(max-width:380px)]:text-[0.98rem] leading-tight mt-0.5' : 'text-base'
           )}
           style={{ fontFamily: '"DM Serif Display", Georgia, serif' }}
         >
           {mobileLeadLabel}
+          {!showBrandLine && (
+            <span className="text-[7px] font-bold text-white w-3.5 h-3.5 rounded flex items-center justify-center leading-none shrink-0" style={{ backgroundColor: '#C97B5C', fontFamily: 'Inter, sans-serif' }}>AI</span>
+          )}
         </p>
       </div>
     </div>

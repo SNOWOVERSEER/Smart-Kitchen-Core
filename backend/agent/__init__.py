@@ -1,4 +1,4 @@
-"""Kitchen Loop AI Agent module using LangGraph."""
+"""Kitchen Loop AI agent module using LangGraph."""
 
 from agent.graph import run_agent
 

@@ -1,6 +1,6 @@
 import type { ElementType } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
-import { LayoutDashboard, History, ScanBarcode, Settings, ChefHat, UtensilsCrossed, ShoppingCart, CalendarDays } from 'lucide-react'
+import { LayoutDashboard, History, ScanBarcode, Settings, UtensilsCrossed, ShoppingCart, CalendarDays } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
@@ -21,16 +21,12 @@ export function Sidebar() {
 
   return (
     <aside className="hidden lg:flex flex-col items-center w-20 h-full bg-card py-6 gap-2 shrink-0 shadow-[2px_0_12px_rgba(28,22,18,0.06)]">
-      {/* Logo + brand name */}
-      <div className="flex flex-col items-center gap-1 mb-4">
-        <div
-          className="flex items-center justify-center w-10 h-10 rounded-xl"
-          style={{ backgroundColor: '#C97B5C' }}
-        >
-          <ChefHat className="w-5 h-5 text-white" />
-        </div>
-        <span className="text-[8px] uppercase tracking-widest text-muted-foreground leading-tight text-center">
-          Kitchen<br />Loop
+      {/* Brand mark */}
+      <div className="flex flex-col items-center mb-4">
+        <span className="text-[11px] font-bold leading-tight tracking-tight text-foreground" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>Kitchen</span>
+        <span className="flex items-center gap-0.5">
+          <span className="text-[11px] font-bold leading-tight tracking-tight text-foreground" style={{ fontFamily: '"Playfair Display", Georgia, serif' }}>Loop</span>
+          <span className="text-[6px] font-bold text-white w-3 h-3 rounded flex items-center justify-center leading-none" style={{ backgroundColor: '#C97B5C' }}>AI</span>
         </span>
       </div>
 

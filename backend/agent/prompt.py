@@ -1,4 +1,4 @@
-"""System prompt for the Kitchen Loop tool-calling agent."""
+"""System prompt for the Kitchen Loop AI tool-calling agent."""
 
 from datetime import date
 

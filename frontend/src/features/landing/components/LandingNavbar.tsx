@@ -22,18 +22,21 @@ export function LandingNavbar() {
     >
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
         {/* Logo */}
-        <div className="flex items-center gap-2">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold"
-            style={{ backgroundColor: 'var(--lp-brand)' }}
-          >
-            KL
-          </div>
+        <div className="flex items-baseline gap-1.5">
           <span
             className="text-xl font-bold tracking-tight"
             style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
           >
-            Kitchen Loop
+            Kitchen
+          </span>
+          <span className="flex items-center gap-1">
+            <span
+              className="text-xl font-bold tracking-tight"
+              style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
+            >
+              Loop
+            </span>
+            <span className="text-[8px] font-bold text-white w-4 h-4 rounded flex items-center justify-center leading-none" style={{ backgroundColor: 'var(--lp-brand)' }}>AI</span>
           </span>
         </div>
 
