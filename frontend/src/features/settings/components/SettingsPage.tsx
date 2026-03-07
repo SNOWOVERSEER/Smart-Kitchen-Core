@@ -20,6 +20,7 @@ import {
   getSubscription,
   createCheckoutSession,
   createPortalSession,
+  buyCredits,
   redeemVoucher,
 } from '../subscriptionApi'
 import { getAIConfigs, addAIConfig, deleteAIConfig, activateProvider } from '../api'
@@ -488,9 +489,23 @@ function SubscriptionTab() {
         hasApiKey: sub.has_api_key,
         trialEndsAt: sub.trial_ends_at,
         currentPeriodEnd: sub.current_period_end,
+        paymentFailed: sub.payment_failed ?? false,
       })
     }
   }, [sub, setSubscription])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.has('session_id') || params.has('credits_purchased')) {
+      void queryClient.invalidateQueries({ queryKey: ['subscription'] })
+      toast.success(
+        params.has('credits_purchased')
+          ? t('subscription.creditsPurchased')
+          : t('subscription.checkoutSuccess')
+      )
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [t])
 
   const handleCheckout = async () => {
     try {
@@ -507,6 +522,15 @@ function SubscriptionTab() {
       window.location.href = url
     } catch {
       toast.error(t('subscription.portalError'))
+    }
+  }
+
+  const handleBuyCredits = async () => {
+    try {
+      const url = await buyCredits(email ?? undefined)
+      window.location.href = url
+    } catch {
+      toast.error(t('subscription.checkoutError'))
     }
   }
 
@@ -561,6 +585,11 @@ function SubscriptionTab() {
 
       {/* Tier badge + credits */}
       <div className="rounded-xl border border-border bg-card p-5 mb-6">
+        {sub?.payment_failed && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 mb-4 text-sm text-red-800">
+            {t('subscription.paymentFailed')}
+          </div>
+        )}
         <div className="flex items-center gap-3 mb-4">
           <span className={cn(
             'inline-flex items-center text-xs font-semibold rounded-full px-2.5 py-1 border',
@@ -618,6 +647,16 @@ function SubscriptionTab() {
           <div>
             <Button variant="outline" onClick={handlePortal} className="h-9">
               {t('subscription.manageSubscription')}
+            </Button>
+          </div>
+        )}
+
+        {tier !== 'byok' && (
+          <div>
+            <p className="text-sm font-medium text-foreground mb-1">{t('subscription.buyCredits')}</p>
+            <p className="text-xs text-muted-foreground mb-3">{t('subscription.buyCreditsDescription')}</p>
+            <Button variant="outline" onClick={handleBuyCredits} className="h-9">
+              {t('subscription.buyCredits')}
             </Button>
           </div>
         )}

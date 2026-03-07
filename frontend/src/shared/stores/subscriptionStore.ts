@@ -8,6 +8,7 @@ export interface SubscriptionState {
   hasApiKey: boolean
   trialEndsAt: string | null
   currentPeriodEnd: string | null
+  paymentFailed: boolean
   loaded: boolean
   setSubscription: (data: Omit<SubscriptionState, 'loaded' | 'setSubscription' | 'decrementCredit' | 'clearSubscription'>) => void
   decrementCredit: () => void
@@ -22,6 +23,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
   hasApiKey: false,
   trialEndsAt: null,
   currentPeriodEnd: null,
+  paymentFailed: false,
   loaded: false,
 
   setSubscription: (data) => set({ ...data, loaded: true }),
@@ -49,6 +51,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
       hasApiKey: false,
       trialEndsAt: null,
       currentPeriodEnd: null,
+      paymentFailed: false,
       loaded: false,
     }),
 }))

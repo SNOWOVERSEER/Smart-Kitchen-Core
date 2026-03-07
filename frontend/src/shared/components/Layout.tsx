@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar'
 import { BottomNav } from './BottomNav'
 import { FABChatButton } from './FABChatButton'
 import { PaywallDialog } from './PaywallDialog'
+import { TrialExpiryBanner } from './TrialExpiryBanner'
 import { ChatDrawer } from '@/features/chat/components/ChatDrawer'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useSubscriptionStore } from '@/shared/stores/subscriptionStore'
@@ -34,6 +35,7 @@ export function Layout({ children }: LayoutProps) {
             hasApiKey: sub.has_api_key,
             trialEndsAt: sub.trial_ends_at,
             currentPeriodEnd: sub.current_period_end,
+            paymentFailed: sub.payment_failed ?? false,
           })
         })
         .catch(() => {
@@ -49,6 +51,8 @@ export function Layout({ children }: LayoutProps) {
 
       {/* Right panel — `relative` anchors the chat overlay */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden relative">
+
+        <TrialExpiryBanner />
 
         {/*
           Permanent flex-1 spacer with inner page slot.

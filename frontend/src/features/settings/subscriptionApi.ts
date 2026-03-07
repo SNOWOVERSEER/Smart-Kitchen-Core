@@ -8,6 +8,7 @@ export interface SubscriptionData {
   has_api_key: boolean
   trial_ends_at: string | null
   current_period_end: string | null
+  payment_failed?: boolean
 }
 
 export async function getSubscription(): Promise<SubscriptionData> {
@@ -28,6 +29,11 @@ export async function createPortalSession(): Promise<string> {
     '/api/v1/subscription/portal',
   )
   return response.data.portal_url
+}
+
+export async function buyCredits(email?: string): Promise<string> {
+  const { data } = await apiClient.post<{ checkout_url: string }>('/api/v1/subscription/buy-credits', { email })
+  return data.checkout_url
 }
 
 export async function redeemVoucher(code: string): Promise<{

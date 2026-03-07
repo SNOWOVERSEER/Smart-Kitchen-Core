@@ -22,6 +22,7 @@ import { Route as ProtectedHistoryRouteImport } from './routes/_protected.histor
 import { Route as ProtectedDashboardRouteImport } from './routes/_protected.dashboard'
 import { Route as ProtectedChatRouteImport } from './routes/_protected.chat'
 import { Route as ProtectedBarcodeRouteImport } from './routes/_protected.barcode'
+import { Route as ProtectedAdminRouteImport } from './routes/_protected.admin'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -87,11 +88,17 @@ const ProtectedBarcodeRoute = ProtectedBarcodeRouteImport.update({
   path: '/barcode',
   getParentRoute: () => ProtectedRoute,
 } as any)
+const ProtectedAdminRoute = ProtectedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => ProtectedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/admin': typeof ProtectedAdminRoute
   '/barcode': typeof ProtectedBarcodeRoute
   '/chat': typeof ProtectedChatRoute
   '/dashboard': typeof ProtectedDashboardRoute
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/admin': typeof ProtectedAdminRoute
   '/barcode': typeof ProtectedBarcodeRoute
   '/chat': typeof ProtectedChatRoute
   '/dashboard': typeof ProtectedDashboardRoute
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   '/_protected': typeof ProtectedRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/_protected/admin': typeof ProtectedAdminRoute
   '/_protected/barcode': typeof ProtectedBarcodeRoute
   '/_protected/chat': typeof ProtectedChatRoute
   '/_protected/dashboard': typeof ProtectedDashboardRoute
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/signup'
+    | '/admin'
     | '/barcode'
     | '/chat'
     | '/dashboard'
@@ -152,6 +162,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/signup'
+    | '/admin'
     | '/barcode'
     | '/chat'
     | '/dashboard'
@@ -167,6 +178,7 @@ export interface FileRouteTypes {
     | '/_protected'
     | '/login'
     | '/signup'
+    | '/_protected/admin'
     | '/_protected/barcode'
     | '/_protected/chat'
     | '/_protected/dashboard'
@@ -279,10 +291,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedBarcodeRouteImport
       parentRoute: typeof ProtectedRoute
     }
+    '/_protected/admin': {
+      id: '/_protected/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof ProtectedAdminRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
   }
 }
 
 interface ProtectedRouteChildren {
+  ProtectedAdminRoute: typeof ProtectedAdminRoute
   ProtectedBarcodeRoute: typeof ProtectedBarcodeRoute
   ProtectedChatRoute: typeof ProtectedChatRoute
   ProtectedDashboardRoute: typeof ProtectedDashboardRoute
@@ -294,6 +314,7 @@ interface ProtectedRouteChildren {
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
+  ProtectedAdminRoute: ProtectedAdminRoute,
   ProtectedBarcodeRoute: ProtectedBarcodeRoute,
   ProtectedChatRoute: ProtectedChatRoute,
   ProtectedDashboardRoute: ProtectedDashboardRoute,

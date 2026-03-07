@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from '@tanstack/react-router'
-import { Key, Heart, Gift } from 'lucide-react'
+import { Key, Heart, Gift, CreditCard } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useSubscriptionStore } from '@/shared/stores/subscriptionStore'
-import { createCheckoutSession, redeemVoucher, getSubscription } from '@/features/settings/subscriptionApi'
+import { createCheckoutSession, buyCredits, redeemVoucher, getSubscription } from '@/features/settings/subscriptionApi'
 import toast from 'react-hot-toast'
 
 export function PaywallDialog() {
@@ -52,6 +52,15 @@ export function PaywallDialog() {
     }
   }
 
+  const handleBuyCredits = async () => {
+    try {
+      const url = await buyCredits(email ?? undefined)
+      window.location.href = url
+    } catch {
+      toast.error(t('paywall.checkoutError'))
+    }
+  }
+
   const handleRedeem = async () => {
     if (!code.trim()) return
     setRedeeming(true)
@@ -68,6 +77,7 @@ export function PaywallDialog() {
         hasApiKey: sub.has_api_key,
         trialEndsAt: sub.trial_ends_at,
         currentPeriodEnd: sub.current_period_end,
+        paymentFailed: sub.payment_failed ?? false,
       })
       setOpen(false)
     } catch {
@@ -119,6 +129,18 @@ export function PaywallDialog() {
               </Button>
             </>
           )}
+
+          <Button
+            variant="outline"
+            className="justify-start gap-3 h-auto py-3 px-4"
+            onClick={handleBuyCredits}
+          >
+            <CreditCard className="w-4 h-4 shrink-0" />
+            <div className="text-left">
+              <p className="text-sm font-medium">{t('subscription.buyCredits')}</p>
+              <p className="text-xs text-muted-foreground">{t('subscription.buyCreditsDescription')}</p>
+            </div>
+          </Button>
 
           {!showRedeem ? (
             <Button
