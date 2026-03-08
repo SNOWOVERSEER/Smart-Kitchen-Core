@@ -122,7 +122,7 @@ export function LandingAgentSection() {
 
           {/* Messages */}
           <div className="min-h-[220px] flex flex-col gap-3 mb-4">
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {messages.map((m, i) => {
                 const isAgent = m.role === 'agent'
                 return (
