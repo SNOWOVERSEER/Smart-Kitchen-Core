@@ -275,7 +275,16 @@
       "saveFailed": "Failed to save provider",
       "removedSuccess": "Provider removed",
       "removeFailed": "Failed to remove provider",
-      "activateFailed": "Failed to activate provider"
+      "activateFailed": "Failed to activate provider",
+      "aiSource": "AI Source",
+      "usePlanApi": "Plan API",
+      "planApiSupporter": "Uses your subscription credits",
+      "planApiFree": "Uses your free credits",
+      "useOwnKey": "Your API Key",
+      "ownKeyUnlimited": "Unlimited, no credits used",
+      "switchedToPlan": "Switched to plan API",
+      "switchedToOwnKey": "Switched to your API key",
+      "switchFailed": "Failed to switch AI source"
     },
     "notifications": {
       "heading": "Notifications",
@@ -550,6 +559,10 @@
     "creditsMonthly": "{{used}} / {{total}} credits this month",
     "bonusCredits": "+ {{count}} bonus credits",
     "unlimited": "Using your own API key — unlimited",
+    "aiSource": "Current AI Source",
+    "usingOwnKey": "Using your own API key — unlimited",
+    "planApi": "Plan",
+    "usingPlanCredits": "Using subscription credits",
     "supportAuthor": "Support the author",
     "supportDescription": "Like this project? Your support keeps development going.",
     "manageSubscription": "Manage subscription",
@@ -569,7 +582,13 @@
     "buyCreditsDescription": "Get 50 bonus credits instantly.",
     "trialExpiryWarning": "Your trial ends in {{days}} day(s). Set up your own API key or subscribe to continue.",
     "lowCreditsWarning": "Only {{count}} credit(s) remaining.",
-    "paymentFailed": "Payment failed. Please update your payment method."
+    "paymentFailed": "Payment failed. Please update your payment method.",
+    "cycleCreditsLabel": "Monthly credits",
+    "trialCreditsLabel": "Trial credits",
+    "cycleCreditsValue": "{{remaining}} / {{total}}",
+    "permanentCreditsLabel": "Permanent credits",
+    "totalCredits": "Total",
+    "creditUsageOrder": "Monthly/trial credits are used first, then permanent credits."
   },
   "paywall": {
     "title": "AI credits used up",

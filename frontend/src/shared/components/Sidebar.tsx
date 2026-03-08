@@ -1,8 +1,9 @@
 import type { ElementType } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
-import { LayoutDashboard, History, ScanBarcode, Settings, UtensilsCrossed, ShoppingCart, CalendarDays } from 'lucide-react'
+import { LayoutDashboard, History, ScanBarcode, Settings, UtensilsCrossed, ShoppingCart, CalendarDays, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { useSubscriptionStore } from '@/shared/stores/subscriptionStore'
 
 const NAV_ITEMS: { to: string; icon: ElementType; key: string }[] = [
   { to: '/dashboard', icon: LayoutDashboard,  key: 'dashboard' },
@@ -13,6 +14,39 @@ const NAV_ITEMS: { to: string; icon: ElementType; key: string }[] = [
   { to: '/barcode',   icon: ScanBarcode,      key: 'scan'      },
   { to: '/settings',  icon: Settings,         key: 'settings'  },
 ]
+
+function TierBadge() {
+  const { t } = useTranslation()
+  const tier = useSubscriptionStore((s) => s.tier)
+  const hasApiKey = useSubscriptionStore((s) => s.hasApiKey)
+  const totalCredits = useSubscriptionStore((s) => s.totalCredits)
+  const loaded = useSubscriptionStore((s) => s.loaded)
+
+  if (!loaded) return null
+
+  const planConfig: Record<string, { label: string; bg: string; text: string; border: string }> = {
+    free: { label: t('subscription.tierFree'), bg: 'bg-zinc-50', text: 'text-zinc-600', border: 'border-zinc-200' },
+    supporter: { label: t('subscription.tierSupporter'), bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+  }
+  const c = planConfig[tier] ?? planConfig.free
+
+  return (
+    <Link to="/settings" className="flex flex-col items-center gap-1 mb-1 group">
+      <span className={cn('text-[9px] font-semibold rounded-full px-2 py-0.5 border leading-none', c.bg, c.text, c.border)}>
+        {c.label}
+      </span>
+      {hasApiKey ? (
+        <span className="text-[9px] font-semibold text-emerald-600 group-hover:text-emerald-700 transition-colors">
+          BYOK
+        </span>
+      ) : (
+        <span className="text-[10px] text-muted-foreground group-hover:text-foreground transition-colors">
+          {totalCredits} <Sparkles className="w-2.5 h-2.5 inline -mt-0.5" />
+        </span>
+      )}
+    </Link>
+  )
+}
 
 export function Sidebar() {
   const { t } = useTranslation()
@@ -55,6 +89,12 @@ export function Sidebar() {
           </Link>
         )
       })}
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Subscription tier badge */}
+      <TierBadge />
     </aside>
   )
 }

@@ -83,20 +83,49 @@ def _log_usage(supabase, user_id: str, action: str, tier: str, credited: bool) -
 
 
 def _deduct_credit_atomic(supabase, user_id: str) -> str:
-    """Atomically deduct 1 credit via RPC. Returns 'prompt' or 'bonus'."""
-    try:
-        result = supabase.rpc("deduct_one_credit", {"p_user_id": user_id}).execute()
-        if not result.data:
-            raise HTTPException(status_code=403, detail="no_credits")
-        return result.data[0]["pool"]
-    except HTTPException:
-        raise
-    except Exception as e:
-        if "no_credits" in str(e):
-            raise HTTPException(status_code=403, detail="no_credits")
-        if "no_subscription" in str(e):
-            raise HTTPException(status_code=403, detail="no_credits")
-        raise
+    """Atomically deduct 1 credit. Returns 'prompt' or 'bonus'."""
+    # Use direct SQL via Supabase's raw RPC to avoid PostgREST schema cache issues
+    sub = (
+        supabase.table("subscriptions")
+        .select("id, prompt_credits, bonus_credits")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not sub.data:
+        raise HTTPException(status_code=403, detail="no_credits")
+
+    row = sub.data[0]
+    sub_id = row["id"]
+    prompt = row["prompt_credits"]
+    bonus = row["bonus_credits"]
+
+    if prompt > 0:
+        # Deduct from prompt_credits, use gt filter for optimistic concurrency
+        result = (
+            supabase.table("subscriptions")
+            .update({"prompt_credits": prompt - 1})
+            .eq("id", sub_id)
+            .gt("prompt_credits", 0)
+            .execute()
+        )
+        if result.data:
+            return "prompt"
+        # Retry: someone else may have deducted, re-read
+        return _deduct_credit_atomic(supabase, user_id)
+    elif bonus > 0:
+        result = (
+            supabase.table("subscriptions")
+            .update({"bonus_credits": bonus - 1})
+            .eq("id", sub_id)
+            .gt("bonus_credits", 0)
+            .execute()
+        )
+        if result.data:
+            return "bonus"
+        return _deduct_credit_atomic(supabase, user_id)
+    else:
+        raise HTTPException(status_code=403, detail="no_credits")
 
 
 def check_and_deduct_credit(

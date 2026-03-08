@@ -321,6 +321,16 @@ def activate_ai_config(provider: str, user_id: str = Depends(get_current_user)):
     return {"message": f"{provider} activated"}
 
 
+@app.put("/api/v1/settings/ai/deactivate-all")
+def deactivate_all_ai_configs(user_id: str = Depends(get_current_user)):
+    supabase = get_supabase_client()
+    supabase.table("user_ai_configs").update(
+        {"is_active": False}
+    ).eq("user_id", user_id).execute()
+    invalidate_llm_cache(user_id)
+    return {"message": "Switched to plan API"}
+
+
 # ── Barcode Lookup ──
 
 @app.get("/api/v1/barcode/{barcode}", response_model=BarcodeResponse)

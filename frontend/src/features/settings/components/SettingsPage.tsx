@@ -23,7 +23,7 @@ import {
   buyCredits,
   redeemVoucher,
 } from '../subscriptionApi'
-import { getAIConfigs, addAIConfig, deleteAIConfig, activateProvider } from '../api'
+import { getAIConfigs, addAIConfig, deleteAIConfig, activateProvider, deactivateAllProviders } from '../api'
 import { getProfile, updateProfile } from '@/features/auth/api'
 import { queryClient } from '@/shared/lib/queryClient'
 import type { AddAIConfigRequest } from '@/shared/lib/api.types'
@@ -223,6 +223,8 @@ function ProfileTab() {
 // ─── AI config tab ────────────────────────────────────────────────────────
 function AIConfigTab() {
   const { t } = useTranslation()
+  const tier = useSubscriptionStore((s) => s.tier)
+  const hasApiKey = useSubscriptionStore((s) => s.hasApiKey)
   const { data: configs, isLoading } = useQuery({
     queryKey: ['ai-configs'],
     queryFn: getAIConfigs,
@@ -263,12 +265,33 @@ function AIConfigTab() {
       )
       return { prev }
     },
+    onSuccess: () => {
+      toast.success(t('settings.ai.switchedToOwnKey'))
+    },
     onError: (_err, _vars, ctx) => {
       queryClient.setQueryData(['ai-configs'], ctx?.prev)
       toast.error(t('settings.ai.activateFailed'))
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ['ai-configs'] }),
   })
+
+  const deactivateMutation = useMutation({
+    mutationFn: () => deactivateAllProviders(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-configs'] })
+      void queryClient.invalidateQueries({ queryKey: ['subscription'] })
+      toast.success(t('settings.ai.switchedToPlan'))
+    },
+    onError: () => toast.error(t('settings.ai.switchFailed')),
+  })
+
+  const handleActivateProvider = (provider: string) => {
+    activateMutation.mutate(provider)
+    void queryClient.invalidateQueries({ queryKey: ['subscription'] })
+  }
+
+  const hasConfiguredKeys = (configs?.length ?? 0) > 0
+  const hasActiveKey = configs?.some((c) => c.is_active) ?? false
 
   if (isLoading) {
     return (
@@ -286,6 +309,52 @@ function AIConfigTab() {
         title={t('settings.ai.heading')}
         description={t('settings.ai.description')}
       />
+
+      {/* AI source selector */}
+      {hasConfiguredKeys && (
+        <div className="rounded-xl border border-border bg-card p-4 mb-6">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+            {t('settings.ai.aiSource')}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { if (hasActiveKey) deactivateMutation.mutate() }}
+              className={cn(
+                'flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer',
+                !hasActiveKey
+                  ? 'border-foreground bg-foreground text-background'
+                  : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/30',
+              )}
+            >
+              {t('settings.ai.usePlanApi')}
+              <span className="block text-[10px] font-normal mt-0.5 opacity-70">
+                {tier === 'supporter'
+                  ? t('settings.ai.planApiSupporter')
+                  : t('settings.ai.planApiFree')}
+              </span>
+            </button>
+            <button
+              onClick={() => {
+                if (!hasActiveKey) {
+                  const firstProvider = configs?.[0]?.provider
+                  if (firstProvider) handleActivateProvider(firstProvider)
+                }
+              }}
+              className={cn(
+                'flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer',
+                hasActiveKey
+                  ? 'border-foreground bg-foreground text-background'
+                  : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/30',
+              )}
+            >
+              {t('settings.ai.useOwnKey')}
+              <span className="block text-[10px] font-normal mt-0.5 opacity-70">
+                {t('settings.ai.ownKeyUnlimited')}
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Provider rows */}
       <div className="divide-y divide-border">
@@ -316,7 +385,7 @@ function AIConfigTab() {
                     variant="outline"
                     size="sm"
                     className="h-7 text-xs"
-                    onClick={() => activateMutation.mutate(config.provider)}
+                    onClick={() => handleActivateProvider(config.provider)}
                     disabled={activateMutation.isPending}
                   >
                     {t('settings.ai.setActive')}
@@ -559,21 +628,20 @@ function SubscriptionTab() {
     )
   }
 
-  const tier = sub?.tier ?? 'free'
+  const subTier = sub?.tier ?? 'free'
+  const hasApiKey = sub?.has_api_key ?? false
   const promptCredits = sub?.prompt_credits ?? 0
   const bonusCredits = sub?.bonus_credits ?? 0
   const totalCredits = sub?.total_credits ?? 0
 
-  const tierLabels: Record<string, string> = {
+  const planLabels: Record<string, string> = {
     free: t('subscription.tierFree'),
     supporter: t('subscription.tierSupporter'),
-    byok: t('subscription.tierByok'),
   }
 
-  const tierColors: Record<string, string> = {
+  const planColors: Record<string, string> = {
     free: 'bg-zinc-100 text-zinc-700 border-zinc-200',
     supporter: 'bg-amber-50 text-amber-700 border-amber-200',
-    byok: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   }
 
   return (
@@ -583,8 +651,8 @@ function SubscriptionTab() {
         description={t('subscription.description')}
       />
 
-      {/* Tier badge + credits */}
-      <div className="rounded-xl border border-border bg-card p-5 mb-6">
+      {/* Subscription plan card */}
+      <div className="rounded-xl border border-border bg-card p-5 mb-4">
         {sub?.payment_failed && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 mb-4 text-sm text-red-800">
             {t('subscription.paymentFailed')}
@@ -593,11 +661,11 @@ function SubscriptionTab() {
         <div className="flex items-center gap-3 mb-4">
           <span className={cn(
             'inline-flex items-center text-xs font-semibold rounded-full px-2.5 py-1 border',
-            tierColors[tier] ?? tierColors.free,
+            planColors[subTier] ?? planColors.free,
           )}>
-            {tierLabels[tier] ?? tier}
+            {planLabels[subTier] ?? subTier}
           </span>
-          {sub?.current_period_end && tier === 'supporter' && (
+          {sub?.current_period_end && subTier === 'supporter' && (
             <span className="text-xs text-muted-foreground">
               {t('subscription.renewsOn', { date: new Date(sub.current_period_end).toLocaleDateString() })}
             </span>
@@ -609,31 +677,71 @@ function SubscriptionTab() {
           )}
         </div>
 
-        {tier === 'byok' ? (
-          <p className="text-sm text-muted-foreground">{t('subscription.unlimited')}</p>
-        ) : (
-          <div className="space-y-1">
-            {tier === 'supporter' ? (
-              <p className="text-sm text-foreground">
-                {t('subscription.creditsMonthly', { used: 600 - promptCredits, total: 600 })}
-              </p>
-            ) : (
-              <p className="text-sm text-foreground">
-                {t('subscription.creditsRemaining', { count: totalCredits })}
-              </p>
-            )}
-            {bonusCredits > 0 && (
-              <p className="text-sm text-muted-foreground">
-                {t('subscription.bonusCredits', { count: bonusCredits })}
-              </p>
-            )}
+        <div className="space-y-2">
+          {/* Plan / cycle credits */}
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm text-muted-foreground">
+              {subTier === 'supporter'
+                ? t('subscription.cycleCreditsLabel')
+                : t('subscription.trialCreditsLabel')}
+            </span>
+            <span className="text-sm font-medium text-foreground">
+              {subTier === 'supporter'
+                ? t('subscription.cycleCreditsValue', { remaining: promptCredits, total: 600 })
+                : `${promptCredits}`}
+            </span>
           </div>
-        )}
+
+          {/* Permanent credits */}
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm text-muted-foreground">
+              {t('subscription.permanentCreditsLabel')}
+            </span>
+            <span className="text-sm font-medium text-foreground">{bonusCredits}</span>
+          </div>
+
+          {/* Divider + total */}
+          <div className="border-t border-border pt-2 flex items-baseline justify-between">
+            <span className="text-sm font-medium text-foreground">{t('subscription.totalCredits')}</span>
+            <span className="text-sm font-semibold text-foreground">{totalCredits}</span>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            {t('subscription.creditUsageOrder')}
+          </p>
+        </div>
+      </div>
+
+      {/* AI source indicator */}
+      <div className="rounded-xl border border-border bg-card p-5 mb-6">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+          {t('subscription.aiSource')}
+        </p>
+        <div className="flex items-center gap-2">
+          {hasApiKey ? (
+            <>
+              <span className="inline-flex items-center text-xs font-semibold rounded-full px-2.5 py-1 border bg-emerald-50 text-emerald-700 border-emerald-200">
+                {t('subscription.tierByok')}
+              </span>
+              <span className="text-sm text-muted-foreground">{t('subscription.usingOwnKey')}</span>
+            </>
+          ) : (
+            <>
+              <span className={cn(
+                'inline-flex items-center text-xs font-semibold rounded-full px-2.5 py-1 border',
+                planColors[subTier] ?? planColors.free,
+              )}>
+                {t('subscription.planApi')}
+              </span>
+              <span className="text-sm text-muted-foreground">{t('subscription.usingPlanCredits')}</span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Actions */}
       <div className="space-y-4">
-        {tier !== 'supporter' && (
+        {subTier !== 'supporter' && (
           <div>
             <p className="text-sm font-medium text-foreground mb-1">{t('subscription.supportAuthor')}</p>
             <p className="text-xs text-muted-foreground mb-3">{t('subscription.supportDescription')}</p>
@@ -643,7 +751,7 @@ function SubscriptionTab() {
           </div>
         )}
 
-        {tier === 'supporter' && (
+        {subTier === 'supporter' && (
           <div>
             <Button variant="outline" onClick={handlePortal} className="h-9">
               {t('subscription.manageSubscription')}
@@ -651,15 +759,13 @@ function SubscriptionTab() {
           </div>
         )}
 
-        {tier !== 'byok' && (
-          <div>
-            <p className="text-sm font-medium text-foreground mb-1">{t('subscription.buyCredits')}</p>
-            <p className="text-xs text-muted-foreground mb-3">{t('subscription.buyCreditsDescription')}</p>
-            <Button variant="outline" onClick={handleBuyCredits} className="h-9">
-              {t('subscription.buyCredits')}
-            </Button>
-          </div>
-        )}
+        <div>
+          <p className="text-sm font-medium text-foreground mb-1">{t('subscription.buyCredits')}</p>
+          <p className="text-xs text-muted-foreground mb-3">{t('subscription.buyCreditsDescription')}</p>
+          <Button variant="outline" onClick={handleBuyCredits} className="h-9">
+            {t('subscription.buyCredits')}
+          </Button>
+        </div>
 
         {/* Redeem code */}
         <div className="pt-4 border-t border-border">

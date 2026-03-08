@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
 export interface SubscriptionState {
-  tier: 'free' | 'supporter' | 'byok'
+  tier: 'free' | 'supporter'
   promptCredits: number
   bonusCredits: number
   totalCredits: number
@@ -30,7 +30,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
 
   decrementCredit: () =>
     set((state) => {
-      if (state.tier === 'byok') return state
+      if (state.hasApiKey) return state
       return {
         totalCredits: Math.max(0, state.totalCredits - 1),
         promptCredits: state.promptCredits > 0

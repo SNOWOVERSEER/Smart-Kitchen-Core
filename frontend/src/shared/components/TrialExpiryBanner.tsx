@@ -5,10 +5,10 @@ import { useSubscriptionStore } from '@/shared/stores/subscriptionStore'
 
 export function TrialExpiryBanner() {
   const { t } = useTranslation()
-  const { tier, trialEndsAt, totalCredits, loaded } = useSubscriptionStore()
+  const { tier, hasApiKey, trialEndsAt, totalCredits, loaded } = useSubscriptionStore()
   const [dismissed, setDismissed] = useState(false)
 
-  if (!loaded || dismissed || tier === 'byok' || tier === 'supporter') return null
+  if (!loaded || dismissed || hasApiKey || tier === 'supporter') return null
 
   if (trialEndsAt) {
     const daysLeft = Math.ceil(

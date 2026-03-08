@@ -1,7 +1,7 @@
 import { apiClient } from '@/shared/lib/axios'
 
 export interface SubscriptionData {
-  tier: 'free' | 'supporter' | 'byok'
+  tier: 'free' | 'supporter'
   prompt_credits: number
   bonus_credits: number
   total_credits: number

@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect } from 'react'
-import { Bell, Search, type LucideIcon } from 'lucide-react'
+import { Bell, Search, Sparkles, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import {
@@ -16,6 +16,43 @@ import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import i18n from '@/shared/lib/i18n'
 import { cn } from '@/lib/utils'
+
+function SubscriptionBadge() {
+  const { t } = useTranslation()
+  const tier = useSubscriptionStore((s) => s.tier)
+  const hasApiKey = useSubscriptionStore((s) => s.hasApiKey)
+  const totalCredits = useSubscriptionStore((s) => s.totalCredits)
+  const loaded = useSubscriptionStore((s) => s.loaded)
+
+  if (!loaded) return null
+
+  const planLabels: Record<string, string> = {
+    free: t('subscription.tierFree'),
+    supporter: t('subscription.tierSupporter'),
+  }
+  const planColors: Record<string, string> = {
+    free: 'bg-zinc-100 text-zinc-600 border-zinc-200',
+    supporter: 'bg-amber-50 text-amber-700 border-amber-200',
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+      <span className={cn('text-[10px] font-semibold rounded-full px-2 py-0.5 border leading-none', planColors[tier] ?? planColors.free)}>
+        {planLabels[tier] ?? tier}
+      </span>
+      {hasApiKey && (
+        <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 border leading-none bg-emerald-50 text-emerald-700 border-emerald-200">
+          BYOK
+        </span>
+      )}
+      {!hasApiKey && (
+        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+          {totalCredits} <Sparkles className="w-2.5 h-2.5" />
+        </span>
+      )}
+    </div>
+  )
+}
 
 interface TopBarProps {
   searchValue?: string
@@ -105,9 +142,10 @@ export function TopBar({
                   {initials}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuContent align="end" className="w-52">
                 <div className="px-2 py-1.5">
                   <p className="text-xs text-muted-foreground truncate">{email}</p>
+                  <SubscriptionBadge />
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

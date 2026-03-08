@@ -275,7 +275,16 @@
       "saveFailed": "保存提供商失败",
       "removedSuccess": "提供商已移除",
       "removeFailed": "移除提供商失败",
-      "activateFailed": "激活提供商失败"
+      "activateFailed": "激活提供商失败",
+      "aiSource": "AI 来源",
+      "usePlanApi": "计划 API",
+      "planApiSupporter": "使用订阅额度",
+      "planApiFree": "使用免费额度",
+      "useOwnKey": "自有 API Key",
+      "ownKeyUnlimited": "无限制，不消耗额度",
+      "switchedToPlan": "已切换为计划 API",
+      "switchedToOwnKey": "已切换为自有 API Key",
+      "switchFailed": "切换 AI 来源失败"
     },
     "notifications": {
       "heading": "通知",
@@ -550,6 +559,10 @@
     "creditsMonthly": "本月已用 {{used}} / {{total}} 次",
     "bonusCredits": "+ {{count}} 次兑换额度",
     "unlimited": "使用自己的 API Key — 无限制",
+    "aiSource": "当前 AI 来源",
+    "usingOwnKey": "使用自有 API Key — 无限制",
+    "planApi": "计划",
+    "usingPlanCredits": "使用订阅额度",
     "supportAuthor": "支持作者",
     "supportDescription": "喜欢这个项目？你的支持是开发的动力。",
     "manageSubscription": "管理订阅",
@@ -569,7 +582,13 @@
     "buyCreditsDescription": "立即获得 50 额外积分。",
     "trialExpiryWarning": "你的试用将在 {{days}} 天后到期。请设置你自己的 API Key 或订阅以继续使用。",
     "lowCreditsWarning": "仅剩 {{count}} 个积分。",
-    "paymentFailed": "付款失败。请更新你的付款方式。"
+    "paymentFailed": "付款失败。请更新你的付款方式。",
+    "cycleCreditsLabel": "月度额度",
+    "trialCreditsLabel": "试用额度",
+    "cycleCreditsValue": "{{remaining}} / {{total}}",
+    "permanentCreditsLabel": "永久额度",
+    "totalCredits": "合计",
+    "creditUsageOrder": "优先消耗月度/试用额度，然后消耗永久额度。"
   },
   "paywall": {
     "title": "AI 额度已用完",

@@ -23,7 +23,7 @@ def list_subscriptions(page: int = 0, limit: int = 50) -> list[dict]:
     supabase = get_supabase_admin_client()
     result = (
         supabase.table("subscriptions")
-        .select("*, profiles(display_name)")
+        .select("*")
         .order("created_at", desc=True)
         .range(page * limit, (page + 1) * limit - 1)
         .execute()
@@ -35,8 +35,11 @@ def list_subscriptions(page: int = 0, limit: int = 50) -> list[dict]:
             sub["email"] = user.user.email if user else None
         except Exception:
             sub["email"] = None
-        sub["display_name"] = sub.get("profiles", {}).get("display_name") if sub.get("profiles") else None
-        sub.pop("profiles", None)
+        try:
+            profile = supabase.table("profiles").select("display_name").eq("id", sub["user_id"]).maybe_single().execute()
+            sub["display_name"] = profile.data.get("display_name") if profile.data else None
+        except Exception:
+            sub["display_name"] = None
     return subs
 
 

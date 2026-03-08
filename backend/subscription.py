@@ -33,9 +33,7 @@ def get_subscription_status(user_id: str) -> dict:
     )
     has_api_key = bool(ai_result.data)
 
-    tier = sub["tier"]
-    if has_api_key and tier != "supporter":
-        tier = "byok"
+    tier = sub["tier"]  # always "free" | "supporter", never overridden
 
     return {
         "tier": tier,

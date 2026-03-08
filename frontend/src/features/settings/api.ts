@@ -18,3 +18,7 @@ export async function deleteAIConfig(provider: string): Promise<void> {
 export async function activateProvider(provider: string): Promise<void> {
   await apiClient.put(`/api/v1/settings/ai/${provider}/activate`)
 }
+
+export async function deactivateAllProviders(): Promise<void> {
+  await apiClient.put('/api/v1/settings/ai/deactivate-all')
+}
